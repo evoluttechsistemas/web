@@ -8,7 +8,7 @@ echo.
 echo Baixando alteracoes do GitHub...
 echo.
 
-git pull
+git pull origin main
 
 if errorlevel 1 (
     echo.

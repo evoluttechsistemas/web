@@ -57,5 +57,11 @@ web.config
 
 *.staticwebassets.endpoints.json
 
-
 /wwwroot/
+
+# Exceções - DLLs externas necessárias
+!EvolutCRM/ssleay32.dll
+!EvolutCRM/libeay32.dll
+!EvolutCRM/KHelpDeskIntegraV3.dll
+!HelpDesktop/KHelpDeskIntegraV3.dll
+!HelpDesktop/libeay32.dll

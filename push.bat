@@ -6,6 +6,14 @@ echo        GIT - EVOLUT HELP
 echo ================================
 echo.
 
+git config user.email >nul 2>&1
+if errorlevel 1 (
+    set /p gitemail="Seu email do GitHub: "
+    git config --global user.email "%gitemail%"
+    set /p gitname="Seu nome: "
+    git config --global user.name "%gitname%"
+)
+
 git status
 echo.
 
