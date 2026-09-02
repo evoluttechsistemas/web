@@ -9,8 +9,8 @@ echo.
 git status
 echo.
 
+git add .
 git diff --cached --quiet
-git diff --quiet
 
 if %errorlevel%==0 (
     echo Nenhuma alteracao para enviar.
@@ -20,7 +20,6 @@ if %errorlevel%==0 (
 
 set /p mensagem="Mensagem do commit: "
 
-git add .
 git commit -m "%mensagem%"
 
 if errorlevel 1 (
@@ -29,7 +28,7 @@ if errorlevel 1 (
     exit /b
 )
 
-git push
+git push --set-upstream origin main
 
 if errorlevel 1 (
     echo ERRO ao enviar para o GitHub.
