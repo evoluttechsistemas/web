@@ -1,0 +1,3126 @@
+﻿@page "/card"
+@page "/card/{id:int}"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Forms
+@inject EvolutCRM.Services.CardService CardService
+@inject EvolutCRM.Services.UserState UserState
+@inject AdminService AdminService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+@inject EvolutCRM.Services.AgendaService AgendaService
+@inject EvolutCRM.Services.HealthMonitorService HealthMonitor
+
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&display=swap');
+
+    .crm-shell {
+        --cr-primary: #2563eb;
+        --cr-primary-dark: #1e3a8a;
+        --cr-primary-900: #172554;
+        --cr-primary-soft: #eff6ff;
+        --cr-bg: #e8eef8;
+        --cr-surface: #ffffff;
+        --cr-border: #cbd5e1;
+        --cr-border-soft: #dbeafe;
+        --cr-text: #0f172a;
+        --cr-muted: #64748b;
+        --cr-soft: #94a3b8;
+        --cr-danger: #dc2626;
+        --cr-success: #16a34a;
+        --cr-warning: #d97706;
+        --cr-radius: 18px;
+        --cr-radius-sm: 12px;
+        --cr-shadow: 0 18px 50px rgba(15, 23, 42, .14);
+        --cr-shadow-soft: 0 4px 16px rgba(15, 23, 42, .08);
+        --cr-tr: .14s ease;
+        --chat-bg: #efeae2;
+        --chat-me: #d9fdd3;
+        --chat-other: #ffffff;
+    }
+
+        .crm-shell *, .crm-shell *::before, .crm-shell *::after {
+            box-sizing: border-box;
+        }
+
+    .crm-shell {
+        color: var(--cr-text);
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+    }
+
+    .crm-shell {
+        width: 100%;
+        height: calc(100vh - 8px);
+        min-height: 0;
+        margin: 0;
+        padding: 10px;
+        overflow: hidden;
+        background: radial-gradient(circle at top left, rgba(37, 99, 235, .12), transparent 30%), linear-gradient(180deg, #eef4ff 0%, var(--cr-bg) 52%, #dde5f5 100%);
+    }
+
+    .crm-card-page {
+        height: 100%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .sem-permissao-box,
+    .msg {
+        margin-top: 12px;
+        width: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        font-weight: 900;
+        text-align: center;
+    }
+
+        .sem-permissao-box,
+        .msg.erro {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .msg.sucesso {
+            background: #dcfce7;
+            color: #14532d;
+            border: 1px solid #bbf7d0;
+        }
+
+    /* TOPO */
+    .crm-modern-topbar {
+        min-height: 66px;
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 48%, #172554 100%);
+        color: #fff;
+        border-radius: 18px;
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-shadow: 0 12px 34px rgba(30, 64, 175, .32);
+        border: 1px solid rgba(255,255,255,.14);
+        overflow: hidden;
+        flex: 0 0 auto;
+    }
+
+    .crm-top-left,
+    .crm-top-right,
+    .crm-card-line,
+    .crm-sub-status,
+    .row-flex,
+    .visualizadores-ticket {
+        display: flex;
+        align-items: center;
+    }
+
+    .crm-top-left {
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .crm-top-right {
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .crm-title-wrap {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .crm-card-line {
+        gap: 8px;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .crm-back-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,.24);
+        background: rgba(255,255,255,.13);
+        color: #fff;
+        font-size: 20px;
+        font-weight: 950;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: var(--cr-tr);
+        flex: 0 0 auto;
+    }
+
+        .crm-back-btn:hover {
+            background: rgba(255,255,255,.22);
+            transform: translateY(-1px);
+        }
+
+    .crm-code-box,
+    .crm-client-box,
+    .crm-kpi-card {
+        background: rgba(255,255,255,.14);
+        border: 1px solid rgba(255,255,255,.20);
+        backdrop-filter: blur(8px);
+    }
+
+    .crm-code-box {
+        padding: 7px 12px;
+        border-radius: 13px;
+        flex-shrink: 0;
+    }
+
+    .crm-code-number {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: .96rem;
+        font-weight: 800;
+        color: #fff;
+        line-height: 1;
+    }
+
+    .crm-client-box {
+        display: flex;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 13px;
+        min-width: 220px;
+        max-width: 560px;
+        flex: 1;
+    }
+
+    .crm-client-name {
+        font-size: .86rem;
+        font-weight: 900;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .crm-whatsapp-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #22c55e;
+        color: white;
+        font-size: .70rem;
+        font-weight: 950;
+        box-shadow: 0 6px 16px rgba(34,197,94,.35);
+        white-space: nowrap;
+    }
+
+        .crm-whatsapp-chip small {
+            opacity: .94;
+            font-size: .62rem;
+            font-weight: 900;
+        }
+
+    .crm-sub-status {
+        gap: 7px;
+        color: #dbeafe;
+        font-weight: 800;
+        font-size: .74rem;
+        min-width: 0;
+    }
+
+    .crm-status-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #22c55e;
+        box-shadow: 0 0 12px #22c55e;
+        animation: pulseDot 1.2s infinite;
+        flex: 0 0 auto;
+    }
+
+    @@keyframes pulseDot {
+        0% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.28);
+        }
+
+        100% {
+            transform: scale(1);
+        }
+    }
+
+    .crm-kpi-card {
+        min-width: 86px;
+        padding: 7px 9px;
+        border-radius: 13px;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .crm-kpi-card small {
+            font-size: .56rem;
+            opacity: .82;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .crm-kpi-card strong {
+            margin-top: 2px;
+            font-size: .72rem;
+            font-weight: 950;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 120px;
+        }
+
+    .visualizadores-ticket {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .visualizador-badge {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 10px;
+        font-weight: 950;
+        cursor: pointer;
+        border: 2px solid rgba(255,255,255,.92);
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        transition: var(--cr-tr);
+    }
+
+        .visualizador-badge:hover {
+            transform: scale(1.08);
+        }
+
+    /* GRID 3 COLUNAS */
+    .crm-modern-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 300px minmax(360px, 1fr) 320px;
+        gap: 10px;
+        align-items: stretch;
+        overflow: hidden;
+    }
+
+    .crm-modern-panel {
+        background: var(--cr-surface);
+        border: 1.5px solid var(--cr-border-soft);
+        border-radius: 18px;
+        box-shadow: var(--cr-shadow-soft);
+        overflow: hidden;
+        min-width: 0;
+        min-height: 0;
+    }
+
+    .crm-modern-left,
+    .crm-modern-center,
+    .crm-modern-right {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .crm-modern-right {
+        overflow: hidden;
+    }
+
+    .crm-panel-title {
+        min-height: 42px;
+        padding: 10px 13px;
+        border-bottom: 1.5px solid var(--cr-border-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        color: var(--cr-primary-dark);
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .035em;
+        font-size: .72rem;
+        flex: 0 0 auto;
+    }
+
+        .crm-panel-title small {
+            color: var(--cr-muted);
+            font-size: .65rem;
+            font-weight: 850;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+    .crm-panel-body {
+        padding: 11px;
+        min-height: 0;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    /* CAMPOS */
+    .field-label,
+    .crm-info-row label {
+        display: block;
+        margin-bottom: 5px;
+        color: #1e3a8a;
+        font-size: .68rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .025em;
+    }
+
+    .field,
+    .field-select,
+    .field-date,
+    textarea.field,
+    input,
+    select,
+    textarea {
+        width: 100%;
+        min-width: 0;
+        border: 1.5px solid #c7d9ef;
+        border-radius: 10px;
+        background: #fff;
+        padding: 7px 9px;
+        font-size: .78rem;
+        outline: none;
+        color: var(--cr-text);
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        transition: var(--cr-tr);
+    }
+
+    .field,
+    .field-select,
+    .field-date,
+    input,
+    select {
+        height: 36px;
+    }
+
+    textarea.field,
+    textarea {
+        height: auto;
+        min-height: 100px;
+        resize: vertical;
+    }
+
+        .field:focus,
+        .field-select:focus,
+        .field-date:focus,
+        textarea.field:focus,
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--cr-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .16);
+        }
+
+        .field:disabled,
+        .field-select:disabled,
+        .field-date:disabled,
+        textarea.field:disabled,
+        input:disabled,
+        select:disabled {
+            background: #f1f5f9;
+            cursor: not-allowed;
+            opacity: .86;
+        }
+
+    .grid-2cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .row-flex {
+        gap: 7px;
+    }
+
+    .btn,
+    .btn-send,
+    .btn-save-big,
+    .composer-mini-btn,
+    .whats-btn,
+    .btn-msg-action,
+    .img-modal-close {
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        transition: var(--cr-tr);
+    }
+
+    .btn {
+        border: none;
+        padding: 8px 10px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: .74rem;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .btn-primary,
+    .btn-send,
+    .btn-save-big {
+        background: linear-gradient(135deg, #2563eb, #1e3a8a);
+        color: white;
+        box-shadow: 0 8px 18px rgba(37,99,235,.20);
+    }
+
+        .btn-primary:hover:not(:disabled),
+        .btn-save-big:hover:not(:disabled),
+        .btn-send:hover:not(:disabled) {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+        }
+
+    .btn-ghost {
+        background: #f8fbff;
+        color: var(--cr-primary-dark);
+        border: 1.5px solid var(--cr-border-soft);
+    }
+
+        .btn-ghost:hover {
+            background: #eff6ff;
+            border-color: #93c5fd;
+        }
+
+    .btn-danger-soft {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+    }
+
+    .btn-send,
+    .btn-save-big {
+        width: 100%;
+        min-height: 38px;
+        border: none;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: .78rem;
+        font-weight: 950;
+    }
+
+        .btn-send:disabled,
+        .btn-save-big:disabled,
+        .btn:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+    .whats-btn {
+        background: #25d366;
+        border: none;
+        border-radius: 10px;
+        width: 38px;
+        height: 36px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        color: #fff;
+        flex: 0 0 auto;
+        font-weight: 950;
+    }
+
+    .composer-card {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .composer-textarea {
+        min-height: 150px !important;
+        resize: vertical;
+    }
+
+    .composer-toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+    }
+
+    .composer-mini-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .composer-mini-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1.5px solid #bfdbfe;
+        background: #f8fbff;
+        color: #0d47a1;
+        font-weight: 950;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+    }
+
+        .composer-mini-btn:hover {
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+
+    .hint {
+        display: block;
+        margin-top: 5px;
+        color: var(--cr-muted);
+        font-size: .64rem;
+        font-weight: 750;
+        line-height: 1.25;
+    }
+
+    .attachment-preview,
+    .agenda-compose {
+        padding: 9px;
+        border: 1.5px solid #cbd5e1;
+        background: #fff;
+        border-radius: 12px;
+    }
+
+        .attachment-preview img {
+            display: block;
+            max-width: 210px;
+            max-height: 190px;
+            margin-top: 8px;
+            border-radius: 10px;
+            border: 2px solid #90caf9;
+            object-fit: cover;
+        }
+
+    .agenda-compose {
+        border-style: dashed;
+        border-color: #93c5fd;
+        background: rgba(248,251,255,.86);
+    }
+
+    .agenda-check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 0;
+        color: #0d47a1;
+        font-weight: 900;
+        cursor: pointer;
+        font-size: .74rem;
+    }
+
+        .agenda-check input {
+            width: auto;
+            height: auto;
+            accent-color: #2563eb;
+        }
+
+    /* HISTÓRICO ESTILO WHATSAPP */
+    .historico-wrap {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 18px 18px 10px;
+        background-color: var(--chat-bg);
+        background-image: radial-gradient(circle at 20% 15%, rgba(255,255,255,.38) 0 1px, transparent 1px), radial-gradient(circle at 75% 65%, rgba(255,255,255,.34) 0 1px, transparent 1px), linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,.08));
+        background-size: 28px 28px, 36px 36px, auto;
+        scroll-behavior: smooth;
+    }
+
+    .historico-line {
+        width: 100%;
+        display: flex;
+        margin-bottom: 10px;
+    }
+
+        .historico-line.me {
+            justify-content: flex-end;
+        }
+
+        .historico-line.other {
+            justify-content: flex-start;
+        }
+
+    .historico-box {
+        width: fit-content;
+        min-width: min(220px, 100%);
+        max-width: 78%;
+        border-radius: 14px;
+        padding: 8px 10px;
+        box-shadow: 0 1px 2px rgba(15,23,42,.14);
+        position: relative;
+        color: #0f172a;
+        border: 1px solid rgba(15,23,42,.04);
+    }
+
+    .hist-me {
+        background: var(--chat-me);
+        border-bottom-right-radius: 4px;
+    }
+
+    .hist-other {
+        background: var(--chat-other);
+        border-bottom-left-radius: 4px;
+    }
+
+        .hist-me::after,
+        .hist-other::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+        }
+
+    .hist-me::after {
+        right: -7px;
+        border-width: 0 0 10px 8px;
+        border-color: transparent transparent transparent var(--chat-me);
+    }
+
+    .hist-other::after {
+        left: -7px;
+        border-width: 0 8px 10px 0;
+        border-color: transparent var(--chat-other) transparent transparent;
+    }
+
+    .historico-topo {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 4px;
+        color: #475569;
+        font-size: .60rem;
+        font-weight: 900;
+        opacity: .92;
+    }
+
+    .historico-texto {
+        display: block;
+        margin-top: 4px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.32;
+        font-size: .80rem;
+    }
+
+    .msg-editada-label {
+        display: inline-flex;
+        margin-top: 4px;
+        font-size: 9px;
+        font-weight: 800;
+        opacity: .60;
+        font-style: italic;
+    }
+
+    .msg-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+    }
+
+    .btn-msg-action {
+        border: 1px solid rgba(15,23,42,.09);
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 10px;
+        font-weight: 900;
+        cursor: pointer;
+        background: rgba(255,255,255,.56);
+        color: #334155;
+    }
+
+        .btn-msg-action:hover {
+            background: rgba(255,255,255,.88);
+            transform: translateY(-1px);
+        }
+
+    .edit-msg-textarea {
+        margin-top: 8px;
+        width: 100%;
+        min-height: 74px;
+        border-radius: 12px;
+        border: 1px solid #bfdbfe;
+        padding: 8px;
+    }
+
+    .edit-msg-actions {
+        display: flex;
+        gap: 7px;
+        margin-top: 8px;
+    }
+
+    .btn-salvar-edit-msg,
+    .btn-cancelar-edit-msg {
+        border: none;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 10px;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .btn-salvar-edit-msg {
+        background: #16a34a;
+        color: #fff;
+    }
+
+    .btn-cancelar-edit-msg {
+        background: rgba(15,23,42,.08);
+        color: #334155;
+    }
+
+    .msg-status-whats {
+        margin-top: 6px;
+        font-size: .68rem;
+        font-weight: 900;
+        text-align: right;
+        opacity: .95;
+    }
+
+    .agenda-card {
+        margin-top: 8px;
+        padding: 8px;
+        border-radius: 10px;
+        border: 1px solid;
+        font-weight: 850;
+        font-size: .72rem;
+    }
+
+        .agenda-card.vencida {
+            background: #fee2e2;
+            border-color: #dc2626;
+            color: #7f1d1d;
+        }
+
+        .agenda-card.futura {
+            background: #ecfdf5;
+            border-color: #16a34a;
+            color: #14532d;
+        }
+
+    .agenda-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 5px;
+    }
+
+    .agenda-badge {
+        padding: 3px 6px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.72);
+        font-size: .58rem;
+        font-weight: 950;
+    }
+
+    .thumb-box,
+    .audio-player {
+        margin-top: 8px;
+        background: rgba(255,255,255,.84);
+        border: 1px solid #cbd5e1;
+        border-radius: 12px;
+        padding: 8px;
+        color: #0d47a1;
+    }
+
+    .thumb {
+        display: block;
+        width: auto;
+        max-width: 230px;
+        max-height: 230px;
+        object-fit: cover;
+        margin: 8px auto 0;
+        border-radius: 12px;
+        border: 2px solid #90caf9;
+        cursor: zoom-in;
+        background: #f8fafc;
+    }
+
+    .audio-player audio {
+        width: 100%;
+        margin-top: 6px;
+    }
+
+    .historico-empty {
+        padding: 30px 10px;
+        color: #64748b;
+        font-weight: 850;
+        text-align: center;
+    }
+
+    /* LATERAL DIREITA */
+    .crm-info-profile {
+        margin: 11px;
+        padding: 11px;
+        border: 1px solid #dbeafe;
+        border-radius: 15px;
+        background: linear-gradient(135deg, #ffffff, #f8fbff);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 0 0 auto;
+    }
+
+    .crm-info-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #1e3a8a, #2563eb);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: .88rem;
+        font-weight: 950;
+        flex: 0 0 auto;
+    }
+
+    .crm-info-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+        padding: 0 11px 11px;
+        flex: 0 0 auto;
+    }
+
+    .crm-info-stat {
+        border: 1px solid #dbeafe;
+        border-radius: 13px;
+        padding: 8px 4px;
+        text-align: center;
+        background: #fff;
+    }
+
+        .crm-info-stat strong {
+            display: block;
+            color: #0d47a1;
+            font-size: .88rem;
+            font-weight: 950;
+        }
+
+        .crm-info-stat span {
+            display: block;
+            color: #64748b;
+            font-size: .56rem;
+            font-weight: 850;
+            margin-top: 2px;
+        }
+
+    .crm-info-row {
+        padding: 8px 11px;
+        border-top: 1px solid #e5eef8;
+    }
+
+    .crm-info-value {
+        color: #172033;
+        font-weight: 850;
+        font-size: .74rem;
+        word-break: break-word;
+    }
+
+    .crm-modern-right {
+        overflow-y: auto;
+    }
+
+    .pro-whats-card {
+        margin: 0 11px 11px;
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px;
+        border-radius: 15px;
+        background: radial-gradient(circle at top right, rgba(34,197,94,.22), transparent 35%), linear-gradient(135deg, #f0fdf4, #ffffff);
+        border: 1px solid #86efac;
+        box-shadow: 0 8px 22px rgba(34,197,94,.12);
+    }
+
+        .pro-whats-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 12px;
+            bottom: 12px;
+            width: 4px;
+            border-radius: 999px;
+            background: linear-gradient(180deg, #22c55e, #16a34a);
+        }
+
+    .pro-whats-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 13px;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        color: white;
+        display: grid;
+        place-items: center;
+        font-size: 19px;
+        box-shadow: 0 8px 18px rgba(22,163,74,.28);
+        flex: 0 0 auto;
+    }
+
+    .pro-whats-content {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .pro-whats-label {
+        font-size: .58rem;
+        font-weight: 900;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .pro-whats-title {
+        margin-top: 2px;
+        font-size: .82rem;
+        font-weight: 950;
+        color: #15803d;
+        line-height: 1.1;
+    }
+
+    .pro-whats-phone {
+        margin-top: 4px;
+        font-size: .66rem;
+        font-weight: 800;
+        color: #334155;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pro-whats-live {
+        position: absolute;
+        right: 10px;
+        top: 9px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #dcfce7;
+        color: #15803d;
+        font-size: .50rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        border: 1px solid #86efac;
+    }
+
+    .crm-side-actions {
+        display: grid;
+        gap: 8px;
+        padding: 11px;
+    }
+
+    /* POPUPS / MODAIS */
+    .mensagem-popup {
+        position: fixed;
+        top: 15px;
+        right: 15px;
+        background: #16a34a;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 12px;
+        font-weight: 900;
+        box-shadow: var(--cr-shadow-soft);
+        z-index: 999;
+    }
+
+        .mensagem-popup.erro {
+            background: #ef4444;
+        }
+
+    .modal-overlay,
+    .img-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,.62);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 14px;
+    }
+
+    .modal-card {
+        width: 500px;
+        max-width: 96vw;
+        background: white;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--cr-border);
+        box-shadow: var(--cr-shadow);
+    }
+
+    .modal-input {
+        width: 100%;
+        padding: 9px;
+        border: 1px solid var(--cr-border);
+        border-radius: 12px;
+        margin-top: 8px;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 12px;
+    }
+
+    .modal-resultados {
+        list-style: none;
+        padding: 0;
+        margin: 10px 0 0 0;
+        max-height: 320px;
+        overflow: auto;
+    }
+
+        .modal-resultados li {
+            padding: 10px;
+            border-bottom: 1px solid var(--cr-border);
+            cursor: pointer;
+            border-radius: 10px;
+        }
+
+            .modal-resultados li:hover {
+                background: var(--cr-primary-soft);
+            }
+
+    .img-modal {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .img-scroll-area {
+        width: 92vw;
+        height: 80vh;
+        overflow: auto;
+        background: #111827;
+        border-radius: 14px;
+        padding: 12px;
+        text-align: center;
+    }
+
+    .img-modal-img {
+        height: auto;
+        border-radius: 12px;
+        user-select: none;
+    }
+
+    .img-scroll-area.normal .img-modal-img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .img-scroll-area.zoomado .img-modal-img {
+        max-width: none !important;
+        max-height: none !important;
+    }
+
+    .img-modal-close {
+        background: #f1f5f9;
+        color: #0d47a1;
+        border: 1px solid #bbdefb;
+        padding: 8px 16px;
+        border-radius: 10px;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    /* RESPONSIVO */
+    @@media (max-width: 1280px) {
+        .crm-modern-grid {
+            grid-template-columns: 280px minmax(340px, 1fr) 290px;
+        }
+
+        .crm-client-box {
+            max-width: 420px;
+        }
+    }
+
+    @@media (max-width: 1080px) {
+        .crm-modern-topbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .crm-top-right {
+            width: 100%;
+            justify-content: flex-start;
+        }
+
+        .crm-modern-grid {
+            grid-template-columns: 280px minmax(0,1fr);
+            overflow: hidden;
+        }
+
+        .crm-modern-right {
+            display: none;
+        }
+    }
+
+    @@media (max-width: 820px) {
+        .crm-shell {
+            height: auto;
+            min-height: 100vh;
+            overflow: auto;
+            padding: 8px;
+        }
+
+        .crm-card-page {
+            height: auto;
+        }
+
+        .crm-modern-grid {
+            grid-template-columns: 1fr;
+            overflow: visible;
+        }
+
+        .crm-modern-left {
+            order: 2;
+        }
+
+        .crm-modern-center {
+            order: 1;
+            min-height: 72vh;
+        }
+
+        .crm-modern-right {
+            order: 3;
+            display: flex;
+            max-height: none;
+        }
+
+        .historico-wrap {
+            height: 62vh;
+            min-height: 420px;
+        }
+
+        .crm-panel-body {
+            max-height: none;
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .crm-modern-topbar {
+            border-radius: 14px;
+            padding: 9px;
+        }
+
+        .crm-top-left, .crm-card-line {
+            width: 100%;
+        }
+
+        .crm-client-box {
+            min-width: 0;
+            max-width: 100%;
+            width: 100%;
+        }
+
+        .crm-kpi-card {
+            min-width: calc(50% - 5px);
+        }
+
+        .grid-2cols {
+            grid-template-columns: 1fr;
+        }
+
+        .composer-toolbar {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .btn-send {
+            min-width: 100% !important;
+        }
+
+        .historico-wrap {
+            height: 64vh;
+            padding: 12px 10px;
+        }
+
+        .historico-box {
+            max-width: 90%;
+        }
+
+        .historico-topo {
+            font-size: .58rem;
+            gap: 6px;
+        }
+
+        .historico-texto {
+            font-size: .76rem;
+        }
+
+        .modal-actions {
+            flex-direction: column;
+        }
+
+            .modal-actions .btn {
+                width: 100%;
+            }
+    }
+
+    @@keyframes pulseRec {
+        0% {
+            box-shadow: 0 0 0 rgba(220,38,38,0);
+        }
+
+        50% {
+            box-shadow: 0 0 0 5px rgba(220,38,38,.20);
+        }
+
+        100% {
+            box-shadow: 0 0 0 rgba(220,38,38,0);
+        }
+    }
+</style>
+
+
+@if (!UserState.IsReady)
+{
+    <div class="p-5 text-center"><h4>Carregando informações...</h4></div>
+    return;
+}
+
+@if (!PodeVisualizarCRM)
+{
+    <div class="crm-shell">
+        <div class="sem-permissao-box">Você não tem permissão para acessar esta tela.</div>
+    </div>
+    return;
+}
+
+@{
+    // DEPOIS — lendo TelefoneWhatsApp:
+    var cardTemWhatsApp = !string.IsNullOrWhiteSpace(cardModel.TelefoneWhatsApp) || !string.IsNullOrWhiteSpace(cardModel.Celular);
+    var telefoneWhats = !string.IsNullOrWhiteSpace(cardModel.TelefoneWhatsApp) ? cardModel.TelefoneWhatsApp : (cardModel.Celular ?? "");
+    var tituloCard = cardModel.Codigo > 0 ? $"#{cardModel.Codigo}" : "Novo";
+    var nomeCard = !string.IsNullOrWhiteSpace(cardModel.Descricao) ? cardModel.Descricao : "Novo atendimento comercial";
+    var qtdAnexos = cardModel.Anotacoes?.Count(x =>
+    !string.IsNullOrWhiteSpace(GetString(x, "CaminhoImagem")) ||
+    !string.IsNullOrWhiteSpace(GetString(x, "NomeImagem")) ||
+    !string.IsNullOrWhiteSpace(GetString(x, "Audio"))) ?? 0;
+}
+
+<div class="crm-shell">
+    <div class="crm-card-page">
+
+        <header class="crm-modern-topbar">
+            <div class="crm-top-left">
+
+                <button type="button"
+                        class="crm-back-btn"
+                        @onclick='() => Nav.NavigateTo("/menu")'
+                        title="Voltar">
+                    ←
+                </button>
+
+                <div class="crm-title-wrap">
+
+                    <div class="crm-card-line">
+                        <div class="crm-code-box">
+                            <span class="crm-code-number">
+                                @tituloCard
+                            </span>
+                        </div>
+
+
+                        @if (cardTemWhatsApp)
+                        {
+                            <span class="crm-whatsapp-chip">
+                                <i class="fab fa-whatsapp"></i>
+                                WhatsApp
+                                <small>@telefoneWhats</small>
+                            </span>
+                        }
+                    </div>
+
+
+
+                </div>
+            </div>
+
+            <div class="crm-top-right">
+                <div class="crm-kpi-card">
+                    <small>Status</small>
+                    <strong>@(string.IsNullOrWhiteSpace(cardModel.Status) ? "ABERTO" : cardModel.Status)</strong>
+                </div>
+
+                <div class="crm-kpi-card">
+                    <small>Responsável</small>
+                    <strong>@(string.IsNullOrWhiteSpace(cardModel.Usuario) ? UserState.CurrentUser : cardModel.Usuario)</strong>
+                </div>
+
+                @if (VisualizadoresCard.Any())
+                {
+                    <div class="visualizadores-ticket">
+                        @foreach (var usuario in VisualizadoresCard)
+                        {
+                            <div class="visualizador-badge"
+                                 title="@usuario"
+                                 style="background:@GerarCorUsuario(usuario)">
+                                @ObterIniciais(usuario)
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </header>
+
+        <div class="crm-modern-grid">
+
+            <!-- ESQUERDA: DIGITAÇÃO / ANEXO / AÇÕES -->
+            <aside class="crm-modern-panel crm-modern-left">
+                <div class="crm-panel-title">
+                    <span>Enviar mensagem</span>
+                </div>
+
+                <div class="crm-panel-body">
+                    @if (PodeEditarCRM)
+                    {
+                        <div class="composer-card">
+
+                            <div>
+                                <label class="field-label">Mensagem / Anotação</label>
+                                <textarea id="cardAnotacao"
+                                          class="field composer-textarea"
+                                          @bind="NovaAnotacao"
+                                          @bind:event="oninput"
+                                          @onkeydown="EnviarAnotacaoComEnter"
+                                          placeholder="Digite sua mensagem aqui..."></textarea>
+
+                                <small class="hint">
+                                    ENTER envia • SHIFT + ENTER quebra linha
+                                </small>
+                            </div>
+
+
+
+                            <div class="composer-toolbar">
+                                @* <div class="composer-mini-actions">
+                                    <button type="button" class="composer-mini-btn" title="Anexo">
+                                        📎
+                                    </button>
+
+                                    <button type="button" class="composer-mini-btn" title="Imagem">
+                                        🖼️
+                                    </button>
+
+                                    <button type="button" class="composer-mini-btn" title="Agenda">
+                                        📅
+                                    </button>
+                                </div> *@
+
+                                <button class="btn-send"
+                                        style="min-width:120px;"
+                                        @onclick="AdicionarAnotacao"
+                                        disabled="@enviandoAnotacao">
+                                    @(enviandoAnotacao ? "Enviando..." : "Enviar")
+                                </button>
+                            </div>
+
+                            <div>
+                                <label class="field-label">Anexo</label>
+
+                                <InputFile OnChange="OnArquivoAnotacaoSelecionado"
+                                           accept=".pdf,.txt,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.bmp,.doc,.docx,.xls,.xlsx,.zip,.rar,.apk,.pfx,.p12" />
+
+
+                                <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+                                    @if (!gravandoAudio)
+                                    {
+                                        <button type="button"
+                                                class="composer-mini-btn"
+                                                title="Gravar áudio"
+                                                @onclick="AlternarGravacao">
+                                            🎤
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button"
+                                                class="composer-mini-btn"
+                                                style="background:#fee2e2; border-color:#fecaca; color:#991b1b;
+                                            animation:pulseRec 1s infinite;"
+                                                title="Parar gravação"
+                                                @onclick="AlternarGravacao">
+                                            ⏹
+                                        </button>
+                                    }
+
+                                    <span style="font-size:.72rem; color:#64748b; font-weight:800;">
+                                        @(gravandoAudio ? "Gravando áudio..." : "Gravar áudio")
+                                    </span>
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(previewAudio))
+                                {
+                                    <div class="audio-player" style="margin-top:8px;">
+                                        <div style="font-weight:800; margin-bottom:6px;">🎧 Áudio gravado</div>
+                                        <audio controls style="width:100%;">
+                                            <source src="@previewAudio" type="@audioMimeType" />
+                                        </audio>
+                                        <button type="button"
+                                                class="btn btn-danger-soft"
+                                                style="margin-top:8px;"
+                                                @onclick="RemoverAudio">
+                                            Remover áudio
+                                        </button>
+                                    </div>
+                                }
+
+                                @if (ArquivoAnotacao != null || _imagemColadaBytes != null)
+                                {
+                                    var ext = ArquivoAnotacao != null
+                                        ? Path.GetExtension(NomeArquivoAnotacao).ToLowerInvariant()
+                                        : ".png";
+                                    var ehImagem = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp";
+                                    var ehPdf = ext == ".pdf";
+                                    var ehTexto = ext is ".txt" or ".csv" or ".xml" or ".json";
+
+                                    <div class="attachment-preview">
+                                        <strong>@(string.IsNullOrWhiteSpace(NomeArquivoAnotacao) ? "print.png" : NomeArquivoAnotacao)</strong>
+
+                                        @if (ehImagem && !string.IsNullOrEmpty(PreviewArquivoAnotacao))
+                                        {
+                                            <img src="@PreviewArquivoAnotacao" />
+                                        }
+                                        else if ((ehPdf || ehTexto) && !string.IsNullOrEmpty(PreviewArquivoAnotacao))
+                                        {
+                                            <iframe src="@PreviewArquivoAnotacao"
+                                                    style="margin-top:10px; width:100%; height:260px; border:1px solid #cbd5e1; border-radius:8px; background:white;"></iframe>
+                                        }
+                                        else if (_imagemColadaBytes != null && string.IsNullOrEmpty(PreviewArquivoAnotacao))
+                                        {
+                                            <div style="margin-top:8px; color:#455a64; font-size:13px;">
+                                                Imagem colada — pronta para envio.
+                                            </div>
+                                        }
+
+                                        <button type="button"
+                                                style="margin-top:8px;"
+                                                class="btn btn-danger-soft"
+                                                @onclick="RemoverArquivoAnotacao">
+                                            Remover anexo
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="agenda-compose">
+                                <label class="agenda-check">
+                                    <input type="checkbox" @bind="CriarAgenda" />
+                                    <span>Criar agenda nesta mensagem</span>
+                                </label>
+
+                                @if (CriarAgenda)
+                                {
+                                    <div style="margin-top:10px;">
+                                        <label class="field-label">Data/Hora da agenda</label>
+                                        <input type="datetime-local"
+                                               class="field"
+                                               value="@_dataHoraAgendaStr"
+                                               @onchange="e => _dataHoraAgendaStr = e.Value?.ToString() ?? string.Empty" />
+                                        <label class="agenda-check" style="margin-top:10px;">
+                                            <input type="checkbox" @bind="NotificarAgenda" />
+                                            <span>Notificar quando vencer</span>
+                                        </label>
+                                    </div>
+                                }
+                            </div>
+
+                            <button class="btn-save-big"
+                                    @onclick="Salvar"
+                                    disabled="@isSaving">
+                                @(isSaving ? "Salvando..." : "Salvar alterações")
+                            </button>
+
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="sem-permissao-box">
+                            Você pode visualizar este card, mas não tem permissão para responder ou alterar.
+                        </div>
+                    }
+                </div>
+            </aside>
+
+            <!-- CENTRO: HISTÓRICO PRINCIPAL -->
+            <main class="crm-modern-panel crm-modern-center">
+                <div class="crm-panel-title">
+                    <span>Histórico do atendimento</span>
+                    <small>@(cardModel.Anotacoes?.Count ?? 0) registro(s)</small>
+                </div>
+
+                <div class="historico-wrap">
+                    @if (cardModel.Anotacoes == null || !cardModel.Anotacoes.Any())
+                    {
+                        <div class="historico-empty">
+                            Nenhuma mensagem registrada.
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var anot in cardModel.Anotacoes.OrderBy(x => x.DataHora))
+                        {
+                            var usuarioAnotacao = ObterUsuarioAnotacao(anot);
+                            var mensagemExcluida = GetString(anot, "MensagemExcluida") == "S";
+                            var alterado = GetString(anot, "Alterado") == "S";
+                            var codigoAnotacao = GetInt(anot, "Codigo");
+                            var editandoEstaMensagem = CodigoMensagemEditando == codigoAnotacao && codigoAnotacao > 0;
+                            var caminhoImagem = GetString(anot, "CaminhoImagem");
+                            var nomeImagem = GetString(anot, "NomeImagem");
+                            var audioUrl = GetString(anot, "Audio");
+                            var audioMime = GetString(anot, "AudioMimeType");
+                            var statusWhats = GetString(anot, "StatusWhatsApp");
+                            var novaAgenda = GetString(anot, "NovaAgenda") == "S";
+                            var agendaResolvida = GetString(anot, "AgendaResolvida") == "S";
+                            var dataAgenda = GetNullableDate(anot, "DataHoraAgenda");
+                            var agendaVencida = novaAgenda && !agendaResolvida && dataAgenda.HasValue && dataAgenda.Value <= DateTime.Now;
+
+                            var usuarioMensagem = usuarioAnotacao?.Trim() ?? "";
+                            var usuarioLogado = UserState.CurrentUser?.Trim() ?? "";
+
+                            bool mensagemCliente =
+                            (anot.EnvioCliente ?? "N")
+                            .Trim()
+                            .Equals("S", StringComparison.OrdinalIgnoreCase);
+
+                            bool souEu = !mensagemCliente;
+
+                            var podeEditarMensagem =
+                            PodeEditarCRM &&
+                            souEu &&
+                            !mensagemExcluida &&
+                            !string.IsNullOrWhiteSpace(anot.Texto) &&
+                            string.IsNullOrWhiteSpace(audioUrl);
+
+                            var podeExcluirMensagem =
+                            PodeEditarCRM &&
+                            souEu &&
+                            !mensagemExcluida;
+
+                            <div @key="@($"anot_{codigoAnotacao}_{anot.DataHora.Ticks}")"
+                                 class="historico-line @(mensagemCliente ? "other" : "me")">
+                                <div class="historico-box @(mensagemCliente ? "hist-other" : "hist-me")">
+
+                                    <div class="historico-topo">
+                                        <span>
+                                            @(string.IsNullOrWhiteSpace(usuarioAnotacao)
+    ? (mensagemCliente
+        ? (string.IsNullOrWhiteSpace(cardModel.Descricao) ? "Cliente" : cardModel.Descricao)
+        : UserState.CurrentUser)
+    : usuarioAnotacao)
+                                </span>
+
+                                        <span>
+                                            @anot.DataHora.ToString("dd/MM/yyyy HH:mm")
+                                        </span>
+                                    </div>
+
+                            @if (mensagemExcluida)
+                                    {
+                                        <span class="historico-texto"
+                                              style="font-style:italic; opacity:.75;">
+                                            🗑️ Mensagem excluída
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        @if (editandoEstaMensagem)
+                                        {
+                                            <textarea class="edit-msg-textarea"
+                                                      @bind="TextoMensagemEditando"></textarea>
+
+                                            <div class="edit-msg-actions">
+                                                <button type="button"
+                                                        class="btn-salvar-edit-msg"
+                                                        @onclick="SalvarEdicaoMensagem">
+                                                    💾 Salvar
+                                                </button>
+
+                                                <button type="button"
+                                                        class="btn-cancelar-edit-msg"
+                                                        @onclick="CancelarEdicaoMensagem">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            @if (!string.IsNullOrWhiteSpace(anot.Texto))
+                                            {
+                                                <span class="historico-texto">
+                                                    @anot.Texto
+                                                </span>
+                                            }
+
+                                            @if (alterado)
+                                            {
+                                                <div class="msg-editada-label">
+                                                    ✏️ editada
+                                                </div>
+                                            }
+                                        }
+
+                                        @if ((podeEditarMensagem && !editandoEstaMensagem) || podeExcluirMensagem)
+                                        {
+                                            <div class="msg-actions">
+                                                @if (podeEditarMensagem && !editandoEstaMensagem)
+                                                {
+                                                    <button type="button"
+                                                            class="btn-msg-action"
+                                                            @onclick="() => IniciarEdicaoMensagem(anot)">
+                                                        ✏️ Editar
+                                                    </button>
+                                                }
+
+                                                @if (podeExcluirMensagem)
+                                                {
+                                                    <button type="button"
+                                                            class="btn-msg-action"
+                                                            @onclick="() => ExcluirMensagem(anot)">
+                                                        🗑️ Excluir
+                                                    </button>
+                                                }
+                                            </div>
+                                        }
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(statusWhats) && !mensagemCliente)
+                                    {
+                                        <div class="msg-status-whats">
+                                            @((MarkupString)RenderStatusWhatsApp(statusWhats))
+                                        </div>
+                                    }
+
+                                    @if (novaAgenda)
+                                    {
+                                        <div class="agenda-card @(agendaVencida ? "vencida" : "futura")">
+                                            <div class="agenda-title">
+                                                <span>
+                                                    @(agendaVencida ? "⏰ Agenda vencida" : "📅 Agenda")
+                                                </span>
+
+                                                <span class="agenda-badge">
+                                                    @(agendaResolvida ? "Resolvida" : "Pendente")
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                Prazo:
+                                                @(dataAgenda?.ToString("dd/MM/yyyy HH:mm") ?? "Sem data")
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(caminhoImagem))
+                                    {
+                                        var ehImagem = ArquivoEhImagem(nomeImagem ?? caminhoImagem);
+
+                                        <div class="thumb-box">
+                                            @if (ehImagem)
+                                            {
+                                                <div style="font-weight:800; margin-bottom:8px;">
+                                                    🖼️ @(nomeImagem ?? "imagem")
+                                                </div>
+
+                                                <img src="@caminhoImagem"
+                                                     class="thumb"
+                                                     @onclick="() => AbrirImagem(caminhoImagem)" />
+
+                                                <a href="@caminhoImagem"
+                                                   target="_blank"
+                                                   class="btn btn-ghost"
+                                                   style="display:block; text-align:center; text-decoration:none; margin-top:8px;">
+                                                    Baixar imagem
+                                                </a>
+                                            }
+                                            else
+                                            {
+                                                <strong>📎 @(nomeImagem ?? "Arquivo")</strong>
+                                                <a href="@caminhoImagem"
+                                                   target="_blank"
+                                                   class="btn btn-ghost"
+                                                   style="display:block; text-align:center; text-decoration:none; margin-top:8px;">
+                                                    Abrir / Baixar arquivo
+                                                </a>
+                                            }
+                                        </div>
+                                    }
+
+                                    @if (!string.IsNullOrWhiteSpace(audioUrl))
+                                    {
+                                        <div class="audio-player">
+                                            <div style="font-weight:800; margin-bottom:6px;">
+                                                🎧 Áudio
+                                            </div>
+
+                                            <audio controls>
+                                                <source src="@audioUrl"
+                                                        type="@(audioMime ?? "audio/mpeg")" />
+                                            </audio>
+                                        </div>
+                                    }
+
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </main>
+
+            <!-- DIREITA: INFORMAÇÕES FIXAS -->
+            <aside class="crm-modern-panel crm-modern-right">
+                <div class="crm-panel-title">
+                    <span>Dados do card</span>
+                </div>
+
+                <div class="crm-info-profile">
+                    <div class="crm-info-avatar">
+                        @ObterIniciais(string.IsNullOrWhiteSpace(cardModel.Usuario) ? UserState.CurrentUser : cardModel.Usuario)
+                    </div>
+
+                    <div>
+                        <div style="font-size:.76rem; color:#64748b; font-weight:800;">Responsável</div>
+                        <div style="font-weight:950; color:#0d47a1;">
+                            @(string.IsNullOrWhiteSpace(cardModel.Usuario) ? UserState.CurrentUser : cardModel.Usuario)
+                        </div>
+                        <div style="font-size:.76rem; color:#16a34a; font-weight:900;">
+                            ● Atendimento comercial
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <div class="crm-info-stats">
+                    <div class="crm-info-stat">
+                        <strong>@(cardModel.Anotacoes?.Count ?? 0)</strong>
+                        <span>Mensagens</span>
+                    </div>
+
+                    <div class="crm-info-stat">
+                        <strong>@qtdAnexos</strong>
+                        <span>Anexos</span>
+                    </div>
+
+                    <div class="crm-info-stat">
+                        <strong>@VisualizadoresCard.Count</strong>
+                        <span>Views</span>
+                    </div>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Observação do cliente</label>
+
+                    <textarea class="field"
+                              style="min-height:110px;"
+                              @bind="cardModel.ObservacaoCliente"
+                              @bind:event="oninput"
+                              disabled="@(!PodeEditarCRM)"
+                              placeholder="Digite observações importantes sobre este cliente..."></textarea>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Descrição</label>
+                    <input class="field"
+                           @bind="cardModel.Descricao"
+                           disabled="@(!PodeEditarCRM)"
+                           required
+                           placeholder="Digite a descrição do cliente ou oportunidade..." />
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Celular</label>
+                    <div class="row-flex">
+                        <input class="field"
+                               @bind="cardModel.TelefoneWhatsApp"
+                               @bind:event="oninput"
+                               disabled="@(!PodeEditarCRM)"
+                               placeholder="(DDD) 99999-9999" />
+
+                        <button type="button"
+                                class="whats-btn"
+                                @onclick="AbrirWhatsApp"
+                                title="Abrir WhatsApp">
+                            <i class="fab fa-whatsapp"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Responsável</label>
+                    <select class="field-select"
+                            disabled="@(!PodeEditarCRM)"
+                            @bind="cardModel.Usuario"
+                            @bind:event="onchange"
+                            @bind:after="() => OnUsuarioAlterado(new ChangeEventArgs { Value = cardModel.Usuario })">
+                        <option value="">Selecione...</option>
+
+                        @foreach (var u in ListaUsuarios)
+                        {
+                            <option value="@u.Username">
+                                @u.Username
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Funil</label>
+                    <select class="field-select"
+                            disabled="@(!PodeEditarCRM)"
+                            @bind="cardModel.Funil">
+                        <option value="">Selecione...</option>
+                        <option value="RA">Novo Lead</option>
+                        <option value="EP">Contato Feito</option>
+                        <option value="FU">Qualificado</option>
+                        <option value="NO">Nutrição</option>
+                        <option value="IM">Implantação</option>
+                    </select>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Status</label>
+                    <select class="field-select"
+                            disabled="@(!PodeEditarCRM)"
+                            @bind="cardModel.Status">
+                        <option value="ABERTO">ABERTO</option>
+                        <option value="CONCLUIDO">CONCLUIDO</option>
+                        <option value="PERDIDO">PERDIDO</option>
+                    </select>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Temperatura</label>
+                    <select class="field-select"
+                            disabled="@(!PodeEditarCRM)"
+                            @bind="cardModel.FaixaLead">
+                        <option value="">Sem temperatura</option>
+                        <option value="QUENTE">🔥 Quente</option>
+                        <option value="MORNO">🟡 Morno</option>
+                        <option value="FRIO">🧊 Frio</option>
+                        <option value="MUITO FRIO">❄️ Muito Frio</option>
+                    </select>
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Data Alteração</label>
+                    <input type="date"
+                           class="field-date"
+                           disabled="@(!PodeEditarCRM)"
+                           value="@cardModel.DataAlteracao?.ToString("yyyy-MM-dd")"
+                           @onchange="e => cardModel.DataAlteracao = ParseDate(e.Value)" />
+                </div>
+
+                <div class="crm-info-row">
+                    <label>Data Criação</label>
+                    <input type="date"
+                           class="field-date"
+                           disabled="@(!PodeEditarCRM)"
+                           value="@cardModel.DataCriacao?.ToString("yyyy-MM-dd")"
+                           @onchange="e => cardModel.DataCriacao = ParseDate(e.Value)" />
+                </div>
+
+                <div class="crm-side-actions">
+                    <button type="button"
+                            class="btn btn-primary"
+                            @onclick="AbrirBuscaCard">
+                        🔍 Buscar Card
+                    </button>
+
+                    @if (cardModel.Codigo > 0 && PodeEditarCRM)
+                    {
+                        <button type="button"
+                                class="btn"
+                                style="background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;box-shadow:0 8px 18px rgba(8,145,178,.20);"
+                                @onclick="AbrirModalCriarTicket">
+                            🎫 Criar Ticket no Suporte
+                        </button>
+                    }
+
+                    <button type="button"
+                            class="btn btn-ghost"
+                            @onclick='() => Nav.NavigateTo("/menu")'>
+                        ← Voltar para lista
+                    </button>
+                </div>
+            </aside>
+
+        </div>
+    </div>
+</div>
+
+@if (mostrarModalCriarTicket)
+{
+    <div class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="margin-top:0; color:#0d47a1;">🎫 Criar Ticket no Suporte</h3>
+
+            <p style="color:#475569; font-size:.82rem; margin-bottom:12px;">
+                Será criado um ticket no módulo de suporte com os dados deste card
+                e o histórico de conversas como anotação inicial.
+            </p>
+
+            <label class="field-label">Responsável no Suporte</label>
+            <select class="field-select" @bind="modalCriarTicketUsuario">
+                <option value="NOVO">— NOVO (fila geral) —</option>
+                @foreach (var u in ListaUsuarios)
+                {
+                    <option value="@u.Username">@u.Username</option>
+                }
+            </select>
+
+            @if (!string.IsNullOrWhiteSpace(modalCriarTicketErro))
+            {
+                <div class="msg erro" style="margin-top:10px;">@modalCriarTicketErro</div>
+            }
+
+            <div class="modal-actions" style="margin-top:14px;">
+                <button class="btn btn-primary"
+                        @onclick="ConfirmarCriarTicket"
+                        disabled="@criandoTicket">
+                    @(criandoTicket ? "Criando..." : "✅ Criar Ticket")
+                </button>
+                <button class="btn btn-ghost"
+                        @onclick="FecharModalCriarTicket"
+                        disabled="@criandoTicket">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (exibirMensagem)
+{
+    <div class="mensagem-popup @(sucesso ? "sucesso" : "erro")">
+        @mensagem
+    </div>
+}
+
+@if (mostrarModalBusca)
+{
+    <div class="modal-overlay">
+        <div class="modal-card">
+            <h3 style="margin-top:0; color:#0d47a1;">Buscar Card</h3>
+
+            <input class="modal-input"
+                   placeholder="Buscar por nome (Descrição)..."
+                   @bind="buscaNome" />
+
+            <input class="modal-input"
+                   placeholder="Buscar por telefone..."
+                   @bind="buscaTelefone" />
+
+            <div class="modal-actions">
+                <button class="btn btn-primary"
+                        @onclick="ProcurarCards">
+                    Pesquisar
+                </button>
+
+                <button class="btn btn-ghost"
+                        @onclick="FecharModalBusca">
+                    Fechar
+                </button>
+            </div>
+
+            @if (resultadosBusca?.Any() == true)
+            {
+                <ul class="modal-resultados">
+                    @foreach (var c in resultadosBusca)
+                    {
+                        <li @onclick="() => AbrirCardPesquisado(c.Codigo)">
+                            <strong>@c.Descricao</strong><br />
+                            <span style="color:var(--cr-muted);">@c.Telefone</span>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <div style="color:var(--cr-muted); font-weight:700; margin-top:10px;">
+                    Nenhum resultado encontrado.
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(ImagemEmVisualizacao))
+{
+    <div class="img-modal-backdrop" @onclick="FecharImagem">
+        <div class="img-modal" @onclick:stopPropagation="true">
+            <div style="display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; justify-content:center;">
+                <button type="button"
+                        class="img-modal-close"
+                        @onclick="DiminuirZoomImagem">
+                    🔍−
+                </button>
+
+                <button type="button"
+                        class="img-modal-close"
+                        @onclick="AumentarZoomImagem">
+                    🔍+
+                </button>
+
+                <button type="button"
+                        class="img-modal-close"
+                        @onclick="ResetarZoomImagem">
+                    100%
+                </button>
+
+                <button type="button"
+                        class="img-modal-close"
+                        @onclick="FecharImagem">
+                    Fechar
+                </button>
+            </div>
+
+            <div class="img-scroll-area @(ZoomImagem > 1 ? "zoomado" : "normal")">
+                <img src="@ImagemEmVisualizacao"
+                     class="img-modal-img"
+                     style="width:@(ZoomImagem * 100)%;" />
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    window.evolutCard = window.evolutCard || {};
+
+    window.evolutCard.scrollHistoricoBottom = function() {
+        const el = document.querySelector(".crm-modern-center .historico-wrap");
+        if (!el) return;
+        setTimeout(function() {
+            el.scrollTop = el.scrollHeight;
+        }, 100);
+    };
+
+    window.enablePasteImageCard = function(textareaId, dotnetRef) {
+        const el = document.getElementById(textareaId);
+        if (!el) {
+            console.warn('[PasteCard] textarea ainda não existe:', textareaId);
+            return false;   // ← sinaliza que falhou, tenta de novo no próximo render
+        }
+        if (el.dataset.pasteBound === '1') {
+            return true;    // ← já registrado, não duplica
+        }
+        el.dataset.pasteBound = '1';
+
+        console.log('[PasteCard] textarea encontrado, registrando paste');
+
+        el.addEventListener('paste', async function(e) {
+            console.log('[PasteCard] paste disparado');
+            if (!e.clipboardData) return;
+            const items = e.clipboardData.items;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = async function(event) {
+                        try {
+                            await dotnetRef.invokeMethodAsync('ReceberImagemColada', event.target.result, file.name || 'print.png');
+                            console.log('[PasteCard] imagem enviada ao Blazor');
+                        } catch (err) {
+                            console.error('[PasteCard] Erro:', err);
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+        return true;
+    };
+</script>
+
+@code {
+    private DotNetObjectReference<Card>? _pasteRef;
+    private bool _pasteRegistrado = false;
+    [Parameter] public int? id { get; set; }
+    private byte[]? _imagemColadaBytes;
+
+    private PeriodicTimer? _timerCard;
+private bool _atualizandoCard;
+private bool _deveScrollarHistorico = true;
+
+    private bool PodeVisualizarCRM = false;
+    private bool PodeEditarCRM = false;
+
+    private bool isSaving;
+    private bool enviandoAnotacao;
+    private CardModels cardModel = new() { Anotacoes = new() };
+    private string NovaAnotacao = "";
+    private string? mensagem;
+    private bool exibirMensagem;
+    private bool sucesso;
+
+    private List<UserItem> ListaUsuarios = new();
+
+    private bool mostrarModalBusca = false;
+    private string buscaNome = "";
+    private string buscaTelefone = "";
+    private List<CardModels> resultadosBusca = new();
+
+    private IBrowserFile? ArquivoAnotacao;
+    private string NomeArquivoAnotacao = "";
+    private string PreviewArquivoAnotacao = "";
+
+    private bool CriarAgenda;
+    private bool NotificarAgenda = true;
+
+    private int CodigoMensagemEditando;
+    private string TextoMensagemEditando = "";
+
+    private string ImagemEmVisualizacao = "";
+    private double ZoomImagem = 1;
+
+    private List<string> VisualizadoresCard = new();
+
+    // ── ÁUDIO ──────────────────────────────────────────────
+    private bool gravandoAudio = false;
+    private byte[]? audioGravado;
+    private string audioMimeType = "";
+    private string audioNomeArquivo = "";
+    private string previewAudio = "";
+
+    // Campo auxiliar para o datetime-local
+    private string _dataHoraAgendaStr = "";
+    private DateTime? DataHoraAgenda
+    {
+        get => string.IsNullOrWhiteSpace(_dataHoraAgendaStr)
+            ? null
+            : DateTime.TryParse(_dataHoraAgendaStr, out var dt) ? dt : null;
+        set => _dataHoraAgendaStr = value?.ToString("yyyy-MM-ddTHH:mm") ?? "";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        while (!UserState.IsReady)
+            await Task.Delay(50);
+
+        var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+
+        PodeVisualizarCRM = await AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "CRM_CLIENTES_VISUALIZAR");
+        PodeEditarCRM = await AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "CRM_CLIENTES_EDITAR");
+
+        if (!PodeVisualizarCRM)
+        {
+            mensagem = "Você não tem permissão para acessar esta tela.";
+            sucesso = false;
+            exibirMensagem = true;
+            return;
+        }
+
+        ListaUsuarios = await CardService.GetUsuariosAsync(UserState.CurrentCompanyId);
+
+        if (id.HasValue && id.Value > 0)
+        {
+            cardModel = await CardService.GetCardAsync(id.Value, UserState.CurrentUser, UserState.CurrentCompanyId)
+                        ?? new CardModels { Anotacoes = new List<AnotacaoModel>() };
+
+            cardModel.Anotacoes = await CardService.GetAnotacoesAsync(id.Value)
+                                  ?? new List<AnotacaoModel>();
+        }
+        else
+        {
+            cardModel = new CardModels { Anotacoes = new List<AnotacaoModel>() };
+            cardModel.Usuario = UserState.CurrentUser;
+        }
+
+        if (cardModel.Usuario?.Trim().ToUpper() == "IMPORTACAO")
+            cardModel.Usuario = UserState.CurrentUser;
+
+        if (string.IsNullOrWhiteSpace(cardModel.Usuario))
+            cardModel.Usuario = UserState.CurrentUser;
+
+        cardModel.CodEmp = UserState.CurrentCompanyId;
+
+        _deveScrollarHistorico = true;
+
+        if (_timerCard == null && id.HasValue && id.Value > 0)
+        {
+            _ = AtualizarCardAutomaticamente();
+        }
+       
+        AtualizarVisualizadoresLocais();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Registra o paste assim que o textarea existir (PodeEditarCRM == true)
+        // Não pode ser só no firstRender porque nesse momento o textarea ainda não está no DOM
+        if (!_pasteRegistrado && PodeEditarCRM)
+        {
+            try
+            {
+                _pasteRef ??= DotNetObjectReference.Create(this);
+                var ok = await JS.InvokeAsync<bool>("enablePasteImageCard", "cardAnotacao", _pasteRef);
+                if (ok)
+                {
+                    _pasteRegistrado = true;
+                    Console.WriteLine("[PasteCard] registrado com sucesso");
+                }
+            }
+            catch
+            {
+                // JS ainda não carregou — tenta no próximo render
+            }
+        }
+
+        if (_deveScrollarHistorico)
+        {
+            _deveScrollarHistorico = false;
+            try { await JS.InvokeVoidAsync("evolutCard.scrollHistoricoBottom"); }
+            catch { }
+        }
+    }
+
+    [JSInvokable]
+    public async Task ReceberImagemColada(string dataUrl, string nomeArquivo)
+    {
+        NomeArquivoAnotacao = nomeArquivo;
+        PreviewArquivoAnotacao = dataUrl;
+
+        // Converte para bytes e popula ImagemBytes na próxima anotação
+        if (dataUrl.Contains(";base64,"))
+        {
+            var base64 = dataUrl.Split(",")[1];
+            _imagemColadaBytes = Convert.FromBase64String(base64);
+        }
+
+        ArquivoAnotacao = null; // sinaliza que tem anexo mas via clipboard
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AtualizarCardAutomaticamente()
+    {
+        if (!id.HasValue || id.Value <= 0)
+            return;
+
+        _timerCard ??= new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        try
+        {
+            while (await _timerCard.WaitForNextTickAsync())
+            {
+                if (_atualizandoCard)
+                    continue;
+
+                _atualizandoCard = true;
+
+                try
+                {
+                    await AtualizarCardAberto();
+                }
+                finally
+                {
+                    _atualizandoCard = false;
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task AtualizarCardAberto()
+    {
+        int codigoCard = id ?? cardModel.Codigo;
+
+        if (codigoCard <= 0)
+            return;
+
+        var novasAnotacoes = await CardService.GetAnotacoesAsync(codigoCard)
+                             ?? new List<AnotacaoModel>();
+
+        var ultimoAtual = cardModel.Anotacoes?
+            .OrderByDescending(x => x.DataHora)
+            .FirstOrDefault();
+
+        var ultimoNovo = novasAnotacoes
+            .OrderByDescending(x => x.DataHora)
+            .FirstOrDefault();
+
+        bool mudou =
+            (cardModel.Anotacoes?.Count ?? 0) != novasAnotacoes.Count
+            || ultimoAtual?.DataHora != ultimoNovo?.DataHora
+            || ultimoAtual?.Texto != ultimoNovo?.Texto;
+
+        if (mudou)
+        {
+            cardModel.Anotacoes = novasAnotacoes;
+            _deveScrollarHistorico = true;
+
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose()
+    {
+        _timerCard?.Dispose();
+        _pasteRef?.Dispose();
+    }
+
+    private void AtualizarVisualizadoresLocais()
+    {
+        VisualizadoresCard = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            VisualizadoresCard.Add(UserState.CurrentUser);
+
+        if (!string.IsNullOrWhiteSpace(cardModel.Usuario) &&
+            !VisualizadoresCard.Any(x => MesmoUsuario(x, cardModel.Usuario)))
+            VisualizadoresCard.Add(cardModel.Usuario);
+    }
+
+    private async Task OnUsuarioAlterado(ChangeEventArgs e)
+    {
+        if (!PodeEditarCRM)
+        {
+            ExibirMensagem("Você não tem permissão para alterar o responsável.", false);
+            return;
+        }
+
+        var novoUsuario = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(novoUsuario) || cardModel.Codigo == 0)
+            return;
+
+        try
+        {
+            await CardService.TransferirCardAsync(cardModel.Codigo, novoUsuario, UserState.CurrentCompanyId);
+            cardModel.Usuario = novoUsuario;
+            AtualizarVisualizadoresLocais();
+            ExibirMensagem($"✅ Card transferido para {novoUsuario}!", true);
+            HealthMonitor.Log(LogCategory.CRM, LogSeverity.Info,
+                $"Card #{cardModel.Codigo} transferido para {novoUsuario} por {UserState.CurrentUser}");
+        }
+        catch (Exception ex)
+        {
+            ExibirMensagem($"❌ Erro ao transferir card: {ex.Message}", false);
+            HealthMonitor.LogException(LogCategory.CRM, ex,
+                $"TransferirCard #{cardModel.Codigo}");
+        }
+    }
+
+    private async Task Salvar()
+    {
+        if (!PodeEditarCRM)
+        {
+            ExibirMensagem("Você não tem permissão para editar cards.", false);
+            return;
+        }
+
+        isSaving = true;
+
+        try
+        {
+            if (!ValidarCardAntesDeSalvar())
+                return;
+
+            PrepararCardParaSalvar();
+
+            var idGerado = await CardService.SaveCardAsync(cardModel);
+            cardModel.Codigo = idGerado;
+
+            await SalvarHistoricoAtual();
+
+            // ── NOVO: gravar agenda se estiver marcada ──
+            if (CriarAgenda && DataHoraAgenda.HasValue)
+            {
+                var novaAgendaObj = new AgendaModel
+                {
+                    Descricao = string.IsNullOrWhiteSpace(NovaAnotacao)
+                        ? $"Agenda - {cardModel.Descricao}"
+                        : NovaAnotacao.Trim(),
+                    DataAgendamento = DataHoraAgenda.Value.Date,
+                    HoraAgendamento = DataHoraAgenda.Value.TimeOfDay,
+                    Usuario = UserState.CurrentUser,
+                    CodEmp = UserState.CurrentCompanyId,
+                    CodCRMC = cardModel.Codigo,
+                    NomeCliente = cardModel.Descricao,
+                    Origem = "CRM",
+                    Status = "PENDENTE",
+                    TipoRepeticao = "UmaVez"
+                };
+
+                await AgendaService.SalvarAgendaAsync(novaAgendaObj, false);
+
+                CriarAgenda = false;
+                _dataHoraAgendaStr = "";
+                NotificarAgenda = true;
+            }
+
+            ExibirMensagem("✅ Card salvo com sucesso.", true);
+            HealthMonitor.Log(LogCategory.CRM, LogSeverity.Success,
+                $"Card #{cardModel.Codigo} salvo por {UserState.CurrentUser}");
+        }
+        catch (Exception ex)
+        {
+            ExibirMensagem($"❌ Erro ao salvar: {ex.Message}", false);
+            HealthMonitor.LogException(LogCategory.CRM, ex,
+                $"Salvar card #{cardModel.Codigo} usuário {UserState.CurrentUser}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private bool ValidarCardAntesDeSalvar()
+    {
+        if (string.IsNullOrWhiteSpace(cardModel.Descricao))
+        {
+            ExibirMensagem("❌ O campo Descrição é obrigatório.", false);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(cardModel.Funil))
+        {
+            ExibirMensagem("❌ É obrigatório selecionar uma opção de Funil.", false);
+            return false;
+        }
+
+        // ADICIONAR:
+        if (string.IsNullOrWhiteSpace(cardModel.Usuario) || cardModel.Usuario.Trim().ToUpper() == "NOVO")
+        {
+            ExibirMensagem("❌ É obrigatório definir um Responsável antes de salvar.", false);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void PrepararCardParaSalvar()
+    {
+        cardModel.Usuario =
+            string.IsNullOrWhiteSpace(cardModel.Usuario) || cardModel.Usuario.Trim().ToUpper() == "IMPORTACAO"
+                ? UserState.CurrentUser
+                : cardModel.Usuario;
+
+        cardModel.CodEmp = cardModel.CodEmp == 0 ? UserState.CurrentCompanyId : cardModel.CodEmp;
+    }
+
+    private async Task AdicionarAnotacao()
+    {
+        if (!PodeEditarCRM)
+        {
+            ExibirMensagem("Você não tem permissão para inserir mensagens.", false);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(NovaAnotacao)
+    && ArquivoAnotacao == null
+    && _imagemColadaBytes == null
+    && !CriarAgenda
+    && (audioGravado == null || audioGravado.Length == 0))
+            return;
+
+        // ADICIONAR:
+        if (string.IsNullOrWhiteSpace(cardModel.Usuario) || cardModel.Usuario.Trim().ToUpper() == "NOVO")
+        {
+            ExibirMensagem("❌ Defina um Responsável antes de enviar mensagem.", false);
+            return;
+        }
+
+
+        enviandoAnotacao = true;
+
+        try
+        {
+            if (!ValidarCardAntesDeSalvar())
+                return;
+
+            PrepararCardParaSalvar();
+
+            if (cardModel.Codigo == 0)
+                cardModel.Codigo = await CardService.SaveCardAsync(cardModel);
+
+            var nova = new AnotacaoModel
+            {
+                DataHora = DateTime.Now,
+                Texto = NovaAnotacao?.Trim() ?? "",
+                Funil = cardModel.Funil,
+                IsNova = true
+            };
+
+            DefinirUsuarioAnotacao(nova, UserState.CurrentUser);
+            SetProp(nova, "MensagemExcluida", "N");
+            SetProp(nova, "Alterado", "N");
+            SetProp(nova, "StatusWhatsApp", "");
+
+            // EXISTENTE — imagem colada / arquivo
+            if (ArquivoAnotacao != null || _imagemColadaBytes != null)
+            {
+                SetProp(nova, "NomeImagem", NomeArquivoAnotacao);
+                if (_imagemColadaBytes != null)
+                {
+                    nova.ImagemBytes = _imagemColadaBytes;
+                }
+                else if (!string.IsNullOrEmpty(PreviewArquivoAnotacao) && PreviewArquivoAnotacao.Contains(";base64,"))
+                {
+                    var base64 = PreviewArquivoAnotacao.Split(",")[1];
+                    nova.ImagemBytes = Convert.FromBase64String(base64);
+                }
+            }
+
+            // ── NOVO — áudio gravado ──────────────────────────────
+            // ── ÁUDIO ──────────────────────────────────────────────
+            if (audioGravado != null && audioGravado.Length > 0)
+            {
+                nova.Audio = "data:" + audioMimeType + ";base64," + Convert.ToBase64String(audioGravado);
+                nova.AudioMimeType = audioMimeType;
+            }
+
+            if (CriarAgenda)
+            {
+                SetProp(nova, "NovaAgenda", "S");
+                SetProp(nova, "DataHoraAgenda", DataHoraAgenda ?? DateTime.Now.AddHours(1));
+                SetProp(nova, "AgendaResolvida", "N");
+                SetProp(nova, "NotificarAgenda", NotificarAgenda);
+            }
+            else
+            {
+                SetProp(nova, "NovaAgenda", "N");
+            }
+
+            cardModel.Anotacoes ??= new List<AnotacaoModel>();
+            cardModel.Anotacoes.Add(nova);
+
+            await SalvarHistoricoAtual();
+
+            if (CriarAgenda)
+{
+    var novaAgendaObj = new AgendaModel
+    {
+        Descricao = string.IsNullOrWhiteSpace(NovaAnotacao)
+            ? $"Agenda - {cardModel.Descricao}"
+            : NovaAnotacao.Trim(),
+        DataAgendamento = DataHoraAgenda?.Date ?? DateTime.Today,
+        HoraAgendamento = DataHoraAgenda.HasValue
+            ? DataHoraAgenda.Value.TimeOfDay
+            : TimeSpan.FromHours(9),
+        Usuario = UserState.CurrentUser,
+        CodEmp = UserState.CurrentCompanyId,
+        CodCRMC = cardModel.Codigo,
+        NomeCliente = cardModel.Descricao,
+        Origem = "CRM",
+        Status = "PENDENTE",
+        TipoRepeticao = "UmaVez"
+    };
+
+    await AgendaService.SalvarAgendaAsync(novaAgendaObj, false);
+}
+
+            await RecarregarAnotacoes();
+
+            _deveScrollarHistorico = true;
+
+            NovaAnotacao = "";
+            RemoverArquivoAnotacao();
+            RemoverAudio();
+            CriarAgenda = false;
+            _dataHoraAgendaStr = "";
+            NotificarAgenda = true;
+
+            ExibirMensagem("✅ Mensagem enviada no histórico do card.", true);
+            HealthMonitor.Log(LogCategory.CRM, LogSeverity.Info,
+                $"Anotação adicionada ao card #{cardModel.Codigo} por {UserState.CurrentUser}",
+                audioGravado != null ? "tipo=audio" : ArquivoAnotacao != null ? "tipo=arquivo" : "tipo=texto");
+        }
+        catch (Exception ex)
+        {
+            ExibirMensagem($"❌ Erro ao enviar mensagem: {ex.Message}", false);
+            HealthMonitor.LogException(LogCategory.CRM, ex,
+                $"AdicionarAnotacao card #{cardModel.Codigo} usuário {UserState.CurrentUser}");
+        }
+        finally
+        {
+            enviandoAnotacao = false;
+        }
+    }
+
+    private async Task SalvarHistoricoAtual()
+    {
+        await CardService.SalvarAnotacoesAsync(cardModel.Codigo, cardModel.Anotacoes ?? new List<AnotacaoModel>(), UserState.CurrentUser);
+    }
+
+    private async Task RecarregarAnotacoes()
+    {
+        if (cardModel.Codigo > 0)
+        {
+            cardModel.Anotacoes = await CardService.GetAnotacoesAsync(cardModel.Codigo)
+                                  ?? cardModel.Anotacoes
+                                  ?? new List<AnotacaoModel>();
+        }
+    }
+
+    private async Task EnviarAnotacaoComEnter(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await AdicionarAnotacao();
+    }
+
+    private async Task OnArquivoAnotacaoSelecionado(InputFileChangeEventArgs e)
+    {
+        ArquivoAnotacao = e.File;
+        NomeArquivoAnotacao = ArquivoAnotacao.Name;
+        PreviewArquivoAnotacao = "";
+
+        try
+        {
+            var maxBytes = 15 * 1024 * 1024;
+            using var stream = ArquivoAnotacao.OpenReadStream(maxBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var bytes = ms.ToArray();
+            var base64 = Convert.ToBase64String(bytes);
+            var contentType = string.IsNullOrWhiteSpace(ArquivoAnotacao.ContentType)
+                ? "application/octet-stream"
+                : ArquivoAnotacao.ContentType;
+
+            PreviewArquivoAnotacao = $"data:{contentType};base64,{base64}";
+        }
+        catch (Exception ex)
+        {
+            ExibirMensagem($"❌ Erro ao carregar anexo: {ex.Message}", false);
+        }
+    }
+
+    private void RemoverArquivoAnotacao()
+    {
+        ArquivoAnotacao = null;
+        NomeArquivoAnotacao = "";
+        PreviewArquivoAnotacao = "";
+        _imagemColadaBytes = null;
+    }
+
+    private void IniciarEdicaoMensagem(AnotacaoModel anotacao)
+    {
+        CodigoMensagemEditando = GetInt(anotacao, "Codigo");
+
+        if (CodigoMensagemEditando == 0)
+            CodigoMensagemEditando = anotacao.GetHashCode();
+
+        TextoMensagemEditando = anotacao.Texto ?? "";
+    }
+
+    private async Task SalvarEdicaoMensagem()
+    {
+        var anotacao = EncontrarMensagemEditando();
+        if (anotacao == null)
+            return;
+
+        anotacao.Texto = TextoMensagemEditando?.Trim() ?? "";
+        SetProp(anotacao, "Alterado", "S");
+
+        await SalvarHistoricoAtual();
+        CancelarEdicaoMensagem();
+        ExibirMensagem("✅ Mensagem editada com sucesso.", true);
+        HealthMonitor.Log(LogCategory.CRM, LogSeverity.Info,
+            $"Mensagem #{CodigoMensagemEditando} editada no card #{cardModel.Codigo} por {UserState.CurrentUser}");
+    }
+
+    private void CancelarEdicaoMensagem()
+    {
+        CodigoMensagemEditando = 0;
+        TextoMensagemEditando = "";
+    }
+
+    private async Task ExcluirMensagem(AnotacaoModel anotacao)
+    {
+        SetProp(anotacao, "MensagemExcluida", "S");
+        SetProp(anotacao, "Alterado", "S");
+        await SalvarHistoricoAtual();
+        ExibirMensagem("✅ Mensagem excluída.", true);
+        HealthMonitor.Log(LogCategory.CRM, LogSeverity.Info,
+            $"Mensagem excluída no card #{cardModel.Codigo} por {UserState.CurrentUser}");
+    }
+
+    private AnotacaoModel? EncontrarMensagemEditando()
+    {
+        if (cardModel.Anotacoes == null)
+            return null;
+
+        return cardModel.Anotacoes.FirstOrDefault(x =>
+        {
+            var codigo = GetInt(x, "Codigo");
+            return (codigo > 0 && codigo == CodigoMensagemEditando) ||
+                   (codigo == 0 && x.GetHashCode() == CodigoMensagemEditando);
+        });
+    }
+
+    private bool AnotacaoEhDoUsuarioLogado(AnotacaoModel anotacao)
+    {
+        var usuarioAnotacao = ObterUsuarioAnotacao(anotacao);
+
+        if (!string.IsNullOrWhiteSpace(usuarioAnotacao))
+            return MesmoUsuario(usuarioAnotacao, UserState.CurrentUser);
+
+        return anotacao.IsNova;
+    }
+
+    private string ObterUsuarioAnotacao(AnotacaoModel anotacao)
+    {
+        var prop = anotacao.GetType().GetProperty("Usuario");
+        if (prop?.GetValue(anotacao) is string usuario)
+            return usuario;
+        return "";
+    }
+
+    private void DefinirUsuarioAnotacao(AnotacaoModel anotacao, string usuario)
+    {
+        SetProp(anotacao, "Usuario", usuario);
+    }
+
+    private bool MesmoUsuario(string? a, string? b)
+    {
+        return string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string GetString(object obj, string propName)
+    {
+        var prop = obj.GetType().GetProperty(propName);
+        var value = prop?.GetValue(obj);
+        return value?.ToString() ?? "";
+    }
+
+    private int GetInt(object obj, string propName)
+    {
+        var prop = obj.GetType().GetProperty(propName);
+        var value = prop?.GetValue(obj);
+
+        if (value == null)
+            return 0;
+
+        if (value is int i)
+            return i;
+
+        int.TryParse(value.ToString(), out var result);
+        return result;
+    }
+
+    private DateTime? GetNullableDate(object obj, string propName)
+    {
+        var prop = obj.GetType().GetProperty(propName);
+        var value = prop?.GetValue(obj);
+
+        if (value == null)
+            return null;
+
+        if (value is DateTime dt)
+            return dt;
+
+        if (DateTime.TryParse(value.ToString(), out var parsed))
+            return parsed;
+
+        return null;
+    }
+
+    private void SetProp(object obj, string propName, object? value)
+    {
+        var prop = obj.GetType().GetProperty(propName);
+        if (prop == null || !prop.CanWrite)
+            return;
+
+        try
+        {
+            if (value == null)
+            {
+                prop.SetValue(obj, null);
+                return;
+            }
+
+            var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+            if (targetType == typeof(string))
+                prop.SetValue(obj, value.ToString());
+            else if (targetType == typeof(bool))
+                prop.SetValue(obj, value is bool b ? b : value.ToString() == "S" || value.ToString()?.ToLower() == "true");
+            else if (targetType == typeof(DateTime))
+                prop.SetValue(obj, value is DateTime dt ? dt : DateTime.Parse(value.ToString()!));
+            else if (targetType == typeof(int))
+                prop.SetValue(obj, value is int i ? i : int.Parse(value.ToString()!));
+            else
+                prop.SetValue(obj, value);
+        }
+        catch
+        {
+            // Ignora propriedades incompatíveis para não quebrar a tela enquanto o model é ajustado.
+        }
+    }
+
+    private string RenderStatusWhatsApp(string status)
+    {
+        var s = (status ?? "").Trim().ToLowerInvariant();
+
+        return s switch
+        {
+            "" or "sending" or "pending" =>
+                "<span style='color:#64748b; font-weight:700;'>🕓 Enviando...</span>",
+
+            "sent" =>
+                "<span style='color:#475569; font-weight:800;'>✓ Enviado</span>",
+
+            "received" or "delivered" or "delivery_ack" or "delivered2user" =>
+                "<span style='color:#16a34a; font-weight:800;'>✓✓ Entregue</span>",
+
+            "read" or "read_ack" =>
+                "<span style='color:#0ea5e9; font-weight:900;'>✓✓ Lido</span>",
+
+            "error" or "failed" =>
+                "<span style='color:#dc2626; font-weight:900;'>⚠ Erro no envio</span>",
+
+            _ =>
+                $"<span style='color:#64748b; font-weight:700;'>🕓 {status}</span>"
+        };
+    }
+
+    private bool ArquivoEhImagem(string? nomeArquivo)
+    {
+        var ext = Path.GetExtension(nomeArquivo ?? "").ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp";
+    }
+
+    private void AbrirImagem(string caminho)
+    {
+        ImagemEmVisualizacao = caminho;
+        ZoomImagem = 1;
+    }
+
+    private void FecharImagem()
+    {
+        ImagemEmVisualizacao = "";
+        ZoomImagem = 1;
+    }
+
+    private void AumentarZoomImagem() => ZoomImagem = Math.Min(ZoomImagem + .25, 3);
+    private void DiminuirZoomImagem() => ZoomImagem = Math.Max(ZoomImagem - .25, .5);
+    private void ResetarZoomImagem() => ZoomImagem = 1;
+
+    private string GerarCorUsuario(string nome)
+    {
+        string[] cores =
+        {
+            "#1976d2", "#e53935", "#43a047", "#8e24aa", "#fb8c00",
+            "#00897b", "#3949ab", "#d81b60", "#5e35b1", "#546e7a"
+        };
+
+        if (string.IsNullOrWhiteSpace(nome))
+            return cores[0];
+
+        int indice = Math.Abs(nome.GetHashCode()) % cores.Length;
+        return cores[indice];
+    }
+
+    private string ObterIniciais(string nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome))
+            return "?";
+
+        var partes = nome.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 1)
+            return partes[0].Length >= 2 ? partes[0][..2].ToUpper() : partes[0][..1].ToUpper();
+
+        return $"{partes[0][0]}{partes[^1][0]}".ToUpper();
+    }
+
+    private DateTime? ParseDate(object? val)
+    {
+        var s = val?.ToString();
+        return string.IsNullOrWhiteSpace(s) ? null : DateTime.Parse(s);
+    }
+
+    private async Task AbrirWhatsApp()
+    {
+        var telParaWhats = !string.IsNullOrWhiteSpace(cardModel.TelefoneWhatsApp)
+            ? cardModel.TelefoneWhatsApp
+            : cardModel.Celular;
+
+        if (string.IsNullOrWhiteSpace(telParaWhats))
+        {
+            ExibirMensagem("❌ Informe um número de celular antes de abrir o WhatsApp.", false);
+            return;
+        }
+
+        if (cardModel.Codigo > 0)
+            await CardService.RegistrarWhatsAsync(cardModel.Codigo, UserState.CurrentUser);
+
+        var numeroLimpo = new string(telParaWhats.Where(char.IsDigit).ToArray());
+
+        if (numeroLimpo.StartsWith("0"))
+            numeroLimpo = numeroLimpo[1..];
+
+        var url = $"https://wa.me/55{numeroLimpo}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private void AbrirBuscaCard() => mostrarModalBusca = true;
+
+    private void FecharModalBusca()
+    {
+        mostrarModalBusca = false;
+        buscaNome = "";
+        buscaTelefone = "";
+        resultadosBusca.Clear();
+    }
+
+    private async Task ProcurarCards()
+    {
+        if (!PodeVisualizarCRM)
+        {
+            ExibirMensagem("Você não tem permissão para visualizar cards.", false);
+            return;
+        }
+
+        resultadosBusca = await CardService.BuscarCardsAsync(buscaNome, buscaTelefone, UserState.CurrentCompanyId);
+        StateHasChanged();
+    }
+
+    private void AbrirCardPesquisado(int codigo)
+    {
+        mostrarModalBusca = false;
+        Nav.NavigateTo($"/card/{codigo}");
+    }
+
+    private void ExibirMensagem(string texto, bool ok)
+    {
+        mensagem = texto;
+        sucesso = ok;
+        exibirMensagem = true;
+        StateHasChanged();
+    }
+
+    private string ObterTextoFunil(string? funil)
+    {
+        return (funil ?? "").Trim().ToUpperInvariant() switch
+        {
+            "RA" => "Novo Lead",
+            "EP" => "Contato Feito",
+            "FU" => "Qualificado",
+            "NO" => "Nutrição",
+            "IM" => "Implantação",
+            "CONCLUIDO" => "Concluído",
+            "PERDIDO" => "Perdido",
+            _ => string.IsNullOrWhiteSpace(funil) ? "Sem funil" : funil
+        };
+    }
+
+    private async Task AlternarGravacao()
+    {
+        if (!gravandoAudio)
+        {
+            gravandoAudio = true;
+            await JS.InvokeVoidAsync("ticketAudio.start");
+        }
+        else
+        {
+            gravandoAudio = false;
+            var retorno = await JS.InvokeAsync<AudioResult>("ticketAudio.stop");
+            audioGravado = Convert.FromBase64String(retorno.base64);
+            audioMimeType = retorno.mimeType;
+            audioNomeArquivo = "audio_" + DateTime.Now.ToString("yyyyMMddHHmmss") + ".ogg";
+            previewAudio = $"data:{audioMimeType};base64,{retorno.base64}";
+        }
+    }
+
+    private void RemoverAudio()
+    {
+        audioGravado = null;
+        audioMimeType = "";
+        audioNomeArquivo = "";
+        previewAudio = "";
+        gravandoAudio = false;
+    }
+
+    public class AudioResult
+    {
+        public string base64 { get; set; } = "";
+        public string mimeType { get; set; } = "";
+    }
+
+    // ── Criar Ticket a partir do Card ──────────────────────────────────────
+    private bool mostrarModalCriarTicket = false;
+    private string modalCriarTicketUsuario = "NOVO";
+    private string modalCriarTicketErro = "";
+    private bool criandoTicket = false;
+
+    private void AbrirModalCriarTicket()
+    {
+        modalCriarTicketUsuario = cardModel.Usuario ?? "NOVO";
+        modalCriarTicketErro = "";
+        mostrarModalCriarTicket = true;
+    }
+
+    private void FecharModalCriarTicket()
+    {
+        mostrarModalCriarTicket = false;
+        modalCriarTicketErro = "";
+    }
+
+    private async Task ConfirmarCriarTicket()
+    {
+        if (criandoTicket) return;
+        criandoTicket = true;
+        modalCriarTicketErro = "";
+
+        try
+        {
+            var codTicket = await CardService.CriarTicketAPartirDoCardAsync(
+                cardModel.Codigo,
+                modalCriarTicketUsuario,
+                UserState.CurrentCompanyId);
+
+            mostrarModalCriarTicket = false;
+            ExibirMensagem($"✅ Ticket #{codTicket} criado no Suporte com sucesso!", true);
+            HealthMonitor.Log(LogCategory.CRM, LogSeverity.Success,
+                $"Ticket #{codTicket} criado a partir do card #{cardModel.Codigo}",
+                $"responsavel={modalCriarTicketUsuario}");
+
+            await Task.Delay(1500);
+            Nav.NavigateTo($"/ticket/{codTicket}");
+        }
+        catch (Exception ex)
+        {
+            modalCriarTicketErro = $"❌ Erro ao criar ticket: {ex.Message}";
+            HealthMonitor.LogException(LogCategory.CRM, ex,
+                $"ConfirmarCriarTicket card #{cardModel.Codigo}");
+        }
+        finally
+        {
+            criandoTicket = false;
+        }
+    }
+
+}

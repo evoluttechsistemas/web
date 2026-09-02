@@ -1,0 +1,2809 @@
+﻿@page "/chat-interno"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using System.Text.Json
+@inject ChatInternoService ChatService
+@inject UserState UserState
+@inject IJSRuntime JS
+@implements IDisposable
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+
+    :root {
+        --c-bg: #eef2f8;
+        --c-surf: #ffffff;
+        --c-surf2: #f8fafc;
+        --c-border: #e2e8f0;
+        --c-text: #0f172a;
+        --c-text2: #475569;
+        --c-text3: #94a3b8;
+        --c-blue: #2563eb;
+        --c-blue-d: #1e3a8a;
+        --c-blue-l: #eff6ff;
+        --c-blue-m: #dbeafe;
+        --c-green: #22c55e;
+        --c-red: #dc2626;
+        --c-purple: #7c3aed;
+        --c-amber: #d97706;
+        --c-radius: 14px;
+        --c-radius-s: 8px;
+        --c-shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+        --c-shadow-b: 0 20px 56px rgba(15,23,42,.16);
+        --c-font: 'Inter', sans-serif;
+        --c-mono: 'JetBrains Mono', monospace;
+        --mine-bg: linear-gradient(135deg, #2563eb, #1e3a8a);
+        --mine-color: #ffffff;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* ── PAGE ── */
+    .ct-page {
+        font-family: var(--c-font);
+        position: absolute; /* ← em vez de height: 100vh */
+        inset: 0;
+        padding: 10px;
+        background: var(--c-bg);
+        overflow: hidden;
+        display: flex;
+        align-items: stretch;
+    }
+
+    /* ── SHELL ── */
+    .ct-shell {
+        display: grid;
+        grid-template-columns: 288px 1fr;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        background: var(--c-surf);
+        border: 1px solid var(--c-border);
+        border-radius: var(--c-radius);
+        overflow: hidden;
+        box-shadow: var(--c-shadow-b);
+    }
+
+    /* ══════════════════════════════
+           SIDEBAR
+        ══════════════════════════════ */
+    .ct-side {
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--c-border);
+        background: var(--c-surf2);
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .ct-side-head {
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .ct-brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+    }
+
+    .ct-brand-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .8rem;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        font-family: var(--c-mono);
+    }
+
+    .ct-brand-name {
+        font-size: .82rem;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .ct-brand-user {
+        font-size: .68rem;
+        color: rgba(255,255,255,.65);
+        margin-top: 1px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ct-head-btns {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+    }
+
+    .ct-icon-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,.2);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .14s;
+        flex-shrink: 0;
+        padding: 0;
+    }
+
+        .ct-icon-btn:hover {
+            background: rgba(255,255,255,.22);
+        }
+
+        .ct-icon-btn.active {
+            background: rgba(255,255,255,.28);
+        }
+
+    /* search */
+    .ct-search-wrap {
+        flex-shrink: 0;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-surf);
+    }
+
+    .ct-search {
+        width: 100%;
+        height: 30px;
+        padding: 0 10px 0 30px;
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        font-family: var(--c-font);
+        font-size: .76rem;
+        color: var(--c-text);
+        background: var(--c-surf2);
+        outline: none;
+        transition: border .14s;
+        background-image: url("data:image/svg+xml,%3Csvg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 9px center;
+    }
+
+        .ct-search:focus {
+            border-color: var(--c-blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+
+    /* slide-in panel */
+    .ct-panel {
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--c-border);
+        background: var(--c-surf);
+        max-height: 260px;
+        overflow-y: auto;
+        padding: 10px 12px;
+        animation: slideDown .16s ease-out;
+    }
+
+    @@keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .ct-panel-title {
+        font-size: .65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--c-text3);
+        margin-bottom: 8px;
+    }
+
+    .ct-user-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: var(--c-radius-s);
+        cursor: pointer;
+        transition: background .12s;
+        margin-bottom: 2px;
+    }
+
+        .ct-user-row:hover {
+            background: var(--c-blue-l);
+        }
+
+    .ct-user-left {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .ct-online-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--c-text3);
+        flex-shrink: 0;
+    }
+
+        .ct-online-dot.on {
+            background: var(--c-green);
+            box-shadow: 0 0 5px rgba(34,197,94,.6);
+        }
+
+    .ct-user-name {
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--c-text);
+    }
+
+    .ct-user-status {
+        font-size: .66rem;
+        color: var(--c-text3);
+    }
+
+    .ct-field {
+        width: 100%;
+        height: 30px;
+        padding: 0 9px;
+        border: 1px solid var(--c-border);
+        border-radius: var(--c-radius-s);
+        font-family: var(--c-font);
+        font-size: .78rem;
+        color: var(--c-text);
+        background: var(--c-surf2);
+        outline: none;
+        transition: border .14s;
+        margin-bottom: 8px;
+    }
+
+        .ct-field:focus {
+            border-color: var(--c-blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+
+    .ct-check-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 0;
+        font-size: .78rem;
+        font-weight: 500;
+        color: var(--c-text2);
+        cursor: pointer;
+    }
+
+        .ct-check-row input {
+            accent-color: var(--c-blue);
+            cursor: pointer;
+        }
+
+    .ct-panel-err {
+        font-size: .70rem;
+        color: var(--c-red);
+        font-weight: 600;
+        margin-top: 4px;
+    }
+
+    .ct-panel-btn {
+        width: 100%;
+        margin-top: 8px;
+        height: 30px;
+        border-radius: var(--c-radius-s);
+        border: none;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        color: #fff;
+        font-family: var(--c-font);
+        font-size: .76rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: filter .14s;
+    }
+
+        .ct-panel-btn:hover {
+            filter: brightness(1.08);
+        }
+
+        .ct-panel-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+    /* conversation list */
+    .ct-conv-header {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px 4px;
+    }
+
+    .ct-conv-label {
+        font-size: .63rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--c-text3);
+    }
+
+    .ct-conv-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 6px 8px;
+        min-height: 0;
+    }
+
+    .ct-conv-item {
+        width: 100%;
+        border: none;
+        background: transparent;
+        border-radius: var(--c-radius-s);
+        padding: 8px 10px;
+        margin-bottom: 2px;
+        cursor: pointer;
+        transition: background .12s;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+
+        .ct-conv-item:hover {
+            background: rgba(37,99,235,.06);
+        }
+
+        .ct-conv-item.active {
+            background: var(--c-blue-m);
+            border-left: 3px solid var(--c-blue);
+        }
+
+    .ct-av {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--c-mono);
+        font-size: .78rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #3b82f6, #1e40af);
+        position: relative;
+    }
+
+        .ct-av.grupo {
+            background: linear-gradient(135deg, var(--c-purple), #4338ca);
+        }
+
+    .ct-av-online {
+        position: absolute;
+        bottom: 1px;
+        right: 1px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--c-green);
+        border: 2px solid var(--c-surf2);
+        box-shadow: 0 0 4px rgba(34,197,94,.5);
+    }
+
+    .ct-conv-body {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .ct-conv-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+        margin-bottom: 2px;
+    }
+
+    .ct-conv-name {
+        font-size: .78rem;
+        font-weight: 700;
+        color: var(--c-text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ct-conv-item.active .ct-conv-name {
+        color: var(--c-blue);
+    }
+
+    .ct-conv-time {
+        font-size: .62rem;
+        color: var(--c-text3);
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-family: var(--c-mono);
+    }
+
+    .ct-conv-preview {
+        font-size: .70rem;
+        color: var(--c-text3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 160px;
+    }
+
+    .ct-badge {
+        min-width: 17px;
+        height: 17px;
+        border-radius: 999px;
+        background: var(--c-green);
+        color: #fff;
+        font-size: .60rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 4px;
+        flex-shrink: 0;
+    }
+
+    /* context menu na conversa */
+    .ct-conv-ctx {
+        position: absolute;
+        background: var(--c-surf);
+        border: 1px solid var(--c-border);
+        border-radius: var(--c-radius-s);
+        box-shadow: var(--c-shadow);
+        z-index: 200;
+        padding: 4px;
+        min-width: 160px;
+        animation: fadeIn .12s ease-out;
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: scale(.96)
+        }
+
+        to {
+            opacity: 1;
+            transform: none
+        }
+    }
+
+    .ct-ctx-item {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 7px 10px;
+        border-radius: 6px;
+        font-size: .76rem;
+        font-weight: 500;
+        color: var(--c-text2);
+        cursor: pointer;
+        transition: background .1s;
+    }
+
+        .ct-ctx-item:hover {
+            background: var(--c-blue-l);
+            color: var(--c-blue);
+        }
+
+        .ct-ctx-item.danger {
+            color: var(--c-red);
+        }
+
+            .ct-ctx-item.danger:hover {
+                background: #fff1f2;
+            }
+
+    /* ══════════════════════════════
+           MAIN
+        ══════════════════════════════ */
+    .ct-main {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        background: var(--c-bg);
+        background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='16' cy='16' r='1' fill='%23bfdbfe' fill-opacity='.4'/%3E%3C/svg%3E");
+        position: relative;
+    }
+
+    /* header */
+    .ct-main-head {
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        padding: 9px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .ct-main-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        cursor: pointer;
+    }
+
+    .ct-main-av {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.18);
+        border: 1px solid rgba(255,255,255,.24);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--c-mono);
+        font-size: .78rem;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+        .ct-main-av.grupo {
+            background: rgba(124,58,237,.35);
+            border-color: rgba(167,139,250,.4);
+        }
+
+    .ct-main-name {
+        font-size: .82rem;
+        font-weight: 700;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ct-main-sub {
+        font-size: .66rem;
+        color: rgba(255,255,255,.6);
+        margin-top: 1px;
+    }
+
+        .ct-main-sub.online {
+            color: #86efac;
+        }
+
+    .ct-main-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .ct-main-btn {
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.25);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        font-family: var(--c-font);
+        font-size: .70rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background .14s;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        .ct-main-btn:hover {
+            background: rgba(255,255,255,.2);
+        }
+
+        .ct-main-btn.danger {
+            background: rgba(220,38,38,.25);
+            border-color: rgba(220,38,38,.4);
+        }
+
+            .ct-main-btn.danger:hover {
+                background: rgba(220,38,38,.45);
+            }
+
+        .ct-main-btn.search-active {
+            background: rgba(255,255,255,.22);
+        }
+
+    /* busca em mensagens */
+    .ct-msg-search {
+        flex-shrink: 0;
+        background: #fff;
+        border-bottom: 1px solid var(--c-border);
+        padding: 6px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: slideDown .14s ease-out;
+    }
+
+        .ct-msg-search input {
+            flex: 1;
+            height: 28px;
+            border: 1px solid var(--c-border);
+            border-radius: 999px;
+            padding: 0 10px;
+            font-family: var(--c-font);
+            font-size: .76rem;
+            outline: none;
+            color: var(--c-text);
+            background: var(--c-surf2);
+            transition: border .14s;
+        }
+
+            .ct-msg-search input:focus {
+                border-color: var(--c-blue);
+            }
+
+    .ct-msg-search-count {
+        font-size: .70rem;
+        color: var(--c-text3);
+        white-space: nowrap;
+        font-family: var(--c-mono);
+    }
+
+    /* info grupo (participantes) */
+    .ct-group-info {
+        flex-shrink: 0;
+        background: #fff;
+        border-bottom: 1px solid var(--c-border);
+        padding: 10px 14px;
+        animation: slideDown .14s ease-out;
+    }
+
+    .ct-group-info-title {
+        font-size: .66rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--c-text3);
+        margin-bottom: 8px;
+    }
+
+    .ct-group-members {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .ct-member-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px 4px 5px;
+        background: var(--c-blue-l);
+        border: 1px solid var(--c-blue-m);
+        border-radius: 999px;
+        font-size: .72rem;
+        font-weight: 600;
+        color: var(--c-blue);
+    }
+
+    .ct-member-chip-av {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        color: #fff;
+        font-size: .58rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--c-mono);
+    }
+
+    /* msgs area */
+    .ct-msgs {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 14px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        scroll-behavior: smooth;
+    }
+
+    .ct-date-sep {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 12px 0 6px;
+    }
+
+    .ct-date-pill {
+        background: rgba(255,255,255,.85);
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        padding: 3px 12px;
+        font-size: .65rem;
+        font-weight: 600;
+        color: var(--c-text2);
+        backdrop-filter: blur(4px);
+        font-family: var(--c-mono);
+    }
+
+    /* typing indicator */
+    .ct-typing-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 4px 0;
+        animation: fadeIn .2s ease;
+    }
+
+    .ct-typing-bubble {
+        background: #fff;
+        border: 1px solid var(--c-border);
+        border-radius: 4px 14px 14px 14px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+
+    .ct-typing-name {
+        font-size: .70rem;
+        font-weight: 600;
+        color: var(--c-blue);
+    }
+
+    .ct-typing-dots {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+    }
+
+        .ct-typing-dots span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--c-text3);
+            animation: bounce .9s ease-in-out infinite;
+        }
+
+            .ct-typing-dots span:nth-child(2) {
+                animation-delay: .15s;
+            }
+
+            .ct-typing-dots span:nth-child(3) {
+                animation-delay: .30s;
+            }
+
+    @@keyframes bounce {
+        0%, 80%, 100% {
+            transform: translateY(0);
+        }
+
+        40% {
+            transform: translateY(-5px);
+        }
+    }
+
+    /* message rows */
+    .ct-msg-row {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 2px;
+        position: relative;
+    }
+
+        .ct-msg-row.mine {
+            align-items: flex-end;
+        }
+
+        .ct-msg-row.other {
+            align-items: flex-start;
+        }
+
+            .ct-msg-row.mine + .ct-msg-row.other,
+            .ct-msg-row.other + .ct-msg-row.mine {
+                margin-top: 8px;
+            }
+
+    /* quote / reply */
+    .ct-quote {
+        max-width: min(64%, 500px);
+        background: rgba(0,0,0,.05);
+        border-left: 3px solid var(--c-blue);
+        border-radius: 4px;
+        padding: 5px 8px;
+        margin-bottom: 3px;
+        font-size: .68rem;
+        color: var(--c-text2);
+        overflow: hidden;
+    }
+
+    .ct-msg-row.mine .ct-quote {
+        background: rgba(255,255,255,.15);
+        border-left-color: rgba(255,255,255,.6);
+        color: rgba(255,255,255,.8);
+    }
+
+    .ct-quote-user {
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+
+    .ct-quote-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* bubble */
+    .ct-bubble {
+        max-width: min(64%, 520px);
+        padding: 8px 12px 6px;
+        border-radius: 4px 14px 14px 14px;
+        background: #fff;
+        border: 1px solid rgba(226,232,240,.9);
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        position: relative;
+        animation: bubbleIn .13s ease-out;
+    }
+
+    @@keyframes bubbleIn {
+        from {
+            opacity: 0;
+            transform: translateY(4px) scale(.98);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .ct-msg-row.mine .ct-bubble {
+        border-radius: 14px 4px 14px 14px;
+        background: var(--mine-bg);
+        color: var(--mine-color);
+        border-color: transparent;
+        box-shadow: 0 3px 12px rgba(37,99,235,.25);
+    }
+
+    .ct-msg-row.mine + .ct-msg-row.mine .ct-bubble {
+        border-radius: 14px 4px 4px 14px;
+    }
+
+    .ct-msg-row.other + .ct-msg-row.other .ct-bubble {
+        border-radius: 4px 14px 14px 14px;
+    }
+
+    .ct-msg-sender {
+        font-size: .65rem;
+        font-weight: 700;
+        color: var(--c-blue);
+        margin-bottom: 3px;
+        letter-spacing: .01em;
+    }
+
+    .ct-msg-row.mine .ct-msg-sender {
+        color: rgba(255,255,255,.65);
+    }
+
+    .ct-msg-text {
+        font-size: .82rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
+
+    /* imagem inline */
+    .ct-msg-img {
+        max-width: 240px;
+        max-height: 200px;
+        border-radius: 8px;
+        object-fit: cover;
+        cursor: zoom-in;
+        display: block;
+        margin-top: 4px;
+        transition: filter .12s;
+    }
+
+        .ct-msg-img:hover {
+            filter: brightness(.92);
+        }
+
+    /* arquivo */
+    .ct-msg-file {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-top: 4px;
+        padding: 8px 10px;
+        background: rgba(0,0,0,.06);
+        border-radius: 8px;
+        text-decoration: none;
+        transition: background .12s;
+    }
+
+    .ct-msg-row.mine .ct-msg-file {
+        background: rgba(255,255,255,.15);
+    }
+
+    .ct-msg-file:hover {
+        background: rgba(0,0,0,.1);
+    }
+
+    .ct-msg-row.mine .ct-msg-file:hover {
+        background: rgba(255,255,255,.22);
+    }
+
+    .ct-file-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(37,99,235,.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: .9rem;
+    }
+
+    .ct-file-name {
+        font-size: .74rem;
+        font-weight: 600;
+        color: var(--c-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 140px;
+    }
+
+    .ct-msg-row.mine .ct-file-name {
+        color: #fff;
+    }
+
+    .ct-file-size {
+        font-size: .62rem;
+        color: var(--c-text3);
+        font-family: var(--c-mono);
+    }
+
+    .ct-msg-row.mine .ct-file-size {
+        color: rgba(255,255,255,.6);
+    }
+
+    /* meta / time / ticks */
+    .ct-msg-meta {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px;
+        margin-top: 4px;
+    }
+
+    .ct-msg-time {
+        font-size: .60rem;
+        opacity: .6;
+        font-family: var(--c-mono);
+    }
+
+    .ct-tick {
+        font-size: .65rem;
+        color: rgba(255,255,255,.55);
+    }
+
+        .ct-tick.read {
+            color: #86efac;
+        }
+
+    /* reações */
+    .ct-reactions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        margin-top: 4px;
+    }
+
+    .ct-reaction {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--c-border);
+        background: var(--c-surf);
+        font-size: .72rem;
+        cursor: pointer;
+        transition: background .12s;
+        white-space: nowrap;
+    }
+
+        .ct-reaction:hover {
+            background: var(--c-blue-l);
+            border-color: var(--c-blue-m);
+        }
+
+        .ct-reaction.mine {
+            background: var(--c-blue-m);
+            border-color: var(--c-blue);
+        }
+
+        .ct-reaction span {
+            font-size: .65rem;
+            font-weight: 700;
+            color: var(--c-text2);
+        }
+
+    /* hover actions sobre mensagem */
+    .ct-msg-hover-actions {
+        position: absolute;
+        top: -12px;
+        display: none;
+        align-items: center;
+        gap: 2px;
+        background: var(--c-surf);
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        padding: 3px 6px;
+        box-shadow: var(--c-shadow);
+        z-index: 10;
+        white-space: nowrap;
+    }
+
+    .ct-msg-row.mine .ct-msg-hover-actions {
+        right: 0;
+    }
+
+    .ct-msg-row.other .ct-msg-hover-actions {
+        left: 0;
+    }
+
+    .ct-msg-row:hover .ct-msg-hover-actions {
+        display: flex;
+    }
+
+    .ct-hover-btn {
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .72rem;
+        transition: background .1s;
+        color: var(--c-text2);
+        padding: 0;
+    }
+
+        .ct-hover-btn:hover {
+            background: var(--c-blue-l);
+            color: var(--c-blue);
+        }
+
+        .ct-hover-btn.danger:hover {
+            background: #fff1f2;
+            color: var(--c-red);
+        }
+
+    /* emoji picker */
+    .ct-emoji-bar {
+        display: flex;
+        gap: 3px;
+        padding: 0 2px;
+    }
+
+    .ct-emoji-pick {
+        border: none;
+        background: transparent;
+        font-size: .85rem;
+        cursor: pointer;
+        padding: 1px 2px;
+        border-radius: 4px;
+        transition: background .1s;
+    }
+
+        .ct-emoji-pick:hover {
+            background: var(--c-blue-l);
+        }
+
+    /* reply preview (acima do compose) */
+    .ct-reply-preview {
+        flex-shrink: 0;
+        background: var(--c-surf);
+        border-top: 1px solid var(--c-border);
+        border-left: 3px solid var(--c-blue);
+        padding: 7px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        animation: slideDown .12s ease-out;
+    }
+
+    .ct-reply-preview-text {
+        font-size: .74rem;
+        color: var(--c-text2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ct-reply-preview-user {
+        font-weight: 700;
+        color: var(--c-blue);
+    }
+
+    .ct-reply-close {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: none;
+        background: var(--c-border);
+        color: var(--c-text2);
+        font-size: .65rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+        .ct-reply-close:hover {
+            background: #fecaca;
+            color: var(--c-red);
+        }
+
+    /* compose */
+    .ct-compose {
+        flex-shrink: 0;
+        padding: 8px 12px;
+        display: flex;
+        align-items: flex-end;
+        gap: 7px;
+        background: var(--c-surf);
+        border-top: 1px solid var(--c-border);
+    }
+
+    .ct-compose-attach {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 1px solid var(--c-border);
+        background: var(--c-surf2);
+        color: var(--c-text2);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all .14s;
+        padding: 0;
+    }
+
+        .ct-compose-attach:hover {
+            background: var(--c-blue-l);
+            border-color: var(--c-blue-m);
+            color: var(--c-blue);
+        }
+
+    .ct-input-wrap {
+        flex: 1;
+        min-width: 0;
+        background: var(--c-surf2);
+        border: 1px solid var(--c-border);
+        border-radius: 18px;
+        padding: 8px 12px;
+        display: flex;
+        align-items: flex-end;
+        gap: 7px;
+        transition: border .14s;
+    }
+
+        .ct-input-wrap:focus-within {
+            border-color: var(--c-blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+            background: #fff;
+        }
+
+    .ct-input {
+        flex: 1;
+        border: none;
+        outline: none;
+        font-family: var(--c-font);
+        font-size: .82rem;
+        color: var(--c-text);
+        background: transparent;
+        resize: none;
+        line-height: 1.45;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+
+        .ct-input::placeholder {
+            color: var(--c-text3);
+        }
+
+    .ct-send-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        color: #fff;
+        cursor: pointer;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(37,99,235,.3);
+        transition: transform .12s, box-shadow .12s;
+        padding: 0;
+    }
+
+        .ct-send-btn:hover {
+            transform: scale(1.06);
+            box-shadow: 0 4px 14px rgba(37,99,235,.4);
+        }
+
+        .ct-send-btn:active {
+            transform: scale(.96);
+        }
+
+    /* upload progress */
+    .ct-upload-bar {
+        flex-shrink: 0;
+        background: var(--c-surf);
+        border-top: 1px solid var(--c-border);
+        padding: 6px 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: .72rem;
+        color: var(--c-text2);
+        animation: slideDown .12s ease-out;
+    }
+
+    .ct-upload-progress {
+        flex: 1;
+        height: 4px;
+        background: var(--c-border);
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .ct-upload-fill {
+        height: 100%;
+        background: var(--c-blue);
+        border-radius: 999px;
+        transition: width .2s ease;
+    }
+
+    /* image lightbox */
+    .ct-lightbox {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.88);
+        z-index: 9999;
+        animation: fadeIn .15s ease;
+        overflow: hidden;
+    }
+
+    .ct-lightbox-area {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 70px;
+    }
+
+    .ct-lightbox-image {
+        max-width: 90vw;
+        max-height: 85vh;
+        width: auto;
+        height: auto;
+        border-radius: 10px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.5);
+        transition: transform .12s ease;
+        transform-origin: center center;
+        flex-shrink: 0;
+    }
+
+    .ct-lightbox-toolbar {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 10001;
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 7px;
+        border-radius: 10px;
+        background: rgba(20,20,20,.88);
+        border: 1px solid rgba(255,255,255,.18);
+        box-shadow: 0 4px 18px rgba(0,0,0,.35);
+    }
+
+        .ct-lightbox-toolbar button {
+            min-width: 32px;
+            height: 28px;
+            padding: 0 8px;
+            border: none;
+            border-radius: 7px;
+            background: rgba(255,255,255,.12);
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+            .ct-lightbox-toolbar button:hover {
+                background: rgba(255,255,255,.24);
+            }
+
+        .ct-lightbox-toolbar span {
+            min-width: 48px;
+            text-align: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+    .ct-lightbox-close {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.2);
+        color: #fff;
+        font-size: .9rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+    }
+
+        .ct-lightbox-close:hover {
+            background: rgba(255,255,255,.24);
+        }
+
+    /* empty */
+    .ct-empty {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 24px;
+        background: var(--c-bg);
+        background-image: url("data:image/svg+xml,%3Csvg width='32' height='32' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='16' cy='16' r='1' fill='%23bfdbfe' fill-opacity='.4'/%3E%3C/svg%3E");
+    }
+
+    .ct-empty-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--c-blue), var(--c-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 24px rgba(37,99,235,.25);
+    }
+
+    .ct-empty-title {
+        font-size: .9rem;
+        font-weight: 700;
+        color: var(--c-text);
+    }
+
+    .ct-empty-sub {
+        font-size: .76rem;
+        color: var(--c-text2);
+        text-align: center;
+        max-width: 200px;
+        line-height: 1.5;
+    }
+
+    /* notification badge no título */
+    .ct-notif-total {
+        font-size: .65rem;
+        font-weight: 700;
+        background: var(--c-red);
+        color: #fff;
+        border-radius: 999px;
+        padding: 1px 6px;
+        margin-left: 4px;
+    }
+
+    /* som toggle */
+    .ct-sound-btn {
+        font-size: .8rem;
+        cursor: pointer;
+        background: none;
+        border: none;
+        padding: 2px;
+        border-radius: 4px;
+        transition: background .1s;
+    }
+
+        .ct-sound-btn:hover {
+            background: rgba(255,255,255,.15);
+        }
+
+    /* responsive */
+    @@media(max-width: 860px) {
+        .ct-page {
+            padding: 0;
+        }
+
+        .ct-shell {
+            border-radius: 0;
+            grid-template-columns: 1fr;
+            grid-template-rows: 230px 1fr;
+        }
+
+        .ct-side {
+            border-right: none;
+            border-bottom: 1px solid var(--c-border);
+        }
+
+        .ct-msgs {
+            padding: 10px 12px;
+        }
+
+        .ct-bubble {
+            max-width: 88%;
+        }
+
+        .ct-compose {
+            padding: 7px 10px;
+        }
+    }
+
+    @@media(max-width: 520px) {
+        .ct-shell {
+            grid-template-rows: 210px 1fr;
+        }
+
+        .ct-bubble {
+            max-width: 94%;
+        }
+    }
+</style>
+
+@* ── Hidden file input ── *@
+<InputFile @ref="fileInput" OnChange="OnFileSelected" style="display:none" accept="*/*" />
+
+<div class="ct-page">
+    <div class="ct-shell">
+
+        <!-- ════════════ SIDEBAR ════════════ -->
+        <aside class="ct-side">
+
+            <div class="ct-side-head">
+                <div class="ct-brand">
+                    <div class="ct-brand-icon">C</div>
+                    <div style="min-width:0">
+                        <div class="ct-brand-name">
+                            Chat Interno
+                            @if (totalNaoLidas > 0)
+                            {
+                                <span class="ct-notif-total">@totalNaoLidas</span>
+                            }
+                        </div>
+                        <div class="ct-brand-user">@UserState.CurrentUser</div>
+                    </div>
+                </div>
+                <div class="ct-head-btns">
+                    <button class="ct-icon-btn @(somAtivo ? "" : "active")" title="@(somAtivo ? "Silenciar" : "Ativar som")"
+                            @onclick="() => somAtivo = !somAtivo">
+                        @(somAtivo ? "🔔" : "🔕")
+                    </button>
+                    <button class="ct-icon-btn @(mostrarUsuarios ? "active" : "")" title="Nova conversa" @onclick="AlternarUsuarios">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="12" y1="8" x2="12" y2="16" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                    </button>
+                    <button class="ct-icon-btn @(mostrarGrupo ? "active" : "")" title="Criar grupo" @onclick="AlternarGrupo">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- busca de conversas -->
+            <div class="ct-search-wrap">
+                <input class="ct-search" placeholder="Buscar conversa…"
+                       @bind="termoBuscaConversa" @bind:event="oninput" />
+            </div>
+
+            <!-- painel nova conversa -->
+            @if (mostrarUsuarios)
+            {
+                <div class="ct-panel">
+                    <div class="ct-panel-title">Nova conversa</div>
+                    @if (!usuarios.Any())
+                    {
+                        <div style="font-size:.76rem;color:var(--c-text3);font-weight:500;">Nenhum usuário disponível.</div>
+                    }
+                    else
+                    {
+                        @foreach (var u in usuarios.Where(u => string.IsNullOrWhiteSpace(termoBuscaConversa) ||
+                                        u.Usuario.Contains(termoBuscaConversa, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <div class="ct-user-row" @onclick="() => AbrirChatIndividual(u.Usuario)">
+                                <div class="ct-user-left">
+                                    <span class="ct-online-dot @(u.Online ? "on" : "")"></span>
+                                    <span class="ct-user-name">@u.Usuario</span>
+                                </div>
+                                <span class="ct-user-status">@(u.Online ? "Online" : UltimaVisto(u.UltimaAtividade))</span>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+
+            <!-- painel criar grupo -->
+            @if (mostrarGrupo)
+            {
+                <div class="ct-panel">
+                    <div class="ct-panel-title">Criar grupo</div>
+                    <input class="ct-field" placeholder="Nome do grupo" @bind="nomeGrupo" />
+                    @foreach (var u in usuarios)
+                    {
+                        <label class="ct-check-row">
+                            <input type="checkbox"
+                                   checked="@usuariosGrupo.Contains(u.Usuario)"
+                                   @onchange="e => SelecionarUsuarioGrupo(u.Usuario, e)" />
+                            <span class="ct-online-dot @(u.Online ? "on" : "")"></span>
+                            @u.Usuario
+                        </label>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(erroGrupo))
+                    {
+                        <div class="ct-panel-err">@erroGrupo</div>
+                    }
+                    <button class="ct-panel-btn" disabled="@criandoGrupo" @onclick="CriarGrupo">
+                        @(criandoGrupo ? "Criando…" : "Criar grupo")
+                    </button>
+                </div>
+            }
+
+            <!-- lista conversas -->
+            <div class="ct-conv-header">
+                <span class="ct-conv-label">Conversas</span>
+            </div>
+
+            <div class="ct-conv-list">
+                @foreach (var conv in ConversasFiltradas)
+                {
+                    bool ativo = conversaSelecionada?.Codigo == conv.Codigo;
+                    bool isGrupo = conv.ChatTipo == "GRUPO";
+                    string inicial = string.IsNullOrWhiteSpace(conv.Titulo) ? "?" : conv.Titulo.Trim()[0].ToString().ToUpper();
+                    bool outroOnline = !isGrupo && usuarios.Any(u => u.Online &&
+                    u.Usuario.Equals(conv.Titulo, StringComparison.OrdinalIgnoreCase));
+
+                    <button class="ct-conv-item @(ativo ? "active" : "")"
+                            @onclick="() => AbrirConversa(conv)"
+                            @oncontextmenu:preventDefault="true"
+                            @oncontextmenu="e => AbrirContextoConversa(e, conv)">
+                        <div class="ct-av @(isGrupo ? "grupo" : "")">
+                            @inicial
+                            @if (outroOnline)
+                            {
+                                <span class="ct-av-online"></span>
+                            }
+                        </div>
+                        <div class="ct-conv-body">
+                            <div class="ct-conv-top">
+                                <span class="ct-conv-name">@conv.Titulo</span>
+                                @if (conv.UltimaMensagem.HasValue)
+                                {
+                                    <span class="ct-conv-time">@FormatarHora(conv.UltimaMensagem.Value)</span>
+                                }
+                                @if (conv.MensagensNaoLidas > 0)
+                                {
+                                    <span class="ct-badge">@conv.MensagensNaoLidas</span>
+                                }
+                            </div>
+                            <div class="ct-conv-preview">
+                                @if (!string.IsNullOrWhiteSpace(conv.UltimaAnotacao))
+                                {
+                                    @($"{(conv.UltimoUsuario == UserState.CurrentUser?.ToUpper() ? "Você: " : "")}{conv.UltimaAnotacao}")
+                                }
+                                else
+                                {
+                                    @(isGrupo ? "Grupo" : "Individual")
+                                }
+                            </div>
+                        </div>
+                    </button>
+                }
+            </div>
+
+        </aside>
+
+        <!-- ════════════ MAIN ════════════ -->
+        <main class="ct-main" @onclick="FecharContexto">
+
+            @if (conversaSelecionada == null)
+            {
+                <div class="ct-empty">
+                    <div class="ct-empty-icon">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                        </svg>
+                    </div>
+                    <div class="ct-empty-title">Nenhuma conversa aberta</div>
+                    <div class="ct-empty-sub">Selecione uma conversa ou inicie um novo chat.</div>
+                </div>
+            }
+            else
+            {
+                <!-- header da conversa -->
+                <div class="ct-main-head">
+                    <div class="ct-main-left" @onclick="() => mostrarInfoGrupo = !mostrarInfoGrupo">
+                        <div class="ct-main-av @(ConversaEhGrupo ? "grupo" : "")">@ConversaInicial</div>
+                        <div style="min-width:0">
+                            <div class="ct-main-name">@conversaSelecionada.Titulo</div>
+                            <div class="ct-main-sub @(OutroEstaOnline ? "online" : "")">
+                                @if (quemEstaDigitando.Any())
+                                {
+                                    @($"{string.Join(", ", quemEstaDigitando)} digitando…")
+                                }
+                                else if (ConversaEhGrupo)
+                                {
+                                    @($"{ParticipantesGrupo.Count} participantes")
+                                }
+                                else
+                                {
+                                    @(OutroEstaOnline ? "Online" : UltimaVistoConversa)
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ct-main-actions">
+                        <button class="ct-main-btn @(mostrarBuscaMsgs ? "search-active" : "")"
+                                @onclick="() => { mostrarBuscaMsgs = !mostrarBuscaMsgs; termoBuscaMsgs = string.Empty; resultadosBusca.Clear(); }">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                            Buscar
+                        </button>
+                        <button class="ct-main-btn danger" @onclick="FinalizarConversa">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            Finalizar
+                        </button>
+                    </div>
+                </div>
+
+                <!-- info grupo -->
+                @if (mostrarInfoGrupo && ConversaEhGrupo)
+                {
+                    <div class="ct-group-info">
+                        <div class="ct-group-info-title">Participantes</div>
+                        <div class="ct-group-members">
+                            @foreach (var p in ParticipantesGrupo)
+                            {
+                                bool onP = usuarios.Any(u => u.Online && u.Usuario.Equals(p, StringComparison.OrdinalIgnoreCase));
+                                <div class="ct-member-chip">
+                                    <div class="ct-member-chip-av">@(p.Length > 0 ? p[0].ToString().ToUpper() : "?")</div>
+                                    @p
+                                    @if (onP)
+                                    {
+                                        <span style="color:var(--c-green);font-size:.6rem;">●</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <!-- busca em mensagens -->
+                @if (mostrarBuscaMsgs)
+                {
+                    <div class="ct-msg-search">
+                        <input placeholder="Buscar nas mensagens…"
+                               value="@termoBuscaMsgs"
+                               @oninput="OnBuscaMsgsInput" />
+                        <span class="ct-msg-search-count">
+                            @(resultadosBusca.Any() ? $"{resultadosBusca.Count} resultado(s)" : "")
+                        </span>
+                    </div>
+                }
+
+                <!-- mensagens -->
+                <div class="ct-msgs" @ref="messagesContainer">
+
+                    @{
+                        var listaMsgs = mostrarBuscaMsgs && resultadosBusca.Any() ? resultadosBusca : mensagens;
+                    }
+
+                    @foreach (var msg in listaMsgs)
+                    {
+                        string dataStr = msg.DataHora.ToString("dd/MM/yyyy");
+                        int idx = listaMsgs.IndexOf(msg);
+                        bool mostrarSep = idx == 0 ||
+                        listaMsgs[idx - 1].DataHora.ToString("dd/MM/yyyy") != dataStr;
+
+                        @if (mostrarSep)
+                        {
+                            <div class="ct-date-sep">
+                                <span class="ct-date-pill">
+                                    @(msg.DataHora.Date == DateTime.Today ? "Hoje" :
+                                                            msg.DataHora.Date == DateTime.Today.AddDays(-1) ? "Ontem" : dataStr)
+                    </span>
+                </div>
+                                }
+
+                        <div class="ct-msg-row @(msg.MinhaMensagem ? "mine" : "other")">
+
+                            <!-- hover actions -->
+                            <div class="ct-msg-hover-actions">
+                                <div class="ct-emoji-bar">
+                                    @foreach (var em in new[] { "👍", "❤️", "😂", "😮", "👏" })
+                                    {
+                                        <button class="ct-emoji-pick" @onclick="() => Reagir(msg, em)">@em</button>
+                                    }
+                                </div>
+                                <button class="ct-hover-btn" title="Responder" @onclick="() => IniciarResposta(msg)">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>
+                                </button>
+                                <button class="ct-hover-btn" title="Copiar" @onclick="() => CopiarTexto(msg.Texto)">
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                </button>
+                                @if (msg.MinhaMensagem)
+                                {
+                                    <button class="ct-hover-btn danger" title="Excluir" @onclick="() => ExcluirMensagem(msg)">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+                                    </button>
+                                }
+                            </div>
+
+                            <!-- quote -->
+                            @if (msg.RespostaCodigo.HasValue && !string.IsNullOrWhiteSpace(msg.RespostaTexto))
+                            {
+                                <div class="ct-quote">
+                                    <div class="ct-quote-user">@msg.RespostaUsuario</div>
+                                    <div class="ct-quote-text">@msg.RespostaTexto</div>
+                                </div>
+                            }
+
+                            <!-- bubble -->
+                            <div class="ct-bubble">
+                                @if (!msg.MinhaMensagem)
+                                {
+                                    <div class="ct-msg-sender">@msg.Usuario</div>
+                                }
+
+                                @if (msg.Tipo == "IMAGE" && !string.IsNullOrWhiteSpace(msg.ArquivoUrl))
+                                {
+                                    <img class="ct-msg-img" src="@msg.ArquivoUrl" alt="@msg.ArquivoNome"
+                                         @onclick="() => AbrirLightbox(msg.ArquivoUrl!)"
+                                         @onclick:stopPropagation="true" />
+                                }
+                                else if (msg.Tipo == "FILE" && !string.IsNullOrWhiteSpace(msg.ArquivoUrl))
+                                {
+                                    <a class="ct-msg-file" href="@msg.ArquivoUrl" target="_blank" download="@msg.ArquivoNome">
+                                        <div class="ct-file-icon">📎</div>
+                                        <div style="min-width:0">
+                                            <div class="ct-file-name">@msg.ArquivoNome</div>
+                                            <div class="ct-file-size">@FormatarTamanho(msg.ArquivoTamanho)</div>
+                                        </div>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                    </a>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(msg.Texto))
+                                {
+                                    <div class="ct-msg-text">@msg.Texto</div>
+                                }
+
+                                <div class="ct-msg-meta">
+                                    <span class="ct-msg-time" title="@msg.DataHora.ToString("dd/MM/yyyy HH:mm")">
+                                        @msg.DataHora.ToString("HH:mm")
+                                    </span>
+                                    @if (msg.MinhaMensagem)
+                                    {
+                                        <span class="@("ct-tick " + (msg.Lida ? "read" : ""))">✓✓</span>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- reações -->
+                            @if (!string.IsNullOrWhiteSpace(msg.Reacoes) && msg.Reacoes != "{}")
+                            {
+                                var reacoes = ParseReacoes(msg.Reacoes);
+                                @if (reacoes.Any())
+                                {
+                                    <div class="ct-reactions">
+                                        @foreach (var kv in reacoes)
+                                        {
+                                            bool euReagi = kv.Value.Contains(UserState.CurrentUser ?? "", StringComparer.OrdinalIgnoreCase);
+                                            <button class="@("ct-reaction " + (euReagi ? "mine" : ""))"
+                                                    @onclick="() => Reagir(msg, kv.Key)"
+                                                    title="@string.Join(", ", kv.Value)">
+                                                @kv.Key <span>@kv.Value.Count</span>
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+
+                    <!-- digitando -->
+                    @if (quemEstaDigitando.Any())
+                    {
+                        <div class="ct-typing-row">
+                            <div class="ct-typing-bubble">
+                                <span class="ct-typing-name">@string.Join(", ", quemEstaDigitando)</span>
+                                <div class="ct-typing-dots">
+                                    <span></span><span></span><span></span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                </div>
+
+                <!-- reply preview -->
+                @if (mensagemRespondendo != null)
+                {
+                    <div class="ct-reply-preview">
+                        <div class="ct-reply-preview-text">
+                            <span class="ct-reply-preview-user">↩ @mensagemRespondendo.Usuario</span>
+                            &nbsp;@mensagemRespondendo.Texto
+                        </div>
+                        <button class="ct-reply-close" @onclick="CancelarResposta">✕</button>
+                    </div>
+                }
+
+                <!-- upload progress -->
+                @if (uploadando)
+                {
+                    <div class="ct-upload-bar">
+                        <span>📎 Enviando arquivo…</span>
+                        <div class="ct-upload-progress">
+                            <div class="ct-upload-fill" style="width:@(uploadPct)%"></div>
+                        </div>
+                        <span>@(uploadPct)%</span>
+                    </div>
+                }
+
+                <!-- compose -->
+                <div class="ct-compose">
+                    <button class="ct-compose-attach" title="Anexar arquivo" @onclick="AbrirSeletorArquivo">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+                    </button>
+
+                    <div class="ct-input-wrap">
+                        <textarea class="ct-input"
+                                  rows="1"
+                                  placeholder="Digite uma mensagem…"
+                                  @onkeydown="OnKeyDown"
+                                  @oninput="OnInput"
+                                  id="ct-textarea"></textarea>
+                    </div>
+
+                    <button class="ct-send-btn" @onclick="EnviarMensagem" title="Enviar">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                    </button>
+                </div>
+            }
+
+        </main>
+    </div>
+</div>
+
+<!-- lightbox -->
+@if (!string.IsNullOrWhiteSpace(lightboxUrl))
+{
+    <div class="ct-lightbox"
+         @onclick="FecharLightbox">
+
+        <div class="ct-lightbox-toolbar"
+             @onclick:stopPropagation="true">
+
+            <button type="button"
+                    @onclick="DiminuirZoom"
+                    title="Diminuir zoom">
+                −
+            </button>
+
+            <span>@($"{zoomImagem * 100:0}%")</span>
+
+            <button type="button"
+                    @onclick="AumentarZoom"
+                    title="Aumentar zoom">
+                +
+            </button>
+
+            <button type="button"
+                    @onclick="ResetarZoom"
+                    title="Zoom original">
+                100%
+            </button>
+        </div>
+
+        <button class="ct-lightbox-close"
+                @onclick:stopPropagation="true"
+                @onclick="FecharLightbox">
+            ✕
+        </button>
+
+        <div class="ct-lightbox-area"
+             @onclick:stopPropagation="true"
+             @onwheel="ZoomComMouse"
+             @onwheel:preventDefault="true">
+
+            <img src="@lightboxUrl"
+                 class="ct-lightbox-image"
+                 style="transform:scale(@zoomImagem.ToString(System.Globalization.CultureInfo.InvariantCulture));"
+                 @onclick:stopPropagation="true" />
+        </div>
+
+    </div>
+}
+
+<!-- context menu conversa -->
+@if (contextoConversa != null)
+{
+    <div class="ct-conv-ctx" style="top:@(contextoY)px;left:@(contextoX)px;position:fixed;">
+        <div class="ct-ctx-item" @onclick="() => MarcarNaoLida(contextoConversa)">
+            📩 Marcar como não lida
+        </div>
+        <div class="ct-ctx-item danger" @onclick="() => FinalizarConversaContexto(contextoConversa)">
+            ✕ Finalizar conversa
+        </div>
+    </div>
+}
+
+<script>
+    window.enablePasteImageChatInterno = function(textareaId, dotnetRef) {
+        const el = document.getElementById(textareaId);
+
+        if (!el) {
+            console.warn('[PasteChat] textarea ainda não existe:', textareaId);
+            return false;
+        }
+
+        if (el.dataset.pasteImageChatBound === '1') {
+            return true;
+        }
+
+        el.dataset.pasteImageChatBound = '1';
+
+        console.log('[PasteChat] textarea encontrado, registrando paste');
+
+        el.addEventListener('paste', async function(e) {
+            if (!e.clipboardData) return;
+
+            const items = e.clipboardData.items;
+
+            for (const item of items) {
+                if (item.type && item.type.startsWith('image/')) {
+
+                    e.preventDefault();
+
+                    const file = item.getAsFile();
+                    if (!file) return;
+
+                    const reader = new FileReader();
+
+                    reader.onload = async function(event) {
+                        try {
+                            const dataUrl = event.target.result;
+
+                            await dotnetRef.invokeMethodAsync(
+                                'ReceberImagemColada',
+                                dataUrl,
+                                file.name || 'print.png'
+                            );
+
+                            console.log('[PasteChat] imagem enviada ao Blazor');
+                        }
+                        catch (err) {
+                            console.error('[PasteChat] Erro:', err);
+                        }
+                    };
+
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        return true;
+    };
+</script>
+
+@code {
+    [Parameter] public bool IsVisible { get; set; } = true;
+    private int _ultimoCodigoMensagem = 0;
+    // ── State ──────────────────────────────────────
+    private HashSet<int> codigosJaNotificados = new();
+    private List<ChatInternoUsuarioModel> usuarios = new();
+    private List<ChatInternoConversaModel> conversas = new();
+    private List<ChatInternoMensagemModel> mensagens = new();
+    private List<ChatInternoMensagemModel> resultadosBusca = new();
+    private List<string> quemEstaDigitando = new();
+
+    private ChatInternoConversaModel? conversaSelecionada;
+    private ChatInternoMensagemModel? mensagemRespondendo;
+
+    private ElementReference messagesContainer;
+    private InputFile? fileInput;
+
+    private string mensagem = "";
+    private string nomeGrupo = "";
+    private string termoBuscaConversa = "";
+    private string termoBuscaMsgs = "";
+    private string erroGrupo = "";
+    private string? lightboxUrl;
+
+    private double zoomImagem = 1.0;
+
+
+
+    private void AbrirLightbox(string url)
+    {
+        lightboxUrl = url;
+        zoomImagem = 1.0;
+    }
+
+    private void FecharLightbox()
+    {
+        lightboxUrl = null;
+        zoomImagem = 1.0;
+    }
+
+    private void AumentarZoom()
+    {
+        zoomImagem = Math.Min(zoomImagem + 0.25, 5.0);
+    }
+
+    private void DiminuirZoom()
+    {
+        zoomImagem = Math.Max(zoomImagem - 0.25, 0.5);
+    }
+
+    private void ResetarZoom()
+    {
+        zoomImagem = 1.0;
+    }
+
+    private void ZoomComMouse(WheelEventArgs e)
+    {
+        if (e.DeltaY < 0)
+            AumentarZoom();
+        else
+            DiminuirZoom();
+    }
+
+    private bool mostrarUsuarios = false;
+    private bool mostrarGrupo = false;
+    private bool mostrarInfoGrupo = false;
+    private bool mostrarBuscaMsgs = false;
+    private bool criandoGrupo = false;
+    private bool uploadando = false;
+    private bool somAtivo = true;
+    private bool estaDigitando = false;
+
+    private int totalNaoLidas = 0;
+    private int uploadPct = 0;
+
+    private List<string> usuariosGrupo = new();
+
+    // context menu
+    private ChatInternoConversaModel? contextoConversa;
+    private double contextoX, contextoY;
+
+    // digitando debounce
+    private System.Timers.Timer? digitandoTimer;
+
+    private PeriodicTimer? pollingTimer;
+    private CancellationTokenSource? cts;
+
+    // ── Computed ───────────────────────────────────
+    private bool ConversaEhGrupo =>
+        conversaSelecionada?.ChatTipo == "GRUPO";
+
+    private string ConversaInicial =>
+        string.IsNullOrWhiteSpace(conversaSelecionada?.Titulo) ? "?" :
+        conversaSelecionada!.Titulo.Trim()[0].ToString().ToUpper();
+
+    private List<string> ParticipantesGrupo =>
+        (conversaSelecionada?.Participantes ?? "")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim().ToUpper())
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+    private bool OutroEstaOnline
+    {
+        get
+        {
+            if (conversaSelecionada == null || ConversaEhGrupo) return false;
+            return usuarios.Any(u => u.Online &&
+                u.Usuario.Equals(conversaSelecionada.Titulo, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private string UltimaVistoConversa
+    {
+        get
+        {
+            var u = usuarios.FirstOrDefault(x =>
+                x.Usuario.Equals(conversaSelecionada?.Titulo, StringComparison.OrdinalIgnoreCase));
+            return UltimaVisto(u?.UltimaAtividade);
+        }
+    }
+
+    private IEnumerable<ChatInternoConversaModel> ConversasFiltradas =>
+        string.IsNullOrWhiteSpace(termoBuscaConversa)
+            ? conversas
+            : conversas.Where(c => c.Titulo.Contains(termoBuscaConversa, StringComparison.OrdinalIgnoreCase) ||
+                                   c.UltimaAnotacao.Contains(termoBuscaConversa, StringComparison.OrdinalIgnoreCase));
+
+    // ── Lifecycle ──────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarTudo();
+
+        cts = new CancellationTokenSource();
+        pollingTimer = new PeriodicTimer(TimeSpan.FromSeconds(4));
+
+        // DEPOIS:
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                int ciclo = 0;
+                while (await pollingTimer.WaitForNextTickAsync(cts.Token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        ciclo++;
+                        await ChatService.AtualizarPresencaAsync(UserState.CurrentUser ?? "", CodEmp);
+
+                        bool houveMudanca = false;
+
+                        if (ciclo % 3 == 0)
+                        {
+                            var convAntes = conversas.Count;
+                            await CarregarTudo(false);
+                            if (conversas.Count != convAntes) houveMudanca = true;
+                        }
+
+                        // DEPOIS:
+                        if (conversaSelecionada != null)
+                        {
+                            // resumo leve primeiro — igual ao Ticket
+                            var resumo = await ChatService.ResumoMensagensAsync(conversaSelecionada.Codigo, CodEmp);
+
+                            if (resumo.Total != mensagens.Count || resumo.UltimoCodigo != _ultimoCodigoMensagem)
+                            {
+                                var antes = mensagens.Select(m => m.Codigo).ToHashSet();
+                                await CarregarMensagens(false);
+
+                                var novas = mensagens.Where(m => !antes.Contains(m.Codigo)).ToList();
+
+                                if (novas.Any())
+                                {
+                                    houveMudanca = true;
+                                    _ultimoCodigoMensagem = resumo.UltimoCodigo;
+
+                                    // DEPOIS — só marca como lida e scrolla se o usuário estiver vendo a aba
+                                    if (IsVisible)
+                                    {
+                                        await ChatService.MarcarConversaComoLidaAsync(
+                                            conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
+                                        await CarregarTudo(false);
+                                        await ScrollParaFinalAsync();
+                                    }
+                                    else
+                                    {
+                                        // Atualiza a lista de conversas para o badge interno da sidebar do chat aparecer
+                                        await CarregarTudo(false);
+                                    }
+                                }
+                                else if (resumo.Total != mensagens.Count)
+                                {
+                                    // houve exclusão ou atualização de reação
+                                    houveMudanca = true;
+                                    _ultimoCodigoMensagem = resumo.UltimoCodigo;
+                                }
+                            }
+
+                            var digitandoAntes = quemEstaDigitando.ToList();
+                            quemEstaDigitando = await ChatService.ObterQuemEstaDigitandoAsync(
+                                conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
+
+                            if (!quemEstaDigitando.SequenceEqual(digitandoAntes))
+                                houveMudanca = true;
+                        }
+
+                        var novoTotal = await ChatService.ObterQuantidadeMensagensNaoLidasAsync(
+                            UserState.CurrentUser ?? "", CodEmp);
+
+                        if (novoTotal != totalNaoLidas)
+                        {
+                            totalNaoLidas = novoTotal;
+                            houveMudanca = true;
+                        }
+
+                        if (houveMudanca && !estaDigitando)
+                            StateHasChanged();
+                    });
+                }
+            }
+            catch { }
+        });
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        pollingTimer?.Dispose();
+        cts?.Dispose();
+        digitandoTimer?.Dispose();
+        _dotNetRef?.Dispose();
+    }
+
+    // ── Carregamento ───────────────────────────────
+    private async Task CarregarTudo(bool comReset = true)
+    {
+        var u = UserState.CurrentUser?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(u)) return;
+        usuarios = await ChatService.ObterUsuariosAtivosAsync(u, CodEmp);
+        conversas = await ChatService.ObterConversasAsync(u, CodEmp);
+    }
+
+    private async Task CarregarMensagens(bool scrollFinal = true)
+    {
+        if (conversaSelecionada == null) return;
+
+        var usuarioAtual = UserState.CurrentUser?.Trim() ?? "";
+        var antes = mensagens.ToList();
+        mensagens = await ChatService.ObterMensagensAsync(conversaSelecionada.Codigo, usuarioAtual, CodEmp);
+
+        // notificações apenas por mensagens novas (não na primeira carga)
+        if (antes.Any())
+        {
+            var novas = mensagens
+    .Where(x => !x.MinhaMensagem && !codigosJaNotificados.Contains(x.Codigo))
+    .OrderBy(x => x.Codigo)
+    .ToList();
+
+            if (novas.Any())
+            {
+                foreach (var m in novas) codigosJaNotificados.Add(m.Codigo);
+
+                // SÓ dispara toast/beep/blink se não for a conversa que está aberta agora
+                bool conversaAberta = conversaSelecionada?.Codigo == (novas.FirstOrDefault()?.CodConversa ?? -1);
+                if (!conversaAberta)
+                {
+                    var ultima = novas.Last();
+                    var texto = ultima.Texto ?? "";
+                    if (texto.Length > 80) texto = texto[..80] + "…";
+
+                    await JS.InvokeVoidAsync("crmToast",
+                        $"💬 {ultima.Usuario}: {texto}", "warning");
+
+                    if (somAtivo)
+                    {
+                        await JS.InvokeVoidAsync("crmBeep", 320);
+                        await JS.InvokeVoidAsync("crmNotifyPopup",
+                            $"💬 Nova mensagem de {ultima.Usuario}", texto, "/images/logo-evoluttech.png");
+                        await JS.InvokeVoidAsync("crmBlinkStart", $"💬 {ultima.Usuario}", 8);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // primeira carga: só registra os IDs já existentes
+            foreach (var m in mensagens.Where(x => !x.MinhaMensagem))
+                codigosJaNotificados.Add(m.Codigo);
+        }
+
+        await InvokeAsync(StateHasChanged);
+
+        if (scrollFinal && !mostrarBuscaMsgs)
+        {
+            await Task.Delay(60);
+            await ScrollParaFinalAsync();
+        }
+    }
+
+    // ── Conversas ──────────────────────────────────
+    private async Task AbrirConversa(ChatInternoConversaModel conv)
+    {
+        conversaSelecionada = conv;
+        mensagemRespondendo = null;
+        mostrarInfoGrupo = false;
+        codigosJaNotificados.Clear();
+        resultadosBusca.Clear();
+        mensagens.Clear();
+        _ultimoCodigoMensagem = 0;
+
+        await ChatService.MarcarConversaComoLidaAsync(conv.Codigo, UserState.CurrentUser ?? "", CodEmp);
+        await CarregarMensagens();
+        await CarregarTudo(false);
+
+        // Garante que o badge some imediatamente ao abrir a conversa
+        totalNaoLidas = await ChatService.ObterQuantidadeMensagensNaoLidasAsync(
+            UserState.CurrentUser ?? "", CodEmp);
+        StateHasChanged();
+    }
+
+    private async Task AbrirChatIndividual(string usuarioDestino)
+    {
+        try
+        {
+            var u = UserState.CurrentUser?.Trim() ?? "";
+            var cod = await ChatService.CriarConversaIndividualAsync(u, usuarioDestino, CodEmp);
+            mostrarUsuarios = false;
+            mostrarGrupo = false;
+
+            await CarregarTudo(false);
+            var conv = conversas.FirstOrDefault(x => x.Codigo == cod)
+                       ?? new ChatInternoConversaModel
+                       {
+                           Codigo = cod,
+                           Titulo = usuarioDestino.Trim().ToUpper(),
+                           ChatTipo = "INDIVIDUAL",
+                           Participantes = $";{u.ToUpper()};{usuarioDestino.ToUpper()};"
+                       };
+
+            await AbrirConversa(conv);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("crmToast", "Erro: " + ex.Message, "danger");
+        }
+    }
+
+    private async Task CriarGrupo()
+    {
+        erroGrupo = "";
+        if (criandoGrupo) return;
+        if (string.IsNullOrWhiteSpace(nomeGrupo)) { erroGrupo = "Informe o nome do grupo."; return; }
+        if (!usuariosGrupo.Any()) { erroGrupo = "Selecione pelo menos um usuário."; return; }
+        try
+        {
+            criandoGrupo = true;
+            var cod = await ChatService.CriarGrupoAsync(UserState.CurrentUser ?? "", nomeGrupo, usuariosGrupo, CodEmp);
+            nomeGrupo = ""; usuariosGrupo.Clear(); mostrarGrupo = false;
+            await CarregarTudo();
+            var conv = conversas.FirstOrDefault(x => x.Codigo == cod);
+            if (conv != null) await AbrirConversa(conv);
+        }
+        catch (Exception ex) { erroGrupo = "Erro: " + ex.Message; }
+        finally { criandoGrupo = false; }
+    }
+
+    private async Task FinalizarConversa()
+    {
+        if (conversaSelecionada == null) return;
+        await ChatService.FinalizarConversaAsync(conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
+        conversaSelecionada = null;
+        mensagens.Clear();
+        mensagemRespondendo = null;
+        await CarregarTudo(false);
+    }
+
+    // ── Mensagens ──────────────────────────────────
+    private async Task EnviarMensagem()
+    {
+        if (conversaSelecionada == null || string.IsNullOrWhiteSpace(mensagem)) return;
+
+        var texto = mensagem.Trim();
+        mensagem = "";
+
+        await ChatService.EnviarMensagemAsync(
+            conversaSelecionada.Codigo,
+            UserState.CurrentUser ?? "",
+            texto, CodEmp,
+            respostaCodigo: mensagemRespondendo?.Codigo,
+            respostaUsuario: mensagemRespondendo?.Usuario,
+            respostaTexto: mensagemRespondendo?.Texto);
+
+        mensagemRespondendo = null;
+        await PararDigitando();
+
+        await JS.InvokeVoidAsync("eval",
+        "var t=document.getElementById('ct-textarea');if(t)t.value='';");
+        await CarregarMensagens();
+        await CarregarTudo(false);
+    }
+
+    private async Task ExcluirMensagem(ChatInternoMensagemModel msg)
+    {
+        await ChatService.ExcluirMensagemAsync(msg.Codigo, UserState.CurrentUser ?? "", CodEmp);
+        mensagens.Remove(msg);
+        StateHasChanged();
+    }
+
+    private async Task Reagir(ChatInternoMensagemModel msg, string emoji)
+    {
+        await ChatService.ReagirMensagemAsync(msg.Codigo, UserState.CurrentUser ?? "", emoji, CodEmp);
+        await CarregarMensagens(false);
+    }
+
+    private void IniciarResposta(ChatInternoMensagemModel msg) => mensagemRespondendo = msg;
+    private void CancelarResposta() => mensagemRespondendo = null;
+
+    // ── Digitando ──────────────────────────────────
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        mensagem = e.Value?.ToString() ?? "";
+        await IniciarDigitando();
+    }
+
+    private async Task IniciarDigitando()
+    {
+        if (conversaSelecionada == null) return;
+
+        if (!estaDigitando)
+        {
+            estaDigitando = true;
+            await ChatService.SalvarDigitandoAsync(
+                UserState.CurrentUser ?? "", conversaSelecionada.Codigo, true, CodEmp);
+        }
+
+        digitandoTimer?.Stop();
+        digitandoTimer?.Dispose();
+        digitandoTimer = new System.Timers.Timer(3000);
+        digitandoTimer.Elapsed += async (_, _) => await PararDigitando();
+        digitandoTimer.AutoReset = false;
+        digitandoTimer.Start();
+    }
+
+    private async Task PararDigitando()
+    {
+        if (!estaDigitando || conversaSelecionada == null) return;
+        estaDigitando = false;
+        digitandoTimer?.Stop();
+        await ChatService.SalvarDigitandoAsync(
+            UserState.CurrentUser ?? "", conversaSelecionada.Codigo, false, CodEmp);
+    }
+
+    // ── Keyboard ───────────────────────────────────
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await EnviarMensagem();
+    }
+
+    // ── Upload / Paste ─────────────────────────────
+    private async Task AbrirSeletorArquivo()
+    {
+        await JS.InvokeVoidAsync("eval",
+            "document.querySelector('input[type=file]')?.click()");
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        if (conversaSelecionada == null) return;
+
+        foreach (var file in e.GetMultipleFiles(10))
+        {
+            await EnviarArquivo(file.OpenReadStream(maxAllowedSize: 50_000_000),
+                                file.Name, file.ContentType);
+        }
+    }
+
+    [JSInvokable]
+    public async Task ReceberImagemColada(string dataUrl, string nomeArquivo)
+    {
+        if (conversaSelecionada == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(dataUrl))
+            return;
+
+        if (!dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var indiceVirgula = dataUrl.IndexOf(',');
+
+        if (indiceVirgula < 0)
+            return;
+
+        var cabecalho = dataUrl[..indiceVirgula];
+        var base64 = dataUrl[(indiceVirgula + 1)..];
+
+        // Exemplo:
+        // data:image/png;base64
+        var mime = cabecalho
+            .Replace("data:", "")
+            .Split(';')[0];
+
+        var bytes = Convert.FromBase64String(base64);
+
+        var nome = string.IsNullOrWhiteSpace(nomeArquivo)
+            ? "print.png"
+            : nomeArquivo;
+
+        // Garante extensão caso o clipboard não informe
+        if (string.IsNullOrWhiteSpace(Path.GetExtension(nome)))
+        {
+            var extensao = mime.ToLowerInvariant() switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/png" => ".png",
+                "image/gif" => ".gif",
+                "image/webp" => ".webp",
+                "image/bmp" => ".bmp",
+                _ => ".png"
+            };
+
+            nome += extensao;
+        }
+
+        using var stream = new MemoryStream(bytes);
+
+        await EnviarArquivo(
+            stream,
+            nome,
+            mime
+        );
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task EnviarArquivo(Stream stream, string nome, string contentType)
+    {
+        if (conversaSelecionada == null) return;
+
+        try
+        {
+            uploadando = true; uploadPct = 10; StateHasChanged();
+
+            var (url, nomeArq, tipo, tamanho) = await ChatService.SalvarArquivoAsync(stream, nome, contentType);
+
+            uploadPct = 80; StateHasChanged();
+
+            bool ehImagem = contentType.StartsWith("image/");
+
+            await ChatService.EnviarMensagemAsync(
+                conversaSelecionada.Codigo,
+                UserState.CurrentUser ?? "",
+                texto: "",
+                CodEmp,
+                tipo: ehImagem ? "IMAGE" : "FILE",
+                arquivoNome: nomeArq,
+                arquivoUrl: url,
+                arquivoMime: tipo,
+                arquivoTamanho: tamanho);
+
+            uploadPct = 100; StateHasChanged();
+            await CarregarMensagens();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("crmToast", "Erro ao enviar arquivo: " + ex.Message, "danger");
+        }
+        finally
+        {
+            await Task.Delay(400);
+            uploadando = false; uploadPct = 0; StateHasChanged();
+        }
+    }
+
+    // ── Busca ──────────────────────────────────────
+    private async Task BuscarNasMensagens()
+    {
+        if (conversaSelecionada == null || string.IsNullOrWhiteSpace(termoBuscaMsgs))
+        {
+            resultadosBusca.Clear();
+            return;
+        }
+
+        resultadosBusca = await ChatService.BuscarMensagensAsync(
+            conversaSelecionada.Codigo, UserState.CurrentUser ?? "", termoBuscaMsgs, CodEmp);
+    }
+
+    // ── Context menu ───────────────────────────────
+    private void AbrirContextoConversa(MouseEventArgs e, ChatInternoConversaModel conv)
+    {
+        contextoConversa = conv;
+        contextoX = e.ClientX;
+        contextoY = e.ClientY;
+    }
+
+    private void FecharContexto() { contextoConversa = null; }
+
+    private async Task MarcarNaoLida(ChatInternoConversaModel conv)
+    {
+        await ChatService.MarcarComoNaoLidaAsync(conv.Codigo, UserState.CurrentUser ?? "", CodEmp);
+        await CarregarTudo(false);
+        contextoConversa = null;
+    }
+
+    private async Task FinalizarConversaContexto(ChatInternoConversaModel conv)
+    {
+        await ChatService.FinalizarConversaAsync(conv.Codigo, UserState.CurrentUser ?? "", CodEmp);
+        if (conversaSelecionada?.Codigo == conv.Codigo)
+        {
+            conversaSelecionada = null;
+            mensagens.Clear();
+        }
+        await CarregarTudo(false);
+        contextoConversa = null;
+    }
+
+    // ── Utilitários ────────────────────────────────
+    private void AlternarUsuarios()
+    {
+        mostrarUsuarios = !mostrarUsuarios;
+        mostrarGrupo = false;
+    }
+
+    private void AlternarGrupo()
+    {
+        mostrarGrupo = !mostrarGrupo;
+        mostrarUsuarios = false;
+    }
+
+    private void SelecionarUsuarioGrupo(string usuario, ChangeEventArgs e)
+    {
+        usuario = usuario.Trim();
+        bool marcado = e.Value is bool b && b;
+        if (marcado)
+        {
+            if (!usuariosGrupo.Any(x => x.Equals(usuario, StringComparison.OrdinalIgnoreCase)))
+                usuariosGrupo.Add(usuario);
+        }
+        else
+        {
+            usuariosGrupo.RemoveAll(x => x.Equals(usuario, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private async Task CopiarTexto(string texto)
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", texto);
+        await JS.InvokeVoidAsync("crmToast", "Copiado!", "success");
+    }
+
+
+    private Dictionary<string, List<string>> ParseReacoes(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new();
+        try { return JsonSerializer.Deserialize<Dictionary<string, List<string>>>(json) ?? new(); }
+        catch { return new(); }
+    }
+
+    private string UltimaVisto(DateTime? dt)
+    {
+        if (dt == null) return "Offline";
+        var diff = DateTime.Now - dt.Value;
+        if (diff.TotalMinutes < 2) return "Visto agora";
+        if (diff.TotalMinutes < 60) return $"Visto há {(int)diff.TotalMinutes}min";
+        if (diff.TotalHours < 24) return $"Visto às {dt.Value:HH:mm}";
+        return $"Visto em {dt.Value:dd/MM}";
+    }
+
+    private string FormatarHora(DateTime dt)
+    {
+        if (dt.Date == DateTime.Today) return dt.ToString("HH:mm");
+        if (dt.Date == DateTime.Today.AddDays(-1)) return "Ontem";
+        return dt.ToString("dd/MM");
+    }
+
+    private string FormatarTamanho(long? bytes)
+    {
+        if (bytes == null) return "";
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024} KB";
+        return $"{bytes / (1024 * 1024):F1} MB";
+    }
+
+    private async Task ScrollParaFinalAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval",
+                "var el=document.querySelector('.ct-msgs');if(el)el.scrollTo({top:el.scrollHeight,behavior:'smooth'});");
+        }
+        catch { }
+    }
+
+    private async Task OnBuscaMsgsInput(ChangeEventArgs e)
+    {
+        termoBuscaMsgs = e.Value?.ToString() ?? "";
+        await BuscarNasMensagens();
+    }
+
+    private DotNetObjectReference<ChatInterno>? _dotNetRef;
+
+
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+       
+        if (_dotNetRef == null)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+
+        if (conversaSelecionada != null)
+        {
+            try
+            {
+                await JS.InvokeAsync<bool>(
+                    "enablePasteImageChatInterno",
+                    "ct-textarea",
+                    _dotNetRef
+                );
+            }
+            catch
+            {
+                // textarea ou JS ainda não disponível;
+                // tenta novamente no próximo render
+            }
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Quando a aba se torna visível, marca a conversa aberta como lida imediatamente
+        if (IsVisible && conversaSelecionada != null)
+        {
+            await ChatService.MarcarConversaComoLidaAsync(
+                conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
+
+            totalNaoLidas = await ChatService.ObterQuantidadeMensagensNaoLidasAsync(
+                UserState.CurrentUser ?? "", CodEmp);
+
+            // Atualiza a lista para sumir o badge interno da conversa
+            await CarregarTudo(false);
+
+            StateHasChanged();
+        }
+    }
+}

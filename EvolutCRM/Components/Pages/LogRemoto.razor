@@ -1,0 +1,397 @@
+﻿@page "/admin/log-remoto"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject AdminService AdminService
+@inject UserState UserState
+@inject NavigationManager Nav
+
+<style>
+    /* reutiliza as mesmas vars do BxPagar */
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+
+    :root {
+        --bg: #f4f7fb;
+        --surface: #fff;
+        --border: #d9e6f5;
+        --border-2: #bfd3ec;
+        --primary: #0d47a1;
+        --primary-3: #42a5f5;
+        --primary-soft: #eaf4ff;
+        --text: #172033;
+        --text-2: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --danger: #dc2626;
+        --danger-soft: #fff1f2;
+        --shadow-sm: 0 3px 10px rgba(15,23,42,.06);
+        --shadow: 0 14px 36px rgba(13,71,161,.11);
+        --radius-lg: 26px;
+        --radius-md: 18px;
+        --radius-sm: 13px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    .lr-card {
+        position: relative;
+        width: 100%;
+        min-height: calc(100vh - 32px);
+        padding: 26px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: radial-gradient(circle at 95% 4%,rgba(66,165,245,.13),transparent 28%), linear-gradient(180deg,#fff 0%,#f8fbff 100%);
+        box-shadow: var(--shadow);
+        font-family: 'Sora',Arial,sans-serif;
+        color: var(--text);
+        animation: fadeUp .28s ease both;
+    }
+
+        .lr-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 5px;
+            background: linear-gradient(90deg,var(--primary),var(--primary-3));
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            z-index: 2;
+        }
+
+    .lr-title {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: -.04em;
+        margin-bottom: 5px;
+    }
+
+        .lr-title::before {
+            content: "🖥️";
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg,var(--primary),var(--primary-3));
+            font-size: 20px;
+            box-shadow: 0 12px 26px rgba(13,71,161,.22);
+        }
+
+    .lr-sub {
+        margin: 0 0 22px 57px;
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 500;
+    }
+
+    .filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: #fff;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .lr-input {
+        height: 42px;
+        border: 1.5px solid var(--border);
+        border-radius: 13px;
+        padding: 0 14px;
+        background: #fff;
+        color: var(--text);
+        font-family: 'Sora',Arial,sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        outline: none;
+        transition: .18s ease;
+    }
+
+        .lr-input:focus {
+            border-color: var(--primary-3);
+            box-shadow: 0 0 0 4px rgba(66,165,245,.14);
+        }
+
+        .lr-input[type="date"] {
+            padding: 0 10px;
+        }
+
+    .btn-filtrar {
+        height: 42px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 13px;
+        background: linear-gradient(135deg,var(--primary),#1565c0);
+        color: #fff;
+        font-family: 'Sora',Arial,sans-serif;
+        font-size: 12.5px;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(13,71,161,.22);
+        transition: .16s ease;
+    }
+
+        .btn-filtrar:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.05);
+        }
+
+        .btn-filtrar:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: #fff;
+        box-shadow: var(--shadow-sm);
+    }
+
+    table {
+        width: 100%;
+        min-width: 900px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora',Arial,sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+    }
+
+    th {
+        padding: 13px 15px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg,#f8fbff,#edf5ff);
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+        text-align: left;
+    }
+
+        th:first-child {
+            border-top-left-radius: var(--radius-md);
+        }
+
+        th:last-child {
+            border-top-right-radius: var(--radius-md);
+        }
+
+    td {
+        padding: 13px 15px;
+        border-bottom: 1px solid #edf2f7;
+        background: #fff;
+        color: var(--text-2);
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-align: middle;
+    }
+
+    tbody tr:hover td {
+        background: var(--primary-soft);
+    }
+
+    tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .badge-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        border: 1px solid rgba(13,71,161,.15);
+        font-size: 10.5px;
+        font-weight: 900;
+        font-family: 'JetBrains Mono',monospace;
+    }
+
+    .badge-ip {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: var(--muted);
+        border: 1px solid #cbd5e1;
+        font-size: 10.5px;
+        font-family: 'JetBrains Mono',monospace;
+        font-weight: 700;
+    }
+
+    .date-strong {
+        display: block;
+        font-family: 'JetBrains Mono',monospace;
+        font-size: 12px;
+        font-weight: 850;
+        color: var(--text);
+    }
+
+    .date-sub {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 700;
+    }
+
+    .loading, .empty-state {
+        min-height: 160px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px dashed var(--border-2);
+        border-radius: var(--radius-md);
+        background: #fff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .loading::before {
+            content: "";
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            animation: spin .75s linear infinite;
+            margin-right: 10px;
+        }
+
+    @@keyframes fadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px)
+        }
+
+        to {
+            opacity: 1;
+            transform: none
+        }
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg)
+        }
+    }
+</style>
+
+<div class="lr-card">
+    <div class="lr-title">Log de Acesso Remoto</div>
+    <div class="lr-sub">Histórico de sessões de acesso remoto realizadas pelos atendentes.</div>
+
+    <div class="filters">
+        <input class="lr-input" style="flex:1; min-width:200px;"
+               placeholder="🔍 Buscar por cliente, atendente ou computador..."
+               @bind="Filtro" @bind:event="oninput" />
+        <input class="lr-input" type="date"
+               @bind="DataInicio" @bind:event="onchange" />
+        <input class="lr-input" type="date"
+               @bind="DataFim" @bind:event="onchange" />
+        <button class="btn-filtrar" @onclick="Carregar" disabled="@Carregando">
+            @(Carregando ? "Buscando..." : "🔍 Filtrar")
+        </button>
+    </div>
+
+    @if (Carregando)
+    {
+        <div class="loading">Carregando logs...</div>
+    }
+    else if (!Logs.Any())
+    {
+        <div class="empty-state">Nenhum acesso remoto registrado no período.</div>
+    }
+    else
+    {
+        <div style="margin-bottom:10px; color:var(--muted); font-size:11.5px; font-weight:700;">
+            @Logs.Count registro(s) encontrado(s)
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Data / Hora</th>
+                        <th>Atendente</th>
+                        <th>Cliente</th>
+                        <th>Computador</th>
+                        <th>IP Origem</th>
+                        <th>Descrição</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in LogsFiltrados)
+                    {
+                        <tr>
+                            <td>
+                                <span style="color:var(--muted); font-size:11px;
+                                font-family:'JetBrains Mono',monospace;">#@log.Codigo</span>
+                            </td>
+                            <td>
+                                <span class="date-strong">@log.DataHora.ToString("dd/MM/yyyy")</span>
+                                <span class="date-sub">@log.DataHora.ToString("HH:mm:ss")</span>
+                            </td>
+                            <td><span class="badge-user">👤 @log.Atendente</span></td>
+                            <td style="font-weight:700; color:var(--text);">@log.Titulo.Replace("Acesso Remoto — ", "")</td>
+                            <td style="font-family:'JetBrains Mono',monospace; font-size:11.5px;">
+                                @log.NomeComputador
+                            </td>
+                            <td><span class="badge-ip">@(string.IsNullOrWhiteSpace(log.IpOrigem) ? "—" : log.IpOrigem)</span></td>
+                            <td style="color:var(--muted); font-size:11.5px;">@log.Descricao</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<LogRemotoDto> Logs = new();
+    private bool Carregando = false;
+    private string Filtro = "";
+    private DateTime? DataInicio = DateTime.Today;
+    private DateTime? DataFim = DateTime.Today;
+
+    private IEnumerable<LogRemotoDto> LogsFiltrados =>
+        string.IsNullOrWhiteSpace(Filtro)
+            ? Logs
+            : Logs.Where(l =>
+                l.Atendente.Contains(Filtro, StringComparison.OrdinalIgnoreCase)
+                || l.Titulo.Contains(Filtro, StringComparison.OrdinalIgnoreCase)
+                || l.NomeComputador.Contains(Filtro, StringComparison.OrdinalIgnoreCase)
+                || l.CodCliente.Contains(Filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override Task OnInitializedAsync() => Task.CompletedTask;
+
+    private async Task Carregar()
+    {
+        Carregando = true;
+        Logs = await AdminService.ListarLogsRemotosAsync(
+            filtro: "",
+            dataInicio: DataInicio,
+            dataFim: DataFim);
+        Carregando = false;
+    }
+}

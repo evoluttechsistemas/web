@@ -1,0 +1,953 @@
+﻿@page "/parametro-dinamico"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject ParametroDinamicoService ParametroService
+@inject AdminService AdminService
+@inject UserState UserState
+@inject IJSRuntime JS
+
+<PageTitle>Parametro Dinamico</PageTitle>
+
+<div class="pd-wrap">
+    <div class="pd-header">
+        <div>
+            <div class="pd-title">
+                <span class="pd-title-ico"><i class="fas fa-sliders-h"></i></span>
+                <span>Parametro Dinamico</span>
+            </div>
+            <div class="pd-subtitle">@EmpresaAtual</div>
+        </div>
+
+        <button type="button" class="pd-btn primary" @onclick="NovoParametro" disabled="@(!PodeEditarParametroDinamico)">
+            <i class="fas fa-plus"></i>
+            Novo parametro
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensagem))
+    {
+        <div class="pd-alert @(classeMensagem == "alert-success" ? "ok" : "err")">@mensagem</div>
+    }
+
+    <div class="pd-grid">
+        <section class="pd-card">
+            <EditForm Model="parametro" OnValidSubmit="SalvarAsync">
+                <DataAnnotationsValidator />
+
+                <div class="pd-card-head">
+                    <div class="pd-card-title">
+                        @(parametro.Codigo > 0 ? $"Editando parametro #{parametro.Codigo}" : "Novo parametro")
+                    </div>
+                </div>
+
+                <div class="pd-card-body">
+                    <ValidationSummary />
+
+                    <div class="pd-row two">
+                        <div class="pd-field">
+                            <label>Parametro</label>
+                            <InputText class="@ClasseCampoChave"
+                                       @bind-Value="parametro.Parametro"
+                                       disabled="@EditandoParametroExistente" />
+                            <ValidationMessage For="@(() => parametro.Parametro)" />
+                        </div>
+
+                        <div class="pd-field">
+                            <label>Grupo</label>
+                            <InputText class="@ClasseCampoChave"
+                                       @bind-Value="parametro.Grupo"
+                                       disabled="@EditandoParametroExistente" />
+                            <ValidationMessage For="@(() => parametro.Grupo)" />
+                        </div>
+                    </div>
+
+                    <div class="pd-row two">
+                        <div class="pd-field">
+                            <label>Valor</label>
+
+                            @if (ParametroEhSimNao)
+                            {
+                                <label class="pd-toggle-line">
+                                    <input type="checkbox" checked="@ValorLigado" @onchange="AlterarValorBooleano" />
+                                    <span class="pd-toggle" aria-hidden="true"></span>
+                                    <span class="pd-toggle-text">@(ValorLigado ? "Ligado" : "Desligado")</span>
+                                </label>
+                            }
+                            else
+                            {
+                                <InputText class="pd-input pd-code" @bind-Value="parametro.Valor" />
+                            }
+
+                            <ValidationMessage For="@(() => parametro.Valor)" />
+                        </div>
+
+                        <div class="pd-field">
+                            <label>Valor padrao</label>
+                            <InputText class="pd-input pd-code pd-readonly" @bind-Value="parametro.ValorPadrao" disabled />
+                            <ValidationMessage For="@(() => parametro.ValorPadrao)" />
+                        </div>
+                    </div>
+
+                    <div class="pd-row">
+                        <div class="pd-field">
+                            <label>Descricao</label>
+                            <InputTextArea class="pd-input pd-textarea" @bind-Value="parametro.Descricao" />
+                            <ValidationMessage For="@(() => parametro.Descricao)" />
+                        </div>
+                    </div>
+
+                    <div class="pd-preview">
+                        <div>
+                            <span class="pd-preview-label">Ultima gravacao</span>
+                            <strong>@UltimaGravacaoTexto</strong>
+                        </div>
+                        <div>
+                            <span class="pd-preview-label">Usuario</span>
+                            <strong>@UsuarioGravacaoTexto</strong>
+                        </div>
+                    </div>
+
+                    <div class="pd-form-actions">
+                        <button type="submit" class="pd-btn primary" disabled="@(!PodeEditarParametroDinamico || salvando)">
+                            <i class="fas fa-save"></i>
+                            @(salvando ? "Salvando..." : "Salvar")
+                        </button>
+
+                        <button type="button" class="pd-btn" @onclick="NovoParametro" disabled="@salvando">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+
+                        @if (parametro.Codigo > 0)
+                        {
+                            <button type="button" class="pd-btn danger" @onclick="ExcluirAtualAsync" disabled="@(!PodeEditarParametroDinamico || salvando)">
+                                <i class="fas fa-trash"></i>
+                                Excluir
+                            </button>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </section>
+
+        <section class="pd-card">
+            <div class="pd-card-head">
+                <div class="pd-card-title">Parametros cadastrados</div>
+                <span class="pd-counter">@parametros.Count parametro(s)</span>
+            </div>
+
+            <div class="pd-toolbar">
+                <InputText class="pd-input" placeholder="Buscar por parametro, grupo, descricao ou valor"
+                           @bind-Value="termoBusca" />
+
+                <select class="pd-input pd-select" @bind="grupoSelecionado">
+                    <option value="">Todos os grupos</option>
+                    @foreach (var grupo in grupos)
+                    {
+                        <option value="@grupo">@grupo</option>
+                    }
+                </select>
+
+                <button type="button" class="pd-btn" @onclick="CarregarAsync" disabled="@carregando">
+                    <i class="fas fa-search"></i>
+                    Buscar
+                </button>
+            </div>
+
+            @if (carregando)
+            {
+                <div class="pd-empty">Carregando parametros...</div>
+            }
+            else if (parametros.Count == 0)
+            {
+                <div class="pd-empty">Nenhum parametro encontrado.</div>
+            }
+            else
+            {
+                <div class="pd-table-wrap">
+                    <table class="pd-table">
+                        <thead>
+                            <tr>
+                                <th>Grupo</th>
+                                <th>Parametro</th>
+                                <th>Valor</th>
+                                <th>Padrao</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in parametros)
+                            {
+                                <tr>
+                                    <td><span class="pd-tag">@item.Grupo</span></td>
+                                    <td>
+                                        <span class="pd-main-text">@item.Parametro</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Descricao))
+                                        {
+                                            <span class="pd-sub-text">@item.Descricao</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (EhValorSimNao(item.ValorPadrao) || EhValorSimNao(item.Valor))
+                                        {
+                                            <span class="pd-status @(EhSim(item.Valor) ? "on" : "off")">
+                                                @(EhSim(item.Valor) ? "Ligado" : "Desligado")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="pd-value">@item.Valor</span>
+                                        }
+                                    </td>
+                                    <td><span class="pd-value muted">@item.ValorPadrao</span></td>
+                                    <td class="pd-actions-cell">
+                                        <button type="button" class="pd-icon-btn" title="Editar parametro"
+                                                @onclick="() => EditarAsync(item.Codigo)">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+<style>
+    .pd-wrap {
+        --pd-ink: #0f172a;
+        --pd-ink2: #334155;
+        --pd-muted: #64748b;
+        --pd-line: #e2e8f0;
+        --pd-bg: #f0f4fd;
+        --pd-card: #ffffff;
+        --pd-blue: #2563eb;
+        --pd-blue-d: #1e3a8a;
+        --pd-red: #dc2626;
+        --pd-rad: 14px;
+        --pd-rad-sm: 10px;
+        --pd-tr: .16s ease;
+        height: 100%;
+        overflow-y: auto;
+        background: var(--pd-bg);
+        color: var(--pd-ink);
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        padding: 20px 22px 40px;
+    }
+
+        .pd-wrap::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .pd-wrap::-webkit-scrollbar-thumb {
+            background: #c7d2e8;
+            border-radius: 999px;
+        }
+
+    .pd-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .pd-title {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--pd-blue-d);
+        line-height: 1.15;
+    }
+
+    .pd-title-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: linear-gradient(135deg, var(--pd-blue), var(--pd-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, .32);
+    }
+
+    .pd-subtitle {
+        font-size: 12.5px;
+        color: var(--pd-muted);
+        margin-top: 6px;
+        margin-left: 51px;
+        font-weight: 600;
+    }
+
+    .pd-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 38px;
+        padding: 0 15px;
+        border-radius: var(--pd-rad-sm);
+        border: 1px solid var(--pd-line);
+        background: var(--pd-card);
+        color: var(--pd-ink2);
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--pd-tr);
+        white-space: nowrap;
+    }
+
+        .pd-btn:hover {
+            border-color: var(--pd-blue);
+            color: var(--pd-blue);
+            background: #f5f9ff;
+        }
+
+        .pd-btn.primary {
+            background: linear-gradient(135deg, var(--pd-blue), var(--pd-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(37, 99, 235, .28);
+        }
+
+            .pd-btn.primary:hover {
+                color: #fff;
+                filter: brightness(1.03);
+            }
+
+        .pd-btn.danger {
+            background: #fff;
+            color: var(--pd-red);
+            border-color: #fecaca;
+        }
+
+        .pd-btn:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+        }
+
+    .pd-alert {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: var(--pd-rad-sm);
+        font-size: 12.5px;
+        font-weight: 700;
+        border: 1px solid var(--pd-line);
+        background: var(--pd-card);
+    }
+
+        .pd-alert.ok {
+            color: #166534;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+
+        .pd-alert.err {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+    .pd-grid {
+        display: grid;
+        grid-template-columns: minmax(430px, 540px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .pd-card {
+        background: var(--pd-card);
+        border: 1px solid var(--pd-line);
+        border-radius: var(--pd-rad);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+        overflow: hidden;
+    }
+
+    .pd-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--pd-line);
+        background: #f8fbff;
+    }
+
+    .pd-card-title {
+        font-size: 14px;
+        font-weight: 850;
+        color: var(--pd-blue-d);
+    }
+
+    .pd-card-body {
+        padding: 16px;
+    }
+
+    .pd-row {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+        .pd-row.two {
+            grid-template-columns: 1fr 1fr;
+        }
+
+    .pd-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+    }
+
+        .pd-field label {
+            font-size: 11.5px;
+            font-weight: 800;
+            color: var(--pd-ink2);
+        }
+
+    .pd-input {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #cbd5e1;
+        border-radius: var(--pd-rad-sm);
+        padding: 7px 10px;
+        background: #fff;
+        color: var(--pd-ink);
+        font: inherit;
+        font-size: 12.5px;
+        outline: none;
+        transition: var(--pd-tr);
+    }
+
+        .pd-input:focus {
+            border-color: var(--pd-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+        }
+
+    .pd-readonly {
+        background: #f8fafc;
+        color: var(--pd-muted);
+        cursor: not-allowed;
+    }
+
+    .pd-code {
+        font-family: Consolas, 'Courier New', monospace;
+        text-transform: uppercase;
+    }
+
+    .pd-textarea {
+        min-height: 112px;
+        resize: vertical;
+    }
+
+    .pd-toggle-line {
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: fit-content;
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .pd-toggle-line input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+    .pd-toggle {
+        position: relative;
+        width: 48px;
+        height: 26px;
+        border-radius: 999px;
+        background: #cbd5e1;
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .06);
+        transition: var(--pd-tr);
+    }
+
+        .pd-toggle::after {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, .24);
+            transition: var(--pd-tr);
+        }
+
+    .pd-toggle-line input:checked + .pd-toggle {
+        background: #16a34a;
+    }
+
+        .pd-toggle-line input:checked + .pd-toggle::after {
+            transform: translateX(22px);
+        }
+
+    .pd-toggle-text {
+        color: var(--pd-ink2);
+        font-size: 12.5px;
+        font-weight: 850;
+    }
+
+    .pd-preview {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+        .pd-preview > div {
+            border: 1px solid var(--pd-line);
+            border-radius: var(--pd-rad-sm);
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+
+    .pd-preview-label {
+        display: block;
+        color: var(--pd-muted);
+        font-size: 10.5px;
+        font-weight: 850;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        margin-bottom: 4px;
+    }
+
+    .pd-preview strong {
+        color: var(--pd-ink2);
+        font-size: 12px;
+    }
+
+    .pd-form-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .pd-toolbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) 190px auto;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--pd-line);
+        background: #f8fbff;
+    }
+
+    .pd-select {
+        cursor: pointer;
+    }
+
+    .pd-counter {
+        color: var(--pd-muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .pd-empty {
+        margin: 16px;
+        padding: 24px;
+        border: 1px dashed #cbd5e1;
+        border-radius: var(--pd-rad-sm);
+        color: var(--pd-muted);
+        text-align: center;
+        font-size: 12.5px;
+        font-weight: 700;
+        background: #f8fafc;
+    }
+
+    .pd-table-wrap {
+        overflow: auto;
+    }
+
+    .pd-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+    }
+
+        .pd-table th {
+            padding: 10px 12px;
+            text-align: left;
+            color: var(--pd-muted);
+            background: #f8fbff;
+            border-bottom: 1px solid var(--pd-line);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            white-space: nowrap;
+        }
+
+        .pd-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+        .pd-table tbody tr:hover {
+            background: #f8fbff;
+        }
+
+        .pd-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+    .pd-tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        background: #e0f2fe;
+        color: #075985;
+        font-size: 11px;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+    .pd-main-text {
+        display: block;
+        color: var(--pd-ink);
+        font-family: Consolas, 'Courier New', monospace;
+        font-weight: 800;
+    }
+
+    .pd-sub-text {
+        display: block;
+        margin-top: 2px;
+        color: var(--pd-muted);
+        font-size: 11.5px;
+        max-width: 520px;
+    }
+
+    .pd-value {
+        display: inline-flex;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: Consolas, 'Courier New', monospace;
+        font-weight: 800;
+        color: var(--pd-ink2);
+    }
+
+        .pd-value.muted {
+            color: var(--pd-muted);
+            font-weight: 700;
+        }
+
+    .pd-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+        .pd-status.on {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .pd-status.off {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+    .pd-actions-cell {
+        width: 1%;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .pd-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--pd-line);
+        background: #fff;
+        color: var(--pd-blue-d);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--pd-tr);
+    }
+
+        .pd-icon-btn:hover {
+            border-color: var(--pd-blue);
+            color: var(--pd-blue);
+            background: #eff6ff;
+        }
+
+    .validation-errors {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: var(--pd-rad-sm);
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .validation-message {
+        color: #dc2626;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    @@media (max-width: 1180px) {
+        .pd-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 760px) {
+        .pd-wrap {
+            padding: 16px 14px 32px;
+        }
+
+        .pd-row.two,
+        .pd-preview,
+        .pd-toolbar {
+            grid-template-columns: 1fr;
+        }
+
+        .pd-btn {
+            width: 100%;
+        }
+
+        .pd-header .pd-btn {
+            width: auto;
+        }
+    }
+</style>
+
+@code {
+    private ParametroDinamicoModel parametro = new();
+    private List<ParametroDinamicoModel> parametros = new();
+    private List<string> grupos = new();
+    private string termoBusca = "";
+    private string grupoSelecionado = "";
+    private bool carregando;
+    private bool salvando;
+    private bool PodeVisualizarParametroDinamico;
+    private bool PodeEditarParametroDinamico;
+    private string mensagem = "";
+    private string classeMensagem = "alert-info";
+
+    private string EmpresaAtual =>
+        UserState.CurrentCompanyId > 0
+            ? $"Empresa: {UserState.CurrentCompany} ({UserState.CurrentCompanyId})"
+            : "Empresa nao carregada";
+
+    private string UltimaGravacaoTexto =>
+        parametro.DataHoraUltimaGravacao?.ToString("dd/MM/yyyy HH:mm") ?? "-";
+
+    private string UsuarioGravacaoTexto =>
+        string.IsNullOrWhiteSpace(parametro.UsuarioUltimaGravacao)
+            ? "-"
+            : parametro.UsuarioUltimaGravacao;
+
+    private bool ParametroEhSimNao =>
+        EhValorSimNao(parametro.ValorPadrao) || EhValorSimNao(parametro.Valor);
+
+    private bool EditandoParametroExistente => parametro.Codigo > 0;
+
+    private string ClasseCampoChave =>
+        EditandoParametroExistente
+            ? "pd-input pd-code pd-readonly"
+            : "pd-input pd-code";
+
+    private bool ValorLigado => EhSim(parametro.Valor);
+
+    protected override async Task OnInitializedAsync()
+    {
+        PodeVisualizarParametroDinamico = await AdminService.UsuarioTemPermissaoAsync(
+            UserState.CurrentUser,
+            "CADASTROS_PARAMETROS_VISUALIZAR");
+
+        PodeEditarParametroDinamico = await AdminService.UsuarioTemPermissaoAsync(
+            UserState.CurrentUser,
+            "CADASTROS_PARAMETROS_EDITAR");
+
+        if (!PodeVisualizarParametroDinamico)
+        {
+            MostrarErro("Voce nao tem permissao para acessar parametros dinamicos.");
+            return;
+        }
+
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            carregando = true;
+            mensagem = "";
+            grupos = await ParametroService.ListarGruposAsync();
+            parametros = await ParametroService.ListarAsync(termoBusca, grupoSelecionado);
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao carregar parametros: {ex.Message}");
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (!PodeEditarParametroDinamico)
+        {
+            MostrarErro("Voce nao tem permissao para alterar parametros dinamicos.");
+            return;
+        }
+
+        try
+        {
+            salvando = true;
+            NormalizarParametro();
+
+            var codigo = await ParametroService.SalvarAsync(parametro);
+            parametro = await ParametroService.ObterAsync(codigo) ?? new ParametroDinamicoModel();
+
+            MostrarSucesso("Parametro salvo com sucesso.");
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao salvar parametro: {ex.Message}");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task EditarAsync(int codigo)
+    {
+        try
+        {
+            var encontrado = await ParametroService.ObterAsync(codigo);
+            if (encontrado is null)
+            {
+                MostrarErro("Parametro nao encontrado para a empresa logada.");
+                return;
+            }
+
+            parametro = encontrado;
+            mensagem = "";
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao abrir parametro: {ex.Message}");
+        }
+    }
+
+    private async Task ExcluirAtualAsync()
+    {
+        if (!PodeEditarParametroDinamico)
+        {
+            MostrarErro("Voce nao tem permissao para excluir parametros dinamicos.");
+            return;
+        }
+
+        if (parametro.Codigo <= 0)
+            return;
+
+        var confirmar = await JS.InvokeAsync<bool>("confirm", "Deseja realmente excluir este parametro?");
+        if (!confirmar)
+            return;
+
+        try
+        {
+            salvando = true;
+            await ParametroService.ExcluirAsync(parametro.Codigo);
+            NovoParametro();
+            MostrarSucesso("Parametro excluido com sucesso.");
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao excluir parametro: {ex.Message}");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private void NovoParametro()
+    {
+        parametro = new ParametroDinamicoModel
+        {
+            ValorPadrao = ""
+        };
+        mensagem = "";
+        classeMensagem = "alert-info";
+    }
+
+    private void AlterarValorBooleano(ChangeEventArgs e)
+    {
+        var ligado = e.Value is bool valor && valor;
+        parametro.Valor = ligado ? "S" : "N";
+    }
+
+    private void NormalizarParametro()
+    {
+        parametro.Parametro = (parametro.Parametro ?? "").Trim().ToUpperInvariant();
+        parametro.Grupo = (parametro.Grupo ?? "").Trim().ToUpperInvariant();
+        parametro.Descricao = parametro.Descricao ?? "";
+        parametro.ValorPadrao = parametro.ValorPadrao ?? "";
+
+        if (ParametroEhSimNao)
+            parametro.Valor = EhSim(parametro.Valor) ? "S" : "N";
+        else
+            parametro.Valor = parametro.Valor ?? "";
+    }
+
+    private static bool EhValorSimNao(string? valor)
+    {
+        var texto = (valor ?? "").Trim().ToUpperInvariant();
+        return texto is "S" or "N" or "SIM" or "NAO" or "NÃO";
+    }
+
+    private static bool EhSim(string? valor)
+    {
+        var texto = (valor ?? "").Trim().ToUpperInvariant();
+        return texto is "S" or "SIM" or "TRUE" or "1";
+    }
+
+    private void MostrarSucesso(string texto)
+    {
+        mensagem = texto;
+        classeMensagem = "alert-success";
+    }
+
+    private void MostrarErro(string texto)
+    {
+        mensagem = texto;
+        classeMensagem = "alert-danger";
+    }
+}

@@ -1,0 +1,588 @@
+﻿@page "/admin/logs"
+
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+
+@inject EvolutCRM.Services.ChangelogService ChangelogService
+@inject EvolutCRM.Services.AdminService AdminService
+@inject EvolutCRM.Services.UserState UserState
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
+
+    .log-root {
+        font-family: 'Sora', Arial, sans-serif;
+        color: #172033;
+        padding: 24px;
+        min-height: 100vh;
+        background: #f4f7fb;
+    }
+
+    .log-card {
+        background: #fff;
+        border: 1px solid #d9e6f5;
+        border-radius: 18px;
+        padding: 24px;
+        box-shadow: 0 10px 30px rgba(13,71,161,.08);
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 20px;
+    }
+
+        .log-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: linear-gradient(90deg, #0d47a1, #42a5f5, #00bcd4);
+        }
+
+    .log-title {
+        font-size: 20px;
+        font-weight: 800;
+        margin: 0 0 4px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .log-subtitle {
+        font-size: 12.5px;
+        color: #64748b;
+        margin: 0 0 20px;
+    }
+
+    .log-form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-bottom: 14px;
+    }
+
+    .log-form-full {
+        grid-column: 1 / -1;
+    }
+
+    .log-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .log-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+
+    .log-input, .log-select, .log-textarea {
+        border: 1.5px solid #d9e6f5;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-family: 'Sora', Arial, sans-serif;
+        color: #172033;
+        background: #fff;
+        outline: none;
+        transition: border-color .15s;
+        width: 100%;
+    }
+
+        .log-input:focus, .log-select:focus, .log-textarea:focus {
+            border-color: #42a5f5;
+            box-shadow: 0 0 0 3px rgba(66,165,245,.12);
+        }
+
+    .log-textarea {
+        min-height: 72px;
+        resize: vertical;
+        line-height: 1.5;
+    }
+
+    .log-check-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+    }
+
+        .log-check-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #1565c0;
+        }
+
+        .log-check-row label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+        }
+
+    .log-btn {
+        border: none;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-size: 13px;
+        font-weight: 700;
+        font-family: 'Sora', Arial, sans-serif;
+        cursor: pointer;
+        transition: opacity .15s, transform .15s;
+    }
+
+        .log-btn:hover:not(:disabled) {
+            opacity: .88;
+            transform: translateY(-1px);
+        }
+
+        .log-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+        .log-btn.primary {
+            background: linear-gradient(135deg, #0d47a1, #1565c0);
+            color: #fff;
+            box-shadow: 0 6px 16px rgba(13,71,161,.22);
+        }
+
+        .log-btn.danger {
+            background: #fee2e2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
+        .log-btn.secondary {
+            background: #f1f5f9;
+            color: #334155;
+            border: 1px solid #d9e6f5;
+        }
+
+    .log-alert {
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        margin-bottom: 14px;
+    }
+
+        .log-alert.success {
+            background: #ecfdf5;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        .log-alert.error {
+            background: #fff1f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+        }
+
+    .log-table-wrap {
+        border: 1px solid #d9e6f5;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .log-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+    }
+
+        .log-table th {
+            background: #f8fbff;
+            color: #475569;
+            text-align: left;
+            padding: 11px 14px;
+            border-bottom: 1px solid #d9e6f5;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            font-weight: 700;
+        }
+
+        .log-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid #eef4fb;
+            vertical-align: middle;
+        }
+
+        .log-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .log-table tr:hover td {
+            background: #f8fbff;
+        }
+
+    .log-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        padding: 0 9px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+        .log-pill.novo {
+            background: #ecfdf5;
+            color: #16a34a;
+        }
+
+        .log-pill.melhoria {
+            background: #eaf4ff;
+            color: #0d47a1;
+        }
+
+        .log-pill.correcao {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .log-pill.remocao {
+            background: #fff1f2;
+            color: #dc2626;
+        }
+
+        .log-pill.help {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .log-pill.evoluttech {
+            background: #f3e8ff;
+            color: #7c3aed;
+        }
+
+        .log-pill.ambos {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .log-pill.destaque {
+            background: #fef9c3;
+            color: #854d0e;
+        }
+
+    .log-empty {
+        text-align: center;
+        padding: 32px;
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .log-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+
+    @@media (max-width: 760px) {
+        .log-form-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .log-root {
+            padding: 14px;
+        }
+    }
+</style>
+
+<div class="log-root">
+
+    @if (!PodeAcessar)
+    {
+        <div class="log-card">
+            <div class="log-title">🔒 Sem permissão</div>
+            <p style="color:#64748b;font-size:13px;margin-top:8px;">Você não tem permissão para acessar esta tela.</p>
+        </div>
+    }
+    else
+    {
+        <!-- Formulário -->
+        <div class="log-card">
+            <div class="log-title">📋 @(editando ? "Editar entrada de log" : "Nova entrada de log")</div>
+            <div class="log-subtitle">Preencha os campos para registrar uma novidade, melhoria ou correção no sistema.</div>
+
+            @if (!string.IsNullOrWhiteSpace(mensagem))
+            {
+                <div class="log-alert @tipoMensagem">@mensagem</div>
+            }
+
+            <div class="log-form-grid">
+                <div class="log-field">
+                    <span class="log-label">Sistema</span>
+                    <select class="log-select" @bind="form.Sistema">
+                        <option value="HELP">HELP</option>
+                        <option value="EVOLUTTECH">EvolutTech</option>
+                        <option value="AMBOS">Ambos</option>
+                    </select>
+                </div>
+
+                <div class="log-field">
+                    <span class="log-label">Versão</span>
+                    <input class="log-input" @bind="form.Versao" placeholder="ex: 2026.07" />
+                </div>
+
+                <div class="log-field log-form-full">
+                    <span class="log-label">Título</span>
+                    <input class="log-input" @bind="form.Titulo" placeholder="O que foi feito?" />
+                </div>
+
+                <div class="log-field log-form-full">
+                    <span class="log-label">Descrição</span>
+                    <textarea class="log-textarea" @bind="form.Descricao" placeholder="Detalhe a mudança para o usuário..."></textarea>
+                </div>
+
+                <div class="log-field">
+                    <span class="log-label">Tipo de alteração</span>
+                    <select class="log-select" @bind="form.TipoAlteracao">
+                        <option value="NOVO">Novo</option>
+                        <option value="MELHORIA">Melhoria</option>
+                        <option value="CORRECAO">Correção</option>
+                        <option value="REMOCAO">Removido</option>
+                    </select>
+                </div>
+
+                <div class="log-field">
+                    <span class="log-label">Ícone (Tabler)</span>
+                    <input class="log-input" @bind="form.Icone" placeholder="ex: ti-rocket, ti-bug, ti-sparkles" />
+                </div>
+
+                <div class="log-field">
+                    <span class="log-label">Referência (slug da doc, opcional)</span>
+                    <input class="log-input" @bind="form.Referencia" placeholder="ex: gravacao-de-tela" />
+                </div>
+
+                <div class="log-field" style="justify-content:flex-end;">
+                    <span class="log-label">Opções</span>
+                    <div class="log-check-row">
+                        <input type="checkbox" id="chk-destaque" @bind="form.Destaque" />
+                        <label for="chk-destaque">Destacar este item no modal</label>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="log-btn primary" disabled="@salvando" @onclick="SalvarAsync">
+                    @(salvando ? "Salvando..." : editando ? "💾 Atualizar" : "➕ Adicionar")
+                </button>
+                @if (editando)
+                {
+                    <button class="log-btn secondary" @onclick="CancelarEdicao">Cancelar</button>
+                }
+            </div>
+        </div>
+
+        <!-- Lista -->
+        <div class="log-card">
+            <div class="log-title" style="margin-bottom:16px;">📜 Entradas cadastradas</div>
+
+            @if (carregando)
+            {
+                <div class="log-empty">Carregando...</div>
+            }
+            else if (!itens.Any())
+            {
+                <div class="log-empty">Nenhuma entrada cadastrada ainda.</div>
+            }
+            else
+            {
+                <div class="log-table-wrap">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Título</th>
+                                <th>Versão</th>
+                                <th>Tipo</th>
+                                <th>Sistema</th>
+                                <th>Data</th>
+                                <th style="text-align:right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in itens.OrderByDescending(x => x.DataHora))
+                            {
+                                <tr>
+                                    <td>
+                                        <div style="font-weight:700;color:#172033;">@item.Titulo</div>
+                                        @if (!string.IsNullOrWhiteSpace(item.Descricao))
+                                        {
+                                            <div style="font-size:11.5px;color:#64748b;margin-top:2px;">@item.Descricao</div>
+                                        }
+                                        @if (item.Destaque)
+                                        {
+                                            <span class="log-pill destaque" style="margin-top:4px;">⭐ Destaque</span>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.Referencia))
+                                        {
+                                            <div style="font-size:11px;color:#0369a1;margin-top:3px;">🔗 @item.Referencia</div>
+                                        }
+                                    </td>
+                                    <td style="font-weight:700;">@item.Versao</td>
+                                    <td>
+                                        <span class="log-pill @item.TipoAlteracao.ToLower()">
+                                            @TraduzirTipo(item.TipoAlteracao)
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="log-pill @item.Sistema.ToLower()">@item.Sistema</span>
+                                    </td>
+                                    <td style="color:#64748b;white-space:nowrap;">
+                                        @item.DataHora.ToString("dd/MM/yyyy HH:mm")
+                                    </td>
+                                    <td>
+                                        <div class="log-actions">
+                                            <button class="log-btn secondary" @onclick="() => Editar(item)">Editar</button>
+                                            <button class="log-btn danger" @onclick="() => ExcluirAsync(item)">Excluir</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+@code {
+    private bool PodeAcessar = false;
+    private bool carregando = true;
+    private bool salvando = false;
+    private bool editando = false;
+    private string mensagem = "";
+    private string tipoMensagem = "success";
+    private List<ChangelogItemAdminDto> itens = new();
+    private FormModel form = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        int tentativas = 0;
+        while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
+
+        var u = UserState.CurrentUser?.Trim().ToUpperInvariant() ?? "";
+        PodeAcessar = await AdminService.UsuarioTemPermissaoAsync(u, "ADMIN_CHANGELOG_VISUALIZAR");
+
+        if (PodeAcessar)
+            await CarregarAsync();
+        else
+            carregando = false;
+    }
+
+    private async Task CarregarAsync()
+    {
+        carregando = true;
+        itens = await ChangelogService.ListarAdminAsync();
+        carregando = false;
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.Titulo) || string.IsNullOrWhiteSpace(form.Versao))
+        {
+            Mensagem("Título e versão são obrigatórios.", "error");
+            return;
+        }
+
+        salvando = true;
+        try
+        {
+            if (editando && form.Codigo > 0)
+                await ChangelogService.AtualizarAsync(form.ToModel());
+            else
+                await ChangelogService.InserirAsync(form.ToModel());
+
+            Mensagem(editando ? "Entrada atualizada com sucesso." : "Entrada adicionada com sucesso.", "success");
+            CancelarEdicao();
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Mensagem($"Erro: {ex.Message}", "error");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private void Editar(ChangelogItemAdminDto item)
+    {
+        editando = true;
+        form = new FormModel
+        {
+            Codigo = item.Codigo,
+            Titulo = item.Titulo,
+            Descricao = item.Descricao,
+            Versao = item.Versao,
+            Sistema = item.Sistema,
+            TipoAlteracao = item.TipoAlteracao,
+            Icone = item.Icone,
+            Referencia = item.Referencia,
+            Destaque = item.Destaque
+        };
+        mensagem = "";
+    }
+
+    private async Task ExcluirAsync(ChangelogItemAdminDto item)
+    {
+        await ChangelogService.ExcluirItemAsync(item.Codigo);
+        await CarregarAsync();
+    }
+
+    private void CancelarEdicao()
+    {
+        editando = false;
+        form = new FormModel();
+    }
+
+    private void Mensagem(string texto, string tipo)
+    {
+        mensagem = texto;
+        tipoMensagem = tipo;
+    }
+
+    private string TraduzirTipo(string tipo) => tipo switch
+    {
+        "NOVO" => "Novo",
+        "MELHORIA" => "Melhoria",
+        "CORRECAO" => "Correção",
+        "REMOCAO" => "Removido",
+        _ => tipo
+    };
+
+    private class FormModel
+    {
+        public int Codigo { get; set; }
+        public string Titulo { get; set; } = "";
+        public string Descricao { get; set; } = "";
+        public string Versao { get; set; } = DateTime.Now.ToString("yyyy.MM");
+        public string Sistema { get; set; } = "HELP";
+        public string TipoAlteracao { get; set; } = "MELHORIA";
+        public string Icone { get; set; } = "ti-sparkles";
+        public string Referencia { get; set; } = "";
+        public bool Destaque { get; set; } = false;
+
+        public ParametrosHelpAdminModel ToModel() => new()
+        {
+            Codigo = Codigo,
+            Titulo = Titulo,
+            Descricao = Descricao,
+            Versao = Versao,
+            Sistema = Sistema,
+            TipoAlteracao = TipoAlteracao,
+            Icone = Icone,
+            Referencia = Referencia,
+            Destaque = Destaque
+        };
+    }
+}

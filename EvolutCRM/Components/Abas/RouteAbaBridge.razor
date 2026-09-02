@@ -1,0 +1,31 @@
+﻿@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Routing
+@inject AbaService Abas
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        await JS.InvokeVoidAsync("console.log", $"[Bridge] OnInitialized | URI={Nav.Uri}");
+        Nav.LocationChanged += AoNavegar;
+        Registrar(Nav.Uri);
+    }
+
+    private async void AoNavegar(object? sender, LocationChangedEventArgs e)
+    {
+        await JS.InvokeVoidAsync("console.log", $"[Bridge] LocationChanged | URI={e.Location}");
+        Registrar(e.Location);
+    }
+
+    private void Registrar(string uri)
+    {
+        var rotaRelativa = Nav.ToBaseRelativePath(uri).Split('?')[0];
+        _ = JS.InvokeVoidAsync("console.log", $"[Bridge] Registrar | rota={rotaRelativa} | abas antes={Abas.Abas.Count}");
+        Abas.AbrirOuAtivarPorRota(rotaRelativa);
+        _ = JS.InvokeVoidAsync("console.log", $"[Bridge] Registrar | abas depois={Abas.Abas.Count} | ativa={Abas.RotaAtiva}");
+    }
+
+    public void Dispose() => Nav.LocationChanged -= AoNavegar;
+}

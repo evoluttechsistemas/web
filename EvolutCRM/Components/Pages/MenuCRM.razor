@@ -1,0 +1,1597 @@
+﻿@page "/menu"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using EvolutCRM.Components.Layout
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@inject EvolutTech.CRM.Services.MenuCRMService Service
+@inject EvolutCRM.Services.CardService CardService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@layout MainLayout
+@implements IDisposable
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+        --b50: #eff6ff;
+        --b100: #dbeafe;
+        --b200: #bfdbfe;
+        --b300: #93c5fd;
+        --b400: #60a5fa;
+        --b500: #3b82f6;
+        --b600: #2563eb;
+        --b700: #1d4ed8;
+        --b800: #1e40af;
+        --b900: #1e3a8a;
+        --b950: #172554;
+        --surface: #ffffff;
+        --bg: #e8eef8;
+        --bg2: #dde5f5;
+        --ink: #0f172a;
+        --ink2: #1e293b;
+        --ink3: #334155;
+        --muted: #64748b;
+        --soft: #94a3b8;
+        --line: #cbd5e1;
+        --g50: #f0fdf4;
+        --g100: #dcfce7;
+        --g600: #16a34a;
+        --g700: #15803d;
+        --g800: #166534;
+        --r50: #fff1f2;
+        --r100: #ffe4e6;
+        --r600: #dc2626;
+        --r700: #b91c1c;
+        --r800: #7f1d1d;
+        --a50: #fffbeb;
+        --a100: #fef3c7;
+        --a600: #d97706;
+        --a700: #b45309;
+        --a800: #78350f;
+        --v50: #f5f3ff;
+        --v100: #ede9fe;
+        --v600: #7c3aed;
+        --v700: #6d28d9;
+        --v800: #4c1d95;
+        --p50: #fdf4ff;
+        --p100: #fae8ff;
+        --p600: #c026d3;
+        --p800: #701a75;
+        --o100: #ffedd5;
+        --o700: #c2410c;
+        --o800: #7c2d12;
+        --rad: 4px;
+        --rad2: 6px;
+        --rad3: 10px;
+        --rad4: 14px;
+        --sh: 0 1px 2px rgba(15,23,42,.06),0 2px 8px rgba(15,23,42,.05);
+        --sh2: 0 4px 16px rgba(37,99,235,.18),0 1px 4px rgba(37,99,235,.1);
+        --tr: .13s ease;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    .temp-box {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+    }
+
+    .temp-head {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .temp-emoji {
+        font-size: 12px;
+    }
+
+    .temp-text {
+        font-size: 9px;
+        font-weight: 700;
+    }
+
+    .temp-progress {
+        width: 64px;
+        height: 6px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: #e2e8f0;
+    }
+
+    .temp-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: .3s;
+    }
+
+    .temp-hot {
+        background: linear-gradient(90deg,#dc2626,#ef4444);
+    }
+
+    .temp-warm {
+        background: linear-gradient(90deg,#f59e0b,#f97316);
+    }
+
+    .temp-cold {
+        background: linear-gradient(90deg,#2563eb,#3b82f6);
+    }
+
+    .temp-freeze {
+        background: linear-gradient(90deg,#4338ca,#6366f1);
+    }
+
+    .temp-score {
+        font-size: 8px;
+        font-weight: 800;
+        color: #475569;
+    }
+
+    .cm {
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 11px;
+        color: var(--ink);
+        background: var(--bg);
+        min-height: 100vh;
+    }
+
+    /* ─── SHELL ─── */
+    .cm-shell {
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 10px 14px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    /* ─── TOPBAR ─── */
+    .cm-topbar {
+        background: var(--surface);
+        border: 1.5px solid var(--b200);
+        border-radius: var(--rad3);
+        box-shadow: var(--sh);
+        padding: 10px 12px;
+        display: grid;
+        grid-template-columns: auto 1fr auto auto auto;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .cm-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .cm-logo {
+        width: 34px;
+        height: 34px;
+        border-radius: var(--rad2);
+        background: linear-gradient(135deg,var(--b600),var(--b900));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: var(--sh2);
+        flex-shrink: 0;
+    }
+
+    .cm-brand-text {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+    }
+
+        .cm-brand-text strong {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .cm-brand-text span {
+            font-size: 9px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+    .cm-search {
+        position: relative;
+        width: 100%;
+    }
+
+    .cm-search-ico {
+        position: absolute;
+        left: 9px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--soft);
+        pointer-events: none;
+        display: flex;
+    }
+
+    .cm-search input {
+        width: 100%;
+        height: 28px;
+        padding: 0 9px 0 28px;
+        border: 1.5px solid var(--b200);
+        border-radius: 999px;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        color: var(--ink);
+        background: #fff;
+        outline: none;
+        transition: var(--tr);
+    }
+
+        .cm-search input:focus {
+            border-color: var(--b500);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.18);
+        }
+
+        .cm-search input::placeholder {
+            color: var(--soft);
+        }
+
+    .cm-user-filter select {
+        height: 28px;
+        padding: 0 10px;
+        border: 1.5px solid var(--b200);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--ink);
+        outline: none;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10px;
+        font-weight: 600;
+        min-width: 160px;
+        cursor: pointer;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 9px center;
+        padding-right: 26px;
+    }
+
+    .cm-btn {
+        height: 28px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: none;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        text-decoration: none;
+    }
+
+        .cm-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .cm-btn:active {
+            transform: none;
+        }
+
+    .cm-btn-solid {
+        background: linear-gradient(135deg,var(--b600),var(--b900));
+        color: #fff;
+        box-shadow: var(--sh2);
+    }
+
+        .cm-btn-solid:hover {
+            box-shadow: 0 6px 20px rgba(37,99,235,.4);
+        }
+
+    .cm-btn-fluxo {
+        background: linear-gradient(135deg,#7c3aed,#4f46e5);
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(79,70,229,.3);
+    }
+
+        .cm-btn-fluxo:hover {
+            box-shadow: 0 6px 20px rgba(79,70,229,.42);
+        }
+
+    .cm-btn-ghost {
+        background: #fff;
+        border: 1.5px solid var(--b200);
+        color: var(--b700);
+    }
+
+        .cm-btn-ghost:hover {
+            background: var(--b50);
+            border-color: var(--b400);
+        }
+
+    .cm-user-box {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .cm-user-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        line-height: 1.2;
+    }
+
+        .cm-user-text strong {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .cm-user-text span {
+            font-size: 8.5px;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+    .cm-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: var(--rad2);
+        background: linear-gradient(135deg,var(--b800),var(--b950));
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* ─── TABS ─── */
+    .cm-tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .cm-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1.5px solid var(--line);
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #fff;
+        color: var(--muted);
+    }
+
+        .cm-tab:hover {
+            background: var(--b50);
+            color: var(--b700);
+            border-color: var(--b300);
+        }
+
+        .cm-tab.active {
+            background: linear-gradient(135deg,var(--b600),var(--b900));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: var(--sh2);
+        }
+
+    .cm-tab-n {
+        font-size: 9px;
+        font-weight: 800;
+        border-radius: 999px;
+        padding: 1px 5px;
+        min-width: 16px;
+        text-align: center;
+        line-height: 1.6;
+        background: rgba(255,255,255,.22);
+        color: inherit;
+    }
+
+    .cm-tab:not(.active) .cm-tab-n {
+        background: var(--b100);
+        color: var(--b800);
+    }
+
+    /* novo piscando */
+    .cm-tab-novo {
+        border-color: #991b1b !important;
+        animation: tabBlink 1s ease-in-out infinite;
+    }
+
+        .cm-tab-novo:not(.active) {
+            background: #fecaca !important;
+            color: #7f1d1d !important;
+        }
+
+            .cm-tab-novo:not(.active) .cm-tab-n {
+                background: #fca5a5 !important;
+                color: #450a0a !important;
+            }
+
+        .cm-tab-novo.active {
+            background: linear-gradient(135deg,#991b1b,#7f1d1d) !important;
+        }
+
+    @@keyframes tabBlink {
+        0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+            box-shadow: 0 0 0 rgba(153,27,27,0);
+        }
+
+        50% {
+            opacity: .85;
+            transform: scale(1.02);
+            box-shadow: 0 0 12px rgba(153,27,27,.45);
+        }
+    }
+
+    .cm-chip-search {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 26px;
+        padding: 0 9px;
+        background: #fffbeb;
+        border: 1.5px solid #fcd34d;
+        border-radius: 999px;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: #92400e;
+    }
+
+    /* ─── CARD / TABELA ─── */
+    .cm-card {
+        background: var(--surface);
+        border-radius: var(--rad3);
+        overflow: hidden;
+        border: 1.5px solid var(--b200);
+        box-shadow: var(--sh);
+    }
+
+    /*
+      Colunas:
+      Código(58) | Lead(1fr) | Funil(90) | Temperatura(82) | Atividade(76) | Estado(68) | Ações(46)
+    */
+    .cm-grid {
+        display: grid;
+        grid-template-columns: 58px 1fr 90px 82px 76px 76px 68px 46px;
+        align-items: stretch;
+    }
+
+    /* ─── THEAD ─── */
+    .cm-thead {
+        border-bottom: 2px solid var(--b900);
+    }
+
+        .cm-thead > span {
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: 8.5px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            padding: 7px 6px;
+            display: flex;
+            align-items: center;
+            border-right: 1px solid rgba(255,255,255,.1);
+        }
+
+            .cm-thead > span:last-child {
+                border-right: none;
+            }
+
+            .cm-thead > span:nth-child(n+3) {
+                justify-content: center;
+            }
+
+            /* cores por coluna */
+            .cm-thead > span:nth-child(1) {
+                background: linear-gradient(180deg,#1e40af,#172554);
+            }
+
+            .cm-thead > span:nth-child(2) {
+                background: linear-gradient(180deg,var(--b700),var(--b900));
+            }
+
+            .cm-thead > span:nth-child(3) {
+                background: linear-gradient(180deg,#6d28d9,#4c1d95);
+            }
+
+            .cm-thead > span:nth-child(4) {
+                background: linear-gradient(180deg,#c2410c,#7c2d12);
+            }
+
+            .cm-thead > span:nth-child(5) {
+                background: linear-gradient(180deg,#1d4ed8,#1e3a8a);
+            }
+
+            .cm-thead > span:nth-child(6) {
+                background: linear-gradient(180deg,var(--g700),var(--g800));
+            }
+
+            .cm-thead > span:nth-child(7) {
+                background: linear-gradient(180deg,#172554,#0f172a);
+            }
+
+    /* ─── ROWS ─── */
+    .cm-row {
+        cursor: pointer;
+        border-bottom: 1px solid var(--line);
+        transition: background var(--tr);
+        position: relative;
+    }
+
+        .cm-row:last-child {
+            border-bottom: none;
+        }
+
+        .cm-row:hover {
+            background: var(--b50);
+        }
+
+        .cm-row::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            background: transparent;
+            transition: var(--tr);
+        }
+
+        .cm-row:hover::before {
+            background: var(--b400);
+        }
+
+        .cm-row.novo::before {
+            background: #7f1d1d;
+            width: 4px;
+            box-shadow: 0 0 10px rgba(127,29,29,.9);
+        }
+
+        .cm-row.novo {
+            border-bottom: 1px solid rgba(153,27,27,.3);
+            animation: cmNovoPulse 1s ease-in-out infinite;
+        }
+
+            .cm-row.novo .cc-code {
+                color: #7f1d1d;
+            }
+
+            .cm-row.novo .cc-title {
+                color: #450a0a;
+            }
+
+            .cm-row.novo:hover {
+                animation: none;
+                background: #f87171;
+            }
+
+    @@keyframes cmNovoPulse {
+        0%, 100% {
+            background: #fecaca;
+            box-shadow: inset 4px 0 0 #991b1b, 0 0 0 rgba(153,27,27,0);
+        }
+
+        50% {
+            background: #fca5a5;
+            box-shadow: inset 4px 0 0 #7f1d1d, 0 3px 22px rgba(153,27,27,.35);
+        }
+    }
+
+    .cm-row > div {
+        padding: 5px 6px;
+        border-right: 1px solid #f1f5f9;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        align-self: stretch;
+    }
+
+        .cm-row > div:last-child {
+            border-right: none;
+        }
+
+        .cm-row > div:nth-child(n+3) {
+            justify-content: center;
+        }
+
+    /* ─── CELLS ─── */
+    .cc-code {
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: var(--b700);
+        letter-spacing: .02em;
+        white-space: nowrap;
+    }
+
+    .cc-title {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.22;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .cc-sub {
+        font-size: 8.5px;
+        color: var(--soft);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .bx-novo {
+        font-size: 7.5px;
+        font-weight: 800;
+        padding: 1px 5px;
+        border-radius: 2px;
+        background: #991b1b;
+        color: #fff;
+        letter-spacing: .05em;
+        margin-left: 4px;
+        vertical-align: middle;
+        box-shadow: 0 0 6px rgba(153,27,27,.6);
+        animation: cmNovoBadge 1s ease-in-out infinite;
+    }
+
+    @@keyframes cmNovoBadge {
+        0%, 100% {
+            background: #991b1b;
+            box-shadow: 0 0 5px rgba(153,27,27,.6);
+        }
+
+        50% {
+            background: #7f1d1d;
+            box-shadow: 0 0 12px rgba(127,29,29,.9);
+        }
+    }
+
+    /* ─── BADGES ─── */
+    .bx {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 700;
+        white-space: nowrap;
+        letter-spacing: .02em;
+        line-height: 1.4;
+    }
+
+    /* funil */
+    .fx-ra {
+        background: var(--b100);
+        color: var(--b800);
+    }
+
+    .fx-ep {
+        background: var(--v100);
+        color: var(--v800);
+    }
+
+    .fx-fu {
+        background: #e0f2fe;
+        color: #075985;
+    }
+
+    .fx-no {
+        background: var(--a100);
+        color: var(--a800);
+    }
+
+    .fx-im {
+        background: var(--p100);
+        color: var(--p800);
+    }
+
+    .fx-ok {
+        background: var(--g100);
+        color: var(--g800);
+    }
+
+    .fx-lost {
+        background: var(--r100);
+        color: var(--r800);
+    }
+
+    .fx-def {
+        background: #f1f5f9;
+        color: var(--muted);
+    }
+
+    /* temperatura */
+    .tx-quente {
+        background: linear-gradient(135deg,#dc2626,#b91c1c);
+        color: #fff;
+    }
+
+    .tx-morno {
+        background: linear-gradient(135deg,#d97706,#b45309);
+        color: #fff;
+    }
+
+    .tx-frio {
+        background: linear-gradient(135deg,#2563eb,#1d4ed8);
+        color: #fff;
+    }
+
+    .tx-muitofrio {
+        background: linear-gradient(135deg,#4338ca,#3730a3);
+        color: #fff;
+    }
+
+    .tx-nd {
+        background: #f1f5f9;
+        color: var(--soft);
+    }
+
+    /* atividade / estado */
+    .ax-ok {
+        background: var(--g100);
+        color: var(--g800);
+    }
+
+    .ax-warn {
+        background: var(--a100);
+        color: var(--a800);
+    }
+
+    .ax-stop {
+        background: var(--r100);
+        color: var(--r800);
+    }
+
+    /* ─── OPEN BTN ─── */
+    .cm-open {
+        height: 22px;
+        padding: 0 8px;
+        border-radius: var(--rad);
+        border: none;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 9px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        background: linear-gradient(135deg,var(--b500),var(--b700));
+        color: #fff;
+        white-space: nowrap;
+        letter-spacing: .02em;
+    }
+
+        .cm-open:hover {
+            background: linear-gradient(135deg,var(--b600),var(--b800));
+            transform: translateY(-1px);
+        }
+
+    /* ─── EMPTY / FOOTER ─── */
+    .cm-empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--soft);
+        font-size: 10.5px;
+        font-weight: 600;
+    }
+
+    .cm-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 9.5px;
+        color: var(--muted);
+        font-weight: 600;
+        padding: 2px 4px;
+    }
+
+    /* ─── MODAL BUSCA ─── */
+    .m-back {
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,.52);
+        backdrop-filter: blur(5px);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+    }
+
+    .m-panel {
+        width: 100%;
+        max-width: 520px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(15,23,42,.24);
+        overflow: hidden;
+        animation: mIn .18s ease;
+    }
+
+    @@keyframes mIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .m-head {
+        background: linear-gradient(135deg,var(--b700),var(--b950));
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .m-head-t {
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        margin: 0;
+    }
+
+    .m-close {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(255,255,255,.3);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        font-size: 15px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: var(--tr);
+        line-height: 1;
+    }
+
+        .m-close:hover {
+            background: rgba(255,255,255,.25);
+        }
+
+    .m-body {
+        padding: 14px 16px;
+    }
+
+    .m-list {
+        list-style: none;
+        max-height: 260px;
+        overflow-y: auto;
+        margin-top: 8px;
+        border-top: 1.5px solid var(--line);
+        padding-top: 6px;
+    }
+
+        .m-list li {
+            padding: 7px 9px;
+            border-radius: var(--rad2);
+            cursor: pointer;
+            font-size: 10.5px;
+            color: var(--ink3);
+            transition: var(--tr);
+        }
+
+            .m-list li:hover {
+                background: var(--b50);
+                color: var(--b700);
+            }
+
+            .m-list li strong {
+                font-weight: 700;
+                display: block;
+                font-size: 10.5px;
+            }
+
+            .m-list li span {
+                font-size: 9.5px;
+                color: var(--soft);
+            }
+
+    .m-empty {
+        font-size: 10.5px;
+        color: var(--soft);
+        font-weight: 600;
+        padding: 12px 0;
+    }
+
+    .m-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 12px 16px;
+        border-top: 1.5px solid var(--line);
+        background: var(--b50);
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @@media(max-width:1080px) {
+        .cm-topbar {
+            grid-template-columns: auto 1fr auto;
+        }
+
+        .cm-user-box {
+            display: none;
+        }
+    }
+
+    @@media(max-width:900px) {
+        .cm-shell {
+            padding: 8px 8px 20px;
+        }
+
+        .cm-topbar {
+            grid-template-columns: 1fr;
+            gap: 7px;
+        }
+
+        .cm-tabs {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 4px;
+        }
+
+        .cm-tab {
+            border-radius: var(--rad2);
+            justify-content: space-between;
+            height: 29px;
+        }
+
+        .cm-thead {
+            display: none;
+        }
+
+        .cm-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            overflow: visible;
+        }
+
+        .cm-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 10px;
+            border-radius: var(--rad2);
+            border: 1.5px solid var(--b200);
+            margin-bottom: 6px;
+            background: #fff;
+            box-shadow: var(--sh);
+        }
+
+            .cm-row > div {
+                border-right: none;
+                padding: 0;
+                align-self: auto;
+            }
+
+                .cm-row > div:nth-child(n+3) {
+                    justify-content: flex-start;
+                }
+
+            .cm-row::before {
+                top: 0;
+                bottom: auto;
+                right: 0;
+                left: 0;
+                width: auto;
+                height: 3px;
+                border-radius: var(--rad2) var(--rad2) 0 0;
+            }
+
+        .cm-open {
+            width: 100%;
+            height: 28px;
+            border-radius: var(--rad2);
+            font-size: 10px;
+            margin-top: 2px;
+        }
+    }
+
+    @@media(max-width:600px) {
+        .cm-tabs {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+</style>
+
+<div class="cm">
+    <div class="cm-shell">
+
+        <!-- TOPBAR -->
+        <header class="cm-topbar">
+            <div class="cm-brand">
+                <div class="cm-logo">E</div>
+                <div class="cm-brand-text">
+                    <strong>EvolutCRM</strong>
+                    <span>Funil Comercial</span>
+                </div>
+            </div>
+
+            <div class="cm-search">
+                <span class="cm-search-ico">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                </span>
+                <input type="text"
+                       placeholder="Buscar lead, cliente ou telefone... Pressione Enter para busca avançada"
+                       @bind="buscaGlobal" @bind:event="oninput"
+                       @onkeyup="OnBuscarGlobalKeyDown" />
+            </div>
+
+            <div class="cm-user-filter">
+                <select @bind="UsuarioSelecionado" @bind:event="onchange">
+                    <option value="">Todos os usuários</option>
+                    @foreach (var u in UsuariosDisponiveis)
+                    {
+                        <option value="@u">@u</option>
+                    }
+                </select>
+            </div>
+
+            <div style="display:flex;gap:6px;">
+                <NavLink href="/card" class="cm-btn cm-btn-solid" activeClass="">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    Novo Lead
+                </NavLink>
+                <NavLink href="/comercial-fluxo" class="cm-btn cm-btn-fluxo" activeClass="">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+                    Fluxo Comercial
+                </NavLink>
+            </div>
+
+            <div class="cm-user-box">
+                <div class="cm-user-text">
+                    <strong>@(string.IsNullOrWhiteSpace(currentUser) ? "Usuário" : currentUser)</strong>
+                    <span>@(string.IsNullOrWhiteSpace(currentCompany) ? "CRM" : currentCompany)</span>
+                </div>
+                <div class="cm-avatar">@UserInitial</div>
+            </div>
+        </header>
+
+        <!-- TABS -->
+        <nav class="cm-tabs">
+            <button type="button" class="cm-tab @(FunilSelecionado == "TODOS" ? "active" : "") @(TemNovoNoFunil("TODOS") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("TODOS")'>
+                Todos <span class="cm-tab-n">@CountPorFunil("TODOS")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "RA" ? "active" : "") @(TemNovoNoFunil("RA") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("RA")'>
+                Novo Lead <span class="cm-tab-n">@CountPorFunil("RA")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "EP" ? "active" : "") @(TemNovoNoFunil("EP") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("EP")'>
+                Contato Feito <span class="cm-tab-n">@CountPorFunil("EP")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "FU" ? "active" : "") @(TemNovoNoFunil("FU") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("FU")'>
+                Qualificado <span class="cm-tab-n">@CountPorFunil("FU")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "NO" ? "active" : "") @(TemNovoNoFunil("NO") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("NO")'>
+                Nutrição <span class="cm-tab-n">@CountPorFunil("NO")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "IM" ? "active" : "") @(TemNovoNoFunil("IM") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("IM")'>
+                Implantação <span class="cm-tab-n">@CountPorFunil("IM")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "CONCLUIDO" ? "active" : "") @(TemNovoNoFunil("CONCLUIDO") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("CONCLUIDO")'>
+                Concluídos <span class="cm-tab-n">@CountPorFunil("CONCLUIDO")</span>
+            </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "PERDIDO" ? "active" : "") @(TemNovoNoFunil("PERDIDO") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("PERDIDO")'>
+                Perdidos <span class="cm-tab-n">@CountPorFunil("PERDIDO")</span>
+            </button>
+
+            @if (!string.IsNullOrWhiteSpace(buscaGlobal))
+            {
+                <span class="cm-chip-search">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                    "@buscaGlobal"
+                </span>
+            }
+        </nav>
+
+        <!-- TABELA -->
+        <div class="cm-card">
+            <div class="cm-grid cm-thead">
+                <span>Código</span>
+                <span>Lead</span>
+                <span>Funil</span>
+                <span>Temperatura</span>
+                <span>Últ. Atividade</span>
+                <span>Tempo Conosco</span>
+                <span>Estado</span>
+                <span></span>
+            </div>
+
+            @{
+                var rows = FiltrarCards().ToList();
+            }
+
+            @if (!rows.Any())
+            {
+                <div class="cm-empty">Nenhum lead encontrado para o filtro selecionado.</div>
+            }
+            else
+            {
+                @foreach (var row in rows)
+                {
+                    var item = row.Item;
+                    var funil = row.Funil;
+                    bool ehNovo = (item.Novo ?? "N").Trim().ToUpper() == "S";
+
+                    <div class="cm-grid cm-row @(ehNovo ? "novo" : "")"
+                         @onclick="() => AbrirCard(item.Codigo)">
+
+                        <!-- Código -->
+                        <div>
+                            <span class="cc-code">#@item.Codigo</span>
+                        </div>
+
+                        <!-- Lead -->
+                        <div>
+                            <div>
+                                <div class="cc-title">
+                                    @item.Descricao
+                                    @if (ehNovo)
+                                    {
+                                        <span class="bx-novo">NOVO</span>
+                                    }
+                                </div>
+                                <div class="cc-sub">@GetUltimaAtividadeLabel(item.UltimaDataHora)</div>
+                            </div>
+                        </div>
+
+                        <!-- Funil -->
+                        <div>
+                            <span class="bx @GetFunilCss(funil)">@ObterTextoFunil(funil)</span>
+                        </div>
+
+                        <!-- Temperatura -->
+                        <div>
+                            <div class="temp-box">
+
+                                <div class="temp-head">
+                                    <span class="temp-emoji">
+                                        @GetTempEmoji(item.ScoreTemperatura)
+                                    </span>
+
+                                    <span class="temp-text @GetTempCss(item.FaixaLead)">
+                                        @ObterTextoTemperaturaMini(item.FaixaLead)
+                                    </span>
+                                </div>
+
+                                <div class="temp-progress">
+                                    <div class="temp-progress-fill @GetTempProgress(item.ScoreTemperatura)"
+                                         style="width:@item.ScoreTemperatura%">
+                                    </div>
+                                </div>
+
+                                <div class="temp-score">
+                                    @item.ScoreTemperatura%
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <!-- Última atividade (dias) -->
+                        <div>
+                            <span class="bx @GetAtividadeClass(item.UltimaDataHora)">@GetAtividadeDias(item.UltimaDataHora)</span>
+                        </div>
+
+                        <!-- Tempo conosco -->
+                        <div>
+                            <span class="bx ax-ok">@GetTempoConosco(item.DataCriacao)</span>
+                        </div>
+
+                        <!-- Estado -->
+                        <div>
+                            <span class="bx @GetAtividadeClass(item.UltimaDataHora)">@GetCardStateText(item.UltimaDataHora)</span>
+                        </div>
+
+                        <!-- Ações -->
+                        <div>
+                            <button type="button" class="cm-open"
+                                    @onclick:stopPropagation="true"
+                                    @onclick='() => Nav.NavigateTo($"/card/{item.Codigo}")'>
+                                Abrir
+                            </button>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <footer class="cm-footer">
+            <span>Total exibido: @FiltrarCards().Count()</span>
+            <span>Atualização automática a cada 3 segundos</span>
+        </footer>
+
+    </div>
+</div>
+
+<!-- MODAL BUSCA -->
+@if (mostrarModalBusca)
+{
+    <div class="m-back">
+        <div class="m-panel">
+            <div class="m-head">
+                <h3 class="m-head-t">Resultados da busca</h3>
+                <button type="button" class="m-close" @onclick="FecharModalBusca">×</button>
+            </div>
+            <div class="m-body">
+                @if (resultadosBusca?.Any() == true)
+                {
+                    <ul class="m-list">
+                        @foreach (var c in resultadosBusca)
+                        {
+                            <li @onclick="() => AbrirCardPesquisado(c.Codigo)">
+                                <strong>@c.Descricao</strong>
+                                <span>@c.Telefone</span>
+                            </li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <div class="m-empty">Nenhum resultado encontrado.</div>
+                }
+            </div>
+            <div class="m-foot">
+                <button class="cm-btn cm-btn-ghost" @onclick="FecharModalBusca">Fechar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PeriodicTimer? _refreshTimer;
+    private bool isActivePage;
+    private DotNetObjectReference<MenuCRM>? dotNetRef;
+
+    private string currentUser = "";
+    private string currentCompany = "";
+    private List<UserItem> users = new();
+    private List<string> UsuariosDisponiveis = new();
+
+    private string buscaGlobal = "";
+    private bool mostrarModalBusca;
+    private List<CardModels> resultadosBusca = new();
+
+    private List<FunnelColumn> funnelColumns = new();
+    private List<CardResumo> concluidos = new();
+    private List<CardResumo> perdidos = new();
+    private List<ImplantacaoItem> implantacao = new();
+    private List<AgendaItem> agenda = new();
+    private int countImplantacao;
+    private decimal totalProducts, totalServices, totalGeneral;
+    private bool showOnlyScheduled = true;
+
+    private string _usuarioSelecionado = "";
+    private string FunilSelecionado = "TODOS";
+
+    private string UserInitial =>
+        string.IsNullOrWhiteSpace(currentUser) ? "?" : currentUser.Trim()[0].ToString().ToUpper();
+
+    protected override void OnInitialized()
+    {
+        UserState.OnChange += OnUserStateChanged;
+        if (UserState.IsReady && !string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            _ = InitializeFromUserState();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        _ = AutoRefreshLoop();
+    }
+
+    private async Task AbrirCard(int codigo)
+    {
+        var card = TodosCards().FirstOrDefault(x => x.Item.Codigo == codigo);
+        if (card != null) card.Item.Novo = "N";
+        try { await Service.MarcarCardComoLido(codigo, UserState.CurrentCompanyId); } catch { }
+        await InvokeAsync(StateHasChanged);
+        Nav.NavigateTo($"/card/{codigo}");
+    }
+
+    private string GetTempEmoji(int score)
+    {
+        if (score >= 80) return "🔥";
+        if (score >= 50) return "🟠";
+        if (score >= 25) return "🧊";
+        return "❄️";
+    }
+
+    private string GetTempProgress(int score)
+    {
+        if (score >= 80)
+            return "temp-hot";
+
+        if (score >= 50)
+            return "temp-warm";
+
+        if (score >= 25)
+            return "temp-cold";
+
+        return "temp-freeze";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        Nav.LocationChanged += OnLocationChanged;
+        isActivePage = Nav.Uri.Contains("/menu", StringComparison.OrdinalIgnoreCase);
+        if (!isActivePage) return;
+        while (!UserState.IsReady) await Task.Delay(50);
+        currentUser = UserState.CurrentUser ?? "";
+        currentCompany = UserState.CurrentCompany ?? "";
+        if (string.IsNullOrWhiteSpace(currentUser))
+            currentUser = await JS.InvokeAsync<string>("localStorage.getItem", "crm_user") ?? "";
+        users = (await Service.LoadUsers()).OrderBy(u => u.Username != currentUser).ThenBy(u => u.Username).ToList();
+        UsuariosDisponiveis = users.Select(u => u.Username.Trim().ToUpper()).Distinct().OrderBy(u => u).ToList();
+        await RefreshAll();
+        StateHasChanged();
+    }
+
+    private async Task RefreshAll()
+    {
+        (funnelColumns, totalProducts, totalServices, totalGeneral) =
+            await Service.BuscaCRM(UserState.CurrentCompanyId,
+                string.IsNullOrWhiteSpace(_usuarioSelecionado) ? null : _usuarioSelecionado);
+        (implantacao, countImplantacao) = await Service.UpdateImplantacao(UserState.CurrentCompanyId);
+        agenda = await Service.UpdateAgenda(UserState.CurrentCompanyId, currentUser, showOnlyScheduled);
+        (concluidos, perdidos) = await Service.LoadConcluidosPerdidos(UserState.CurrentCompanyId, currentUser);
+    }
+
+    private IEnumerable<CardListaRow> TodosCards()
+    {
+        return funnelColumns
+            .SelectMany(c => c.Items.Select(i => new CardListaRow(i, c.FunnelCode)))
+            .ToList();
+    }
+
+    private IEnumerable<CardListaRow> FiltrarCards(string? funil = null)
+    {
+        var filtro = funil ?? FunilSelecionado;
+        var q = TodosCards();
+
+        if (filtro != "TODOS")
+            q = q.Where(x => string.Equals(x.Funil, filtro, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(buscaGlobal))
+        {
+            var busca = buscaGlobal.Trim();
+            q = q.Where(x =>
+                (x.Item.Descricao?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (x.Item.FaixaLead?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return q
+            .OrderByDescending(x => (x.Item.Novo ?? "N").Trim().Equals("S", StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(x => GetDataUltimaAtividade(x.Item.UltimaDataHora))
+            .ThenBy(x => x.Item.Descricao);
+    }
+
+    private int CountPorFunil(string funil)
+    {
+        if (funil == "TODOS") return TodosCards().Count();
+        return TodosCards().Count(x => string.Equals(x.Funil, funil, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void SelecionarFunil(string funil) => FunilSelecionado = funil;
+
+    private async Task OnBuscarGlobalKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(buscaGlobal))
+        {
+            mostrarModalBusca = true;
+            await ProcurarCards();
+        }
+    }
+
+    private async Task ProcurarCards()
+    {
+        if (string.IsNullOrWhiteSpace(buscaGlobal)) { resultadosBusca.Clear(); return; }
+        var somenteNumeros = new string(buscaGlobal.Where(char.IsDigit).ToArray());
+        string nome = somenteNumeros.Length >= 8 ? "" : buscaGlobal.Trim();
+        string telefone = somenteNumeros.Length >= 8 ? somenteNumeros : "";
+        resultadosBusca = await CardService.BuscarCardsAsync(nome, telefone, UserState.CurrentCompanyId);
+        StateHasChanged();
+    }
+
+    private void FecharModalBusca() { mostrarModalBusca = false; buscaGlobal = ""; resultadosBusca.Clear(); }
+    private void AbrirCardPesquisado(int codigo) { mostrarModalBusca = false; Nav.NavigateTo($"/card/{codigo}"); }
+
+    private string UsuarioSelecionado
+    {
+        get => _usuarioSelecionado;
+        set { if (_usuarioSelecionado == value) return; _usuarioSelecionado = value; _ = OnUsuarioSelecionadoChanged(); }
+    }
+
+    private async Task OnUsuarioSelecionadoChanged() { await RefreshAll(); await InvokeAsync(StateHasChanged); }
+
+    private async void OnUserStateChanged()
+    {
+        if (!UserState.IsReady) return;
+        await InitializeFromUserState();
+    }
+
+    private async Task InitializeFromUserState()
+    {
+        currentUser = UserState.CurrentUser ?? "";
+        currentCompany = UserState.CurrentCompany ?? "";
+        _usuarioSelecionado = currentUser.Trim().ToUpper();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        isActivePage = e.Location.Contains("/menu", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task AutoRefreshLoop()
+    {
+        try
+        {
+            while (_refreshTimer != null && await _refreshTimer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(async () =>
+                {
+                    if (!isActivePage) return;
+                    await RefreshAll();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private bool TemNovoNoFunil(string funil)
+    {
+        var q = TodosCards();
+        if (funil != "TODOS")
+            q = q.Where(x => string.Equals(x.Funil, funil, StringComparison.OrdinalIgnoreCase));
+        return q.Any(x => (x.Item.Novo ?? "N").Trim().Equals("S", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /* ── HELPERS ── */
+    static string ObterTextoFunil(string f) => f switch
+    {
+        "RA" => "Novo Lead",
+        "EP" => "Contato Feito",
+        "FU" => "Qualificado",
+        "NO" => "Nutrição",
+        "IM" => "Implantação",
+        "CONCLUIDO" => "Concluído",
+        "PERDIDO" => "Perdido",
+        _ => f
+    };
+
+    static string GetFunilCss(string f) => f switch
+    {
+        "RA" => "fx-ra",
+        "EP" => "fx-ep",
+        "FU" => "fx-fu",
+        "NO" => "fx-no",
+        "IM" => "fx-im",
+        "CONCLUIDO" => "fx-ok",
+        "PERDIDO" => "fx-lost",
+        _ => "fx-def"
+    };
+
+    static string GetTempCss(string? faixa)
+    {
+        return (faixa?.Trim().ToUpper()) switch
+        {
+            "QUENTE" => "tx-quente",
+            "MORNO" => "tx-morno",
+            "FRIO" => "tx-frio",
+            "MUITO FRIO" or "MUITOFRIO" => "tx-muitofrio",
+            _ => "tx-nd"
+        };
+    }
+
+    static string ObterTextoTemperaturaMini(string? faixa) => (faixa?.Trim().ToUpper()) switch
+    {
+        "QUENTE" => "Quente",
+        "MORNO" => "Morno",
+        "FRIO" => "Frio",
+        "MUITO FRIO" or "MUITOFRIO" => "M. Frio",
+        _ => faixa ?? ""
+    };
+
+    private DateTime GetDataUltimaAtividade(string? s)
+    {
+        return DateTime.TryParse(s, out var d) ? d : DateTime.MinValue;
+    }
+
+    private string GetUltimaAtividadeLabel(string? s)
+    {
+        if (!DateTime.TryParse(s, out var d)) return "Sem atividade";
+        var dias = (DateTime.Now.Date - d.Date).Days;
+        if (dias == 0) return "Hoje";
+        if (dias == 1) return "Ontem";
+        if (dias <= 7) return $"Há {dias} dias";
+        return d.ToString("dd/MM/yyyy");
+    }
+
+    private string GetAtividadeDias(string? s)
+    {
+        if (!DateTime.TryParse(s, out var d)) return "—";
+        var dias = (DateTime.Now.Date - d.Date).Days;  // ← .Date nos dois lados
+        if (dias == 0) return "Hoje";
+        if (dias == 1) return "1 dia";
+        return $"{dias} dias";
+    }
+
+    private string GetAtividadeClass(string? s)
+    {
+        if (!DateTime.TryParse(s, out var d)) return "ax-warn";
+        var dias = (DateTime.Now.Date - d.Date).Days;  // ← .Date nos dois lados
+        return dias <= 3 ? "ax-ok" : dias <= 7 ? "ax-warn" : "ax-stop";
+    }
+
+    private string GetCardStateText(string? s)
+    {
+        if (!DateTime.TryParse(s, out var d)) return "Sem data";
+        var dias = (DateTime.Now.Date - d.Date).Days;  // ← .Date nos dois lados
+        return dias <= 3 ? "Ativo" : dias <= 7 ? "Atenção" : "Parado";
+    }
+
+    public void Dispose()
+    {
+        UserState.OnChange -= OnUserStateChanged;
+        Nav.LocationChanged -= OnLocationChanged;
+        dotNetRef?.Dispose();
+        _refreshTimer?.Dispose();
+    }
+
+    private sealed record CardListaRow(FunnelItem Item, string Funil);
+
+    private string GetTempoConosco(DateTime? dataCriacao)
+    {
+        if (!dataCriacao.HasValue) return "—";
+        var dias = (DateTime.Today - dataCriacao.Value.Date).Days;
+        if (dias == 0) return "Hoje";
+        if (dias == 1) return "1 dia";
+        return $"{dias} dias";
+    }
+}

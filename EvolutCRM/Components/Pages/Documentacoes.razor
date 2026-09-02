@@ -1,0 +1,423 @@
+﻿@page "/documentacoes"
+@inject IJSRuntime JS
+@inject EvolutCRM.Services.DocumentacaoService DocumentacaoService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+
+@using EvolutCRM.Models
+
+<style>
+    .docs-page {
+        padding: 22px;
+        color: #0f172a;
+        font-family: 'IBM Plex Sans', Arial, sans-serif;
+    }
+
+    .docs-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .docs-title h1 {
+        font-size: 24px;
+        margin: 0;
+        font-weight: 800;
+    }
+
+    .docs-title p {
+        margin: 5px 0 0;
+        color: #64748b;
+        font-size: 13px;
+    }
+
+    .docs-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .docs-btn {
+        border: 1px solid #dbe3ef;
+        background: #fff;
+        color: #1e293b;
+        border-radius: 6px;
+        padding: 9px 12px;
+        font-weight: 700;
+        font-size: 12px;
+    }
+
+        .docs-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+    .docs-toolbar {
+        display: grid;
+        grid-template-columns: minmax(220px, 1fr) 190px;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .docs-input, .docs-select {
+        border: 1px solid #dbe3ef;
+        background: #fff;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-size: 13px;
+        outline: none;
+    }
+
+    .docs-table-wrap {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(15,23,42,.06);
+    }
+
+    .docs-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+        .docs-table th {
+            background: #f8fafc;
+            color: #475569;
+            text-align: left;
+            padding: 11px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .docs-table td {
+            padding: 12px 11px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: top;
+        }
+
+    .docs-tutorial {
+        display: grid;
+        grid-template-columns: 120px minmax(0, 1fr); /* era 86px */
+        gap: 11px;
+        align-items: center;
+    }
+
+    .docs-thumb {
+        width: 120px; /* era 86px */
+        aspect-ratio: 16 / 9;
+        border-radius: 6px;
+        overflow: hidden;
+        background: #e0ecff;
+        border: 1px solid #dbeafe;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #1d4ed8;
+        font-weight: 900;
+        font-size: 18px;
+    }
+
+        .docs-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* era cover — contain mostra a imagem completa */
+            display: block;
+        }
+
+    .docs-name {
+        font-weight: 800;
+        color: #0f172a;
+    }
+
+    .docs-desc {
+        color: #64748b;
+        margin-top: 4px;
+        line-height: 1.35;
+    }
+
+    .docs-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 22px;
+        border-radius: 999px;
+        padding: 0 8px;
+        font-size: 11px;
+        font-weight: 800;
+        background: #e0f2fe;
+        color: #0369a1;
+    }
+
+        .docs-pill.off {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+    .docs-row-actions {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+    }
+
+    .docs-empty {
+        padding: 28px;
+        text-align: center;
+        color: #64748b;
+        background: #fff;
+        border: 1px dashed #cbd5e1;
+        border-radius: 8px;
+    }
+
+    @@media(max-width: 760px) {
+        .docs-page {
+            padding: 14px;
+        }
+
+        .docs-head, .docs-toolbar {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .docs-table {
+            min-width: 760px;
+        }
+
+        .docs-table-wrap {
+            overflow-x: auto;
+        }
+    }
+</style>
+
+<div class="docs-page">
+    <div class="docs-head">
+        <div class="docs-title">
+            <h1>Documentacoes</h1>
+            <p>Crie tutoriais com texto, videos, imagens e links para compartilhar com clientes.</p>
+        </div>
+        <div class="docs-actions">
+            <button class="docs-btn primary" @onclick="NovaDocumentacao">Nova documentacao</button>
+        </div>
+    </div>
+
+    <div class="docs-toolbar" style="grid-template-columns: minmax(220px, 1fr) 160px 160px;">
+        <input class="docs-input" placeholder="Buscar por titulo, descricao ou categoria"
+               value="@Busca"
+               @oninput="e => Busca = e.Value?.ToString() ?? string.Empty" />
+        <select class="docs-select" value="@FiltroPublicado"
+                @onchange="e => FiltroPublicado = e.Value?.ToString() ?? string.Empty">
+            <option value="">Todos os status</option>
+            <option value="S">Publicadas</option>
+            <option value="N">Rascunhos</option>
+        </select>
+        <select class="docs-select" value="@FiltroSistema"
+                @onchange="e => FiltroSistema = e.Value?.ToString() ?? string.Empty">
+            <option value="">Todos os sistemas</option>
+            <option value="HELP">HELP</option>
+            <option value="EVOLUTTECH">EvolutTech</option>
+        </select>
+    </div>
+
+    @if (carregando)
+    {
+        <div class="docs-empty">Carregando documentacoes...</div>
+    }
+    else if (!DocumentacoesFiltradas.Any())
+    {
+        <div class="docs-empty">Nenhuma documentacao encontrada.</div>
+    }
+    else
+    {
+        <div class="docs-table-wrap">
+            <table class="docs-table">
+                <thead>
+                    <tr>
+                        <th>Tutorial</th>
+                        <th>Categoria</th>
+                        <th>Status</th>
+                        <th>Link do cliente</th>
+                        <th style="text-align:right;">Acoes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var doc in DocumentacoesPagina)
+                    {
+                        <tr>
+                            <td>
+                                <div class="docs-tutorial">
+                                    <div class="docs-thumb">
+                                        @if (doc.Thumbnail != null)
+                                        {
+                                            <img src="/api/thumbnail/@doc.Codigo" alt="@doc.Titulo" />
+                                        }
+                                        else
+                                        {
+                                            <span>@ObterInicial(doc.Titulo)</span>
+                                        }
+                                    </div>
+                                    <div>
+                                        <div class="docs-name">@doc.Titulo</div>
+                                        <div class="docs-desc">@doc.Descricao</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>@doc.Categoria</td>
+                            <td>
+                                <span class="docs-pill @(doc.Publicado == "S" ? "" : "off")">
+                                    @(doc.Publicado == "S" ? "Publicado" : "Rascunho")
+                                </span>
+                            </td>
+                            <td>/curso-tutorial/@UserState.CurrentCompanyId/@doc.Slug</td>
+                            <td>
+                                <div class="docs-row-actions">
+                                    <button class="docs-btn" @onclick="async () => await AbrirCliente(doc)">Ver</button>
+                                    <button class="docs-btn" @onclick="() => Editar(doc.Codigo)">Editar</button>
+                                    <button class="docs-btn" style="color:#b91c1c; border-color:#fecaca;"
+                                            @onclick="() => ExcluirAsync(doc)">
+                                        Excluir
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (TotalPaginas > 1)
+{
+    <div style="display:flex; align-items:center; justify-content:space-between;
+        margin-top:14px; gap:10px; flex-wrap:wrap;">
+
+        <span style="font-size:12px; color:#64748b; font-weight:600;">
+            Mostrando @(((paginaAtual - 1) * itensPorPagina) + 1)–@(Math.Min(paginaAtual * itensPorPagina, TotalFiltrado))
+            de @TotalFiltrado documentação(ões)
+        </span>
+
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+
+            <button class="docs-btn"
+                    disabled="@(paginaAtual == 1)"
+                    @onclick="() => paginaAtual = 1">
+                «
+            </button>
+
+            <button class="docs-btn"
+                    disabled="@(paginaAtual == 1)"
+                    @onclick="() => paginaAtual--">
+                ‹ Anterior
+            </button>
+
+            @for (int p = Math.Max(1, paginaAtual - 2);
+                      p <= Math.Min(TotalPaginas, paginaAtual + 2); p++)
+            {
+                var pagina = p;
+                <button class="docs-btn @(pagina == paginaAtual ? "primary" : "")"
+                        @onclick="() => paginaAtual = pagina">
+                    @pagina
+                </button>
+            }
+
+            <button class="docs-btn"
+                    disabled="@(paginaAtual == TotalPaginas)"
+                    @onclick="() => paginaAtual++">
+                Próxima ›
+            </button>
+
+            <button class="docs-btn"
+                    disabled="@(paginaAtual == TotalPaginas)"
+                    @onclick="() => paginaAtual = TotalPaginas">
+                »
+            </button>
+
+        </div>
+    </div>
+}
+
+@code {
+    private List<DocumentacaoTutorialModel> documentacoes = new();
+    private string busca = "";
+    private bool carregando = true;
+    private int paginaAtual = 1;
+    private const int itensPorPagina = 8;
+
+    private string _busca = "";
+    private string Busca
+    {
+        get => _busca;
+        set { _busca = value; busca = value; paginaAtual = 1; }
+    }
+
+    private string _filtroPublicado = "";
+    private string FiltroPublicado
+    {
+        get => _filtroPublicado;
+        set { _filtroPublicado = value; paginaAtual = 1; }
+    }
+
+    private string _filtroSistema = "";
+    private string FiltroSistema
+    {
+        get => _filtroSistema;
+        set { _filtroSistema = value; paginaAtual = 1; }
+    }
+
+    private IEnumerable<DocumentacaoTutorialModel> DocumentacoesFiltradas =>
+        documentacoes.Where(x =>
+            (string.IsNullOrWhiteSpace(_filtroPublicado) || x.Publicado == _filtroPublicado) &&
+            (string.IsNullOrWhiteSpace(_filtroSistema) || x.Sistema == _filtroSistema) &&
+            (string.IsNullOrWhiteSpace(busca) ||
+             x.Titulo.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+             x.Descricao.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+             x.Categoria.Contains(busca, StringComparison.OrdinalIgnoreCase)));
+
+    private int TotalFiltrado => DocumentacoesFiltradas.Count();
+    private int TotalPaginas => (int)Math.Ceiling(TotalFiltrado / (double)itensPorPagina);
+
+    private IEnumerable<DocumentacaoTutorialModel> DocumentacoesPagina =>
+        DocumentacoesFiltradas
+            .Skip((paginaAtual - 1) * itensPorPagina)
+            .Take(itensPorPagina);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        carregando = true;
+        paginaAtual = 1;
+        documentacoes = await DocumentacaoService.ListarAsync(UserState.CurrentCompanyId);
+        carregando = false;
+    }
+
+    private void NovaDocumentacao() => Nav.NavigateTo("/documentacoes/novo");
+    private void Editar(int codigo) => Nav.NavigateTo($"/documentacoes/{codigo}");
+
+    private async Task AbrirCliente(DocumentacaoTutorialModel doc)
+    {
+        await JS.InvokeVoidAsync("open", $"/curso-tutorial/{UserState.CurrentCompanyId}/{doc.Slug}", "_blank");
+    }
+
+    private static string ObterInicial(string texto)
+        => string.IsNullOrWhiteSpace(texto) ? "D" : texto.Trim()[0].ToString().ToUpperInvariant();
+
+    private async Task ExcluirAsync(DocumentacaoTutorialModel doc)
+    {
+        var confirmar = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Deseja excluir a documentação \"{doc.Titulo}\"? Esta ação não pode ser desfeita.");
+
+        if (!confirmar) return;
+
+        await DocumentacaoService.ExcluirAsync(doc.Codigo, UserState.CurrentCompanyId);
+        await CarregarAsync();
+    }
+}

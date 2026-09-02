@@ -1,0 +1,61 @@
+# ==========================================
+# SEGURANÇA - Arquivos sensíveis
+# ==========================================
+appsettings.json
+appsettings.*.json
+EnvioWhatsAppBackgroundService.cs
+*.pfx
+*.p12
+secrets.json
+
+# ==========================================
+# BUILD - Pastas geradas automaticamente
+# ==========================================
+**/bin/
+**/obj/
+
+# ==========================================
+# VISUAL STUDIO
+# ==========================================
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ==========================================
+# PUBLISH
+# ==========================================
+**/publish/
+**/PublishProfiles/
+
+# ==========================================
+# ARQUIVOS COMPILADOS SOLTOS NA RAIZ
+# ==========================================
+*.dll
+*.exe
+*.pdb
+*.cache
+*.zip
+*.deps.json
+*.runtimeconfig.json
+
+# ==========================================
+# UPLOADS E ARQUIVOS GERADOS EM RUNTIME
+# ==========================================
+wwwroot/uploads/
+wwwroot/chat-uploads/
+embedding_cache.json
+
+# ==========================================
+# OUTROS
+# ==========================================
+web.config
+
+**/wwwroot/uploads/
+**/wwwroot/chat-uploads/
+
+*.staticwebassets.endpoints.json
+
+
+/wwwroot/

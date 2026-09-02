@@ -1,0 +1,661 @@
+﻿@page "/cadastro-usuario"
+@inject EvolutCRM.Services.CadastroUsuarioService CadastroUsuarioService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@using EvolutCRM.Components.Layout
+@layout LoginLayout
+
+<style>
+    :root {
+        --login-primary: #0d47a1;
+        --login-primary-2: #1976d2;
+        --login-accent: #0f766e;
+        --login-bg: #f4f8fc;
+        --login-card: #ffffff;
+        --login-text: #172033;
+        --login-muted: #64748b;
+        --login-border: #d7e6f7;
+        --login-field: #f8fbff;
+        --login-danger-bg: #fee2e2;
+        --login-danger-text: #991b1b;
+        --login-success-bg: #dcfce7;
+        --login-success-text: #166534;
+        --login-shadow: 0 24px 60px rgba(13, 71, 161, .22);
+    }
+
+    body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    .login-page {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: linear-gradient(135deg, rgba(15, 118, 110, .18), transparent 34%), linear-gradient(160deg, #0b2f6b 0%, #0d47a1 48%, #1976d2 100%);
+    }
+
+    .login-card {
+        width: min(1080px, 100%);
+        min-height: 520px;
+        display: grid;
+        grid-template-columns: minmax(300px, .92fr) minmax(440px, 1.08fr);
+        background: var(--login-card);
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: var(--login-shadow);
+        border: 1px solid rgba(255,255,255,.28);
+        animation: loginEnter .45s ease both;
+    }
+
+    .login-brand {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 34px;
+        color: #fff;
+        background: linear-gradient(145deg, rgba(13, 71, 161, .96), rgba(15, 118, 110, .92)), url("images/logo-evoluttech.png");
+        background-size: cover;
+        background-position: center;
+        isolation: isolate;
+    }
+
+        .login-brand::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: rgba(3, 20, 48, .54);
+            z-index: -1;
+        }
+
+    .login-brand-logo-box {
+        width: 210px;
+        max-width: 82%;
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(255,255,255,.96);
+        box-shadow: 0 14px 34px rgba(0,0,0,.24);
+    }
+
+    .login-logo {
+        width: 100%;
+        display: block;
+        object-fit: contain;
+    }
+
+    .login-brand-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+        .login-brand-copy strong {
+            font-size: 1.28rem;
+            line-height: 1.15;
+            font-weight: 950;
+            letter-spacing: 0;
+        }
+
+        .login-brand-copy span {
+            max-width: 300px;
+            font-size: .88rem;
+            line-height: 1.45;
+            color: rgba(255,255,255,.86);
+            font-weight: 650;
+        }
+
+    .login-panel {
+        padding: 40px 52px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        overflow-y: auto;
+    }
+
+    .login-panel-header {
+        margin-bottom: 22px;
+    }
+
+    .login-kicker {
+        margin: 0 0 7px;
+        color: var(--login-accent);
+        font-size: .74rem;
+        font-weight: 950;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+
+    .login-title {
+        margin: 0;
+        color: var(--login-text);
+        font-size: 1.72rem;
+        line-height: 1.1;
+        font-weight: 950;
+        letter-spacing: 0;
+    }
+
+    .login-subtitle {
+        margin: 8px 0 0;
+        color: var(--login-muted);
+        font-size: .88rem;
+        line-height: 1.45;
+        font-weight: 650;
+    }
+
+    .login-alert {
+        margin-bottom: 14px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        background: var(--login-danger-bg);
+        color: var(--login-danger-text);
+        border: 1px solid #fecaca;
+        font-size: .86rem;
+        font-weight: 850;
+    }
+
+    .login-success {
+        margin-bottom: 14px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        background: var(--login-success-bg);
+        color: var(--login-success-text);
+        border: 1px solid #bbf7d0;
+        font-size: .86rem;
+        font-weight: 850;
+    }
+
+    .login-form {
+        display: grid;
+        gap: 13px;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 13px;
+    }
+
+    .login-field {
+        display: grid;
+        gap: 5px;
+    }
+
+        .login-field label {
+            color: var(--login-primary);
+            font-size: .78rem;
+            font-weight: 900;
+        }
+
+        .login-field input {
+            width: 100%;
+            height: 46px;
+            box-sizing: border-box;
+            border: 1px solid var(--login-border);
+            border-radius: 12px;
+            padding: 0 13px;
+            background: var(--login-field);
+            color: var(--login-text);
+            font-size: .92rem;
+            font-weight: 650;
+            outline: none;
+            transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+
+            .login-field input:focus {
+                border-color: var(--login-primary-2);
+                background: #fff;
+                box-shadow: 0 0 0 4px rgba(25, 118, 210, .14);
+            }
+
+            .login-field input:disabled,
+            .login-field input[readonly] {
+                color: var(--login-muted);
+                cursor: default;
+                background: #eef4fb;
+            }
+
+            .login-field input.input-error {
+                border-color: #f87171;
+                background: #fff5f5;
+            }
+
+    .field-hint {
+        font-size: .72rem;
+        color: var(--login-muted);
+        font-weight: 650;
+        margin-top: 1px;
+    }
+
+        .field-hint.danger {
+            color: #dc2626;
+        }
+
+    .senha-requisitos {
+        display: grid;
+        gap: 3px;
+        margin-top: 2px;
+    }
+
+    .req-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: .72rem;
+        font-weight: 750;
+        color: var(--login-muted);
+        transition: color .2s ease;
+    }
+
+        .req-item.ok {
+            color: #16a34a;
+        }
+
+        .req-item .req-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #cbd5e1;
+            flex-shrink: 0;
+            transition: background .2s ease;
+        }
+
+        .req-item.ok .req-dot {
+            background: #16a34a;
+        }
+
+    .login-submit {
+        height: 48px;
+        margin-top: 4px;
+        border: none;
+        border-radius: 13px;
+        background: linear-gradient(135deg, var(--login-accent), var(--login-primary));
+        color: #fff;
+        font-size: .96rem;
+        font-weight: 950;
+        cursor: pointer;
+        box-shadow: 0 14px 28px rgba(13, 71, 161, .24);
+        transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+
+        .login-submit:hover:not(:disabled) {
+            transform: translateY(-1px);
+            filter: brightness(1.04);
+            box-shadow: 0 18px 34px rgba(13, 71, 161, .30);
+        }
+
+        .login-submit:disabled {
+            cursor: wait;
+            opacity: .74;
+        }
+
+    .login-footnote {
+        margin-top: 16px;
+        color: var(--login-muted);
+        font-size: .76rem;
+        font-weight: 650;
+        text-align: center;
+    }
+
+        .login-footnote a {
+            color: var(--login-primary-2);
+            text-decoration: none;
+            font-weight: 850;
+        }
+
+            .login-footnote a:hover {
+                text-decoration: underline;
+            }
+
+    .divider {
+        height: 1px;
+        background: var(--login-border);
+        margin: 4px 0;
+    }
+
+    .section-label {
+        font-size: .72rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        color: var(--login-muted);
+        margin-bottom: -4px;
+    }
+
+    @@keyframes loginEnter {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@media (max-width: 860px) {
+        .login-card {
+            grid-template-columns: 1fr;
+            min-height: unset;
+        }
+
+        .login-brand {
+            min-height: 200px;
+            padding: 26px;
+        }
+
+        .login-panel {
+            padding: 30px 24px;
+        }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 460px) {
+        .login-page {
+            padding: 0;
+            background: #f8fbff;
+        }
+
+        .login-card {
+            min-height: 100vh;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .login-brand {
+            min-height: 170px;
+            border-radius: 0;
+        }
+
+        .login-panel {
+            padding: 24px 16px;
+        }
+    }
+</style>
+
+<div class="login-page">
+    <section class="login-card">
+        <aside class="login-brand">
+            <div class="login-brand-logo-box">
+                <img src="images/logo-evoluttech.png" alt="EvolutTech" class="login-logo" />
+            </div>
+            <div class="login-brand-copy">
+                <strong>EvolutTech HELP</strong>
+                <span>Cadastre novos usuários com acesso seguro ao sistema.</span>
+            </div>
+        </aside>
+
+        <main class="login-panel">
+            <div class="login-panel-header">
+                <p class="login-kicker">Gerenciamento de usuários</p>
+                <h1 class="login-title">Novo usuário</h1>
+                <p class="login-subtitle">Preencha os dados para liberar o acesso ao HELP na empresa logada.</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <div class="login-alert">@ErrorMessage</div>
+            }
+
+            @if (!string.IsNullOrEmpty(SuccessMessage))
+            {
+                <div class="login-success">@SuccessMessage</div>
+            }
+
+            <div class="login-form">
+                <div class="section-label">Identificação</div>
+
+                <div class="form-row">
+                    <div class="login-field">
+                        <label for="empresa">Empresa</label>
+                        <input id="empresa"
+                               value="@EmpresaLogadaNome"
+                               readonly
+                               disabled="@Salvando" />
+                        <span class="field-hint">Empresa definida pelo usuário logado.</span>
+                    </div>
+
+                    <div class="login-field">
+                        <label for="usuario">Usuário</label>
+                        <input id="usuario"
+                               autocomplete="off"
+                               placeholder="Ex: JOAO"
+                               value="@novoUsuario"
+                               @oninput="OnUsuarioInput"
+                               disabled="@Salvando"
+                               class="@(usuarioJaExiste ? "input-error" : "")" />
+                        @if (usuarioJaExiste)
+                        {
+                            <span class="field-hint danger">Usuário já existe no sistema.</span>
+                        }
+                    </div>
+                </div>
+
+                <div class="login-field">
+                    <label for="email">E-mail</label>
+                    <input id="email"
+                           type="email"
+                           autocomplete="email"
+                           placeholder="usuario@email.com"
+                           @bind="email"
+                           disabled="@Salvando" />
+                    <span class="field-hint">Será usado para verificação e recuperação de acesso.</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="section-label">Senha de acesso</div>
+
+                <div class="form-row">
+                    <div class="login-field">
+                        <label for="senha">Senha</label>
+                        <input id="senha"
+                               type="password"
+                               autocomplete="new-password"
+                               value="@senha"
+                               @oninput="OnSenhaInput"
+                               disabled="@Salvando" />
+                    </div>
+
+                    <div class="login-field">
+                        <label for="confirmarSenha">Confirmar senha</label>
+                        <input id="confirmarSenha"
+                               type="password"
+                               autocomplete="new-password"
+                               value="@confirmarSenha"
+                               @oninput="OnConfirmarSenhaInput"
+                               disabled="@Salvando"
+                               class="@(!senhasConferem && !string.IsNullOrEmpty(confirmarSenha) ? "input-error" : "")" />
+                        @if (!senhasConferem && !string.IsNullOrEmpty(confirmarSenha))
+                        {
+                            <span class="field-hint danger">As senhas não conferem.</span>
+                        }
+                    </div>
+                </div>
+
+                <div class="senha-requisitos">
+                    <div class="req-item @(req8chars ? "ok" : "")">
+                        <span class="req-dot"></span> Mínimo 8 caracteres
+                    </div>
+                    <div class="req-item @(reqMaiuscula ? "ok" : "")">
+                        <span class="req-dot"></span> Uma letra maiúscula
+                    </div>
+                    <div class="req-item @(reqNumero ? "ok" : "")">
+                        <span class="req-dot"></span> Um número
+                    </div>
+                    <div class="req-item @(reqEspecial ? "ok" : "")">
+                        <span class="req-dot"></span> Um caractere especial (!@@#$%...)
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="section-label">Nível de acesso</div>
+
+                <button type="button"
+                        class="login-submit"
+                        disabled="@(Salvando || !FormularioValido)"
+                        @onclick="HandleCadastro">
+                    @(Salvando ? "Cadastrando..." : "Cadastrar usuário")
+                </button>
+            </div>
+
+            <div class="login-footnote">
+                <a href="/" @onclick:preventDefault @onclick="VoltarLogin">← Voltar ao login</a>
+                &nbsp;·&nbsp; EvolutTech
+            </div>
+        </main>
+    </section>
+</div>
+
+@code {
+    private string novoUsuario = "";
+    private string email = "";
+    private string senha = "";
+    private string confirmarSenha = "";
+
+    private string ErrorMessage = "";
+    private string SuccessMessage = "";
+    private bool Salvando = false;
+    private bool usuarioJaExiste = false;
+
+    private bool req8chars = false;
+    private bool reqMaiuscula = false;
+    private bool reqNumero = false;
+    private bool reqEspecial = false;
+    private bool senhasConferem = false;
+
+    private int EmpresaLogadaCodigo => UserState.CurrentCompanyId;
+
+    private string EmpresaLogadaNome =>
+        !string.IsNullOrWhiteSpace(UserState.CurrentCompany)
+            ? UserState.CurrentCompany
+            : EmpresaLogadaCodigo > 0 ? $"Empresa {EmpresaLogadaCodigo}" : "Empresa não carregada";
+
+    private bool EmpresaCarregada => UserState.IsReady && EmpresaLogadaCodigo > 0;
+
+    private bool SenhaValida =>
+        req8chars && reqMaiuscula && reqNumero && reqEspecial;
+
+    private bool FormularioValido =>
+        EmpresaCarregada &&
+        !string.IsNullOrWhiteSpace(novoUsuario) &&
+        !string.IsNullOrWhiteSpace(email) &&
+        SenhaValida &&
+        senhasConferem &&
+        !usuarioJaExiste;
+
+    protected override void OnInitialized()
+    {
+        if (!EmpresaCarregada)
+            ErrorMessage = "Não foi possível identificar a empresa logada. Faça login novamente.";
+    }
+
+    private void OnSenhaInput(ChangeEventArgs e)
+    {
+        senha = e.Value?.ToString() ?? "";
+        ValidarRequisitos();
+        ValidarConfirmacao();
+    }
+
+    private void OnConfirmarSenhaInput(ChangeEventArgs e)
+    {
+        confirmarSenha = e.Value?.ToString() ?? "";
+        ValidarConfirmacao();
+    }
+
+    private void ValidarRequisitos()
+    {
+        req8chars = senha.Length >= 8;
+        reqMaiuscula = senha.Any(char.IsUpper);
+        reqNumero = senha.Any(char.IsDigit);
+        reqEspecial = senha.Any(c => "!@#$%^&*()_+-=[]{}|;':\",./<>?".Contains(c));
+    }
+
+    private void ValidarConfirmacao()
+    {
+        senhasConferem = !string.IsNullOrEmpty(senha) && senha == confirmarSenha;
+    }
+
+    private async Task OnUsuarioInput(ChangeEventArgs e)
+    {
+        novoUsuario = e.Value?.ToString()?.ToUpperInvariant() ?? "";
+
+        if (!EmpresaCarregada)
+        {
+            usuarioJaExiste = false;
+            ErrorMessage = "Não foi possível identificar a empresa logada. Faça login novamente.";
+            return;
+        }
+
+        if (novoUsuario.Length >= 3)
+            usuarioJaExiste = await CadastroUsuarioService.UsuarioExisteAsync(
+                novoUsuario, EmpresaLogadaCodigo.ToString());
+        else
+            usuarioJaExiste = false;
+    }
+
+    private async Task HandleCadastro()
+    {
+        if (Salvando || !FormularioValido) return;
+
+        ErrorMessage = "";
+        SuccessMessage = "";
+
+        try
+        {
+            Salvando = true;
+
+            var resultado = await CadastroUsuarioService.CadastrarUsuarioAsync(new CadastroUsuarioRequest
+            {
+                Usuario = novoUsuario.Trim().ToUpperInvariant(),
+                Email = email.Trim().ToLowerInvariant(),
+                Senha = senha,
+                CodEmpresa = EmpresaLogadaCodigo
+            });
+
+            if (resultado.Sucesso)
+            {
+                SuccessMessage = $"Usuário {novoUsuario} cadastrado com sucesso! Um e-mail de verificação foi enviado.";
+                LimparFormulario();
+            }
+            else
+            {
+                ErrorMessage = resultado.Mensagem;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Erro ao cadastrar usuário: {ex.Message}";
+        }
+        finally
+        {
+            Salvando = false;
+        }
+    }
+
+    private void LimparFormulario()
+    {
+        novoUsuario = "";
+        email = "";
+        senha = "";
+        confirmarSenha = "";
+        usuarioJaExiste = false;
+        req8chars = false;
+        reqMaiuscula = false;
+        reqNumero = false;
+        reqEspecial = false;
+        senhasConferem = false;
+    }
+
+    private void VoltarLogin()
+    {
+        Nav.NavigateTo("/");
+    }
+}

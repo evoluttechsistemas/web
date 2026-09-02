@@ -1,0 +1,779 @@
+﻿@page "/admin/tarefas"
+
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+
+@inject AdminService AdminService
+@inject UserState UserState
+
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+    :root {
+        --adm-bg: #f4f7fb;
+        --adm-card: #ffffff;
+        --adm-card-2: #f8fbff;
+        --adm-border: #dbe7f5;
+        --adm-border-2: #c8d8ee;
+        --adm-text: #172033;
+        --adm-text-2: #334155;
+        --adm-muted: #64748b;
+        --adm-muted-2: #94a3b8;
+        --adm-primary: #0d47a1;
+        --adm-primary-2: #1565c0;
+        --adm-primary-3: #42a5f5;
+        --adm-primary-soft: #eaf4ff;
+        --adm-danger: #dc2626;
+        --adm-danger-2: #b91c1c;
+        --adm-danger-soft: #fff1f2;
+        --adm-success: #16a34a;
+        --adm-success-soft: #ecfdf5;
+        --adm-warning: #d97706;
+        --adm-warning-soft: #fffbeb;
+        --adm-shadow-sm: 0 2px 8px rgba(15, 23, 42, .05);
+        --adm-shadow: 0 10px 30px rgba(13, 71, 161, .10);
+        --adm-shadow-lg: 0 18px 50px rgba(13, 71, 161, .14);
+        --adm-radius: 18px;
+        --adm-radius-sm: 12px;
+        --adm-radius-xs: 9px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    .admin-card {
+        position: relative;
+        width: 100%;
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .13), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        border: 1px solid var(--adm-border);
+        border-radius: var(--adm-radius);
+        padding: 24px;
+        box-shadow: var(--adm-shadow);
+        color: var(--adm-text);
+        font-family: 'Sora', Arial, sans-serif;
+        overflow: hidden;
+        animation: admFadeUp .28s ease both;
+    }
+
+        .admin-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--adm-primary), var(--adm-primary-3), #00bcd4);
+            z-index: 1;
+        }
+
+        .admin-card::after {
+            content: "";
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            right: -80px;
+            top: -80px;
+            border-radius: 999px;
+            background: rgba(13, 71, 161, .06);
+            pointer-events: none;
+        }
+
+    .card-title {
+        position: relative;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 4px;
+        color: var(--adm-text);
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: -.03em;
+        line-height: 1.2;
+    }
+
+        .card-title::before {
+            content: "📋";
+            width: 38px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 13px;
+            background: linear-gradient(135deg, var(--adm-primary), var(--adm-primary-2));
+            color: #fff;
+            font-size: 17px;
+            box-shadow: 0 8px 18px rgba(13, 71, 161, .25);
+            flex: 0 0 auto;
+        }
+
+    .card-subtitle {
+        position: relative;
+        z-index: 2;
+        margin: 0 0 22px 48px;
+        color: var(--adm-muted);
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    .admin-input {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        height: 46px;
+        border: 1.5px solid var(--adm-border);
+        border-radius: 14px;
+        padding: 0 16px 0 42px;
+        background: linear-gradient(90deg, transparent 0 38px, transparent 38px), #ffffff;
+        color: var(--adm-text);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: 'Sora', Arial, sans-serif;
+        outline: none;
+        box-shadow: var(--adm-shadow-sm);
+        transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+    }
+
+        .admin-input::placeholder {
+            color: var(--adm-muted-2);
+            font-weight: 500;
+        }
+
+        .admin-input:focus {
+            border-color: var(--adm-primary-3);
+            background: #ffffff;
+            box-shadow: 0 0 0 4px rgba(66, 165, 245, .14), var(--adm-shadow-sm);
+            transform: translateY(-1px);
+        }
+
+    .admin-card > .admin-input {
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 14px center;
+        background-size: 17px;
+    }
+
+    .summary-grid {
+        position: relative;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+    }
+
+    .summary-card {
+        position: relative;
+        min-height: 104px;
+        padding: 18px 18px 16px;
+        border: 1.5px solid var(--adm-border);
+        border-radius: 18px;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.9), transparent 35%), linear-gradient(135deg, #ffffff, #f8fbff);
+        box-shadow: var(--adm-shadow-sm);
+        overflow: hidden;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+        .summary-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--adm-shadow);
+            border-color: var(--adm-primary-3);
+        }
+
+        .summary-card::before {
+            content: "";
+            position: absolute;
+            right: -24px;
+            top: -24px;
+            width: 88px;
+            height: 88px;
+            border-radius: 999px;
+            background: rgba(13, 71, 161, .08);
+        }
+
+        .summary-card::after {
+            content: "!";
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            width: 32px;
+            height: 32px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--adm-primary-soft);
+            color: var(--adm-primary);
+            font-size: 18px;
+            font-weight: 900;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .summary-card.danger {
+            border-color: #fecdd3;
+            background: radial-gradient(circle at top right, rgba(255,255,255,.8), transparent 35%), linear-gradient(135deg, #ffffff 0%, var(--adm-danger-soft) 100%);
+        }
+
+            .summary-card.danger::before {
+                background: rgba(220, 38, 38, .09);
+            }
+
+            .summary-card.danger::after {
+                content: "⚠";
+                background: #ffe4e6;
+                color: var(--adm-danger);
+            }
+
+        .summary-card span {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--adm-muted);
+            font-size: 10.5px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .summary-card strong {
+            display: block;
+            color: var(--adm-text);
+            font-size: 34px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -.04em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .summary-card.danger strong {
+            color: var(--adm-danger);
+        }
+
+    .empty-state {
+        position: relative;
+        z-index: 2;
+        padding: 34px 22px;
+        border: 1.5px dashed var(--adm-border-2);
+        border-radius: 18px;
+        background: radial-gradient(circle at top, rgba(66, 165, 245, .09), transparent 35%), #ffffff;
+        color: var(--adm-muted);
+        text-align: center;
+        font-size: 13px;
+        font-weight: 700;
+        box-shadow: var(--adm-shadow-sm);
+    }
+
+        .empty-state::before {
+            content: "✅";
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 12px;
+            border-radius: 16px;
+            background: var(--adm-success-soft);
+            color: var(--adm-success);
+            font-size: 22px;
+        }
+
+    .loading {
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        color: var(--adm-muted);
+        font-weight: 800;
+        text-align: center;
+    }
+
+        .loading::before {
+            content: "";
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: 3px solid var(--adm-border);
+            border-top-color: var(--adm-primary);
+            animation: admSpin .75s linear infinite;
+        }
+
+    .table-wrap {
+        position: relative;
+        z-index: 2;
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--adm-border);
+        border-radius: 18px;
+        background: #ffffff;
+        box-shadow: var(--adm-shadow-sm);
+    }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 9px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: #eef4fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: #bfd3ec;
+            border-radius: 999px;
+        }
+
+            .table-wrap::-webkit-scrollbar-thumb:hover {
+                background: #9dbbe0;
+            }
+
+    table {
+        width: 100%;
+        min-width: 850px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+    }
+
+    th {
+        background: linear-gradient(180deg, #f8fbff, #edf5ff);
+        color: var(--adm-muted);
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--adm-border);
+        text-align: left;
+        font-size: 10.5px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+    }
+
+        th:first-child {
+            border-top-left-radius: 18px;
+        }
+
+        th:last-child {
+            border-top-right-radius: 18px;
+        }
+
+    td {
+        padding: 15px 16px;
+        border-bottom: 1px solid #eef2f7;
+        color: var(--adm-text-2);
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-align: middle;
+        background: #ffffff;
+        transition: background .15s ease, color .15s ease;
+    }
+
+    tbody tr {
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+        tbody tr:hover td {
+            background: var(--adm-primary-soft);
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+    td[data-label="Código"] {
+        color: var(--adm-primary);
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 800;
+    }
+
+    td[data-label="Cliente"] strong {
+        display: inline-block;
+        color: var(--adm-text);
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    td[data-label="Cliente"] small {
+        color: var(--adm-muted);
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    td[data-label="Última abertura"] {
+        color: var(--adm-text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    td[data-label="Aviso"] {
+        color: var(--adm-muted);
+        font-size: 12px;
+        line-height: 1.45;
+        max-width: 420px;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        background: var(--adm-primary-soft);
+        color: var(--adm-primary);
+        border: 1px solid rgba(13, 71, 161, .12);
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1;
+        white-space: nowrap;
+        font-family: 'JetBrains Mono', monospace;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+
+        .badge.status-danger {
+            background: #ffe4e6;
+            color: var(--adm-danger-2);
+            border-color: #fecdd3;
+        }
+
+            .badge.status-danger::before {
+                content: "●";
+                margin-right: 6px;
+                font-size: 9px;
+                animation: admPulseDanger 1.4s ease-in-out infinite;
+            }
+
+    @@media (max-width: 900px) {
+        .admin-card {
+            padding: 18px;
+            border-radius: 16px;
+        }
+
+        .card-title {
+            font-size: 17px;
+        }
+
+            .card-title::before {
+                width: 34px;
+                height: 34px;
+                border-radius: 12px;
+            }
+
+        .card-subtitle {
+            margin-left: 44px;
+            font-size: 12px;
+        }
+
+        .summary-grid {
+            grid-template-columns: 1fr;
+        }
+
+        table {
+            min-width: 760px;
+        }
+    }
+
+    @@media (max-width: 650px) {
+        .admin-card {
+            padding: 14px;
+            border-radius: 15px;
+        }
+
+        .card-title {
+            align-items: flex-start;
+            font-size: 16px;
+        }
+
+        .card-subtitle {
+            margin: 8px 0 18px;
+        }
+
+        .admin-input {
+            height: 44px;
+            font-size: 12px;
+        }
+
+        .summary-card {
+            min-height: 92px;
+            padding: 15px;
+        }
+
+            .summary-card strong {
+                font-size: 28px;
+            }
+
+        .table-wrap {
+            border: none;
+            box-shadow: none;
+            background: transparent;
+            overflow: visible;
+        }
+
+        table {
+            min-width: unset;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+
+        thead {
+            display: none;
+        }
+
+        tbody,
+        tr,
+        td {
+            display: block;
+            width: 100%;
+        }
+
+            tbody tr {
+                border: 1px solid var(--adm-border);
+                border-radius: 16px;
+                background: #ffffff;
+                box-shadow: var(--adm-shadow-sm);
+                overflow: hidden;
+            }
+
+                tbody tr:hover {
+                    box-shadow: var(--adm-shadow);
+                }
+
+        td {
+            display: grid;
+            grid-template-columns: 130px 1fr;
+            gap: 12px;
+            align-items: start;
+            padding: 11px 13px;
+            border-bottom: 1px solid #eef2f7;
+            font-size: 12px;
+        }
+
+            td:last-child {
+                border-bottom: none;
+            }
+
+            td::before {
+                content: attr(data-label);
+                color: var(--adm-muted);
+                font-size: 9.5px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: .07em;
+            }
+
+            td[data-label="Aviso"] {
+                max-width: unset;
+            }
+    }
+
+    @@media (max-width: 420px) {
+        .admin-card {
+            padding: 12px;
+        }
+
+        td {
+            grid-template-columns: 1fr;
+            gap: 4px;
+        }
+
+        .card-title::before {
+            display: none;
+        }
+    }
+
+    @@keyframes admFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes admSpin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@keyframes admPulseDanger {
+        0%, 100% {
+            opacity: .45;
+            transform: scale(.9);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(1.15);
+        }
+    }
+</style>
+
+
+@if (Carregando)
+{
+    <div class="admin-card loading">
+        Carregando tarefas...
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(MensagemPermissao))
+{
+    <div class="admin-card">
+        <div class="card-title">Acesso não permitido</div>
+        <div class="card-subtitle">@MensagemPermissao</div>
+    </div>
+}
+else
+{
+    <div class="admin-card">
+        <div class="card-title">Clientes sem ação nas tarefas</div>
+        <div class="card-subtitle">
+            Mostra clientes que não abriram o sistema/tarefas nos últimos 7 dias.
+        </div>
+
+        <input class="admin-input"
+               placeholder="Buscar por código, nome ou apelido..."
+               @bind="FiltroTarefas"
+               @bind:event="oninput" />
+
+        <div class="summary-grid" style="margin-top:18px;">
+            <div class="summary-card danger">
+                <span>Clientes sem ação</span>
+                <strong>@ClientesTarefas.Count</strong>
+            </div>
+        </div>
+
+        @if (!ClientesTarefasFiltrados.Any())
+        {
+            <div class="empty-state">
+                Nenhum cliente encontrado sem abertura de tarefas nos últimos 7 dias.
+            </div>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Cliente</th>
+                            <th>Última abertura</th>
+                            <th>Dias sem ação</th>
+                            <th>Aviso</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var cliente in ClientesTarefasFiltrados)
+                        {
+                            <tr>
+                                <td data-label="Código">@cliente.Codigo</td>
+
+                                <td data-label="Cliente">
+                                    <strong>@(!string.IsNullOrWhiteSpace(cliente.Apelido) ? cliente.Apelido : cliente.Nome)</strong>
+                                    <br />
+                                    <small>@cliente.Nome</small>
+                                </td>
+
+                                <td data-label="Última abertura">
+                                    @(cliente.DataHoraUltimaAberturaTarefas?.ToString("dd/MM/yyyy HH:mm") ?? "Nunca abriu")
+                                </td>
+
+                                <td data-label="Dias sem ação">
+                                    <span class="badge status-danger">
+                                        @(cliente.DataHoraUltimaAberturaTarefas == null ? "Sem registro" : $"{cliente.DiasSemAbrir} dias")
+                                    </span>
+                                </td>
+
+                                <td data-label="Aviso">
+                                    Cliente está há @(cliente.DataHoraUltimaAberturaTarefas == null ? "mais de 7 dias sem registro" : $"{cliente.DiasSemAbrir} dias") sem abrir o sistema/tarefas.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool Carregando = true;
+    private bool PodeAcessarAdmin = false;
+    private bool PodeVisualizarTarefas = false;
+
+    private string MensagemPermissao = "";
+    private string FiltroTarefas = "";
+
+    private List<AdminClienteTarefaDto> ClientesTarefas = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Carregando = true;
+        MensagemPermissao = "";
+
+        try
+        {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            {
+                MensagemPermissao = "Usuário ainda não foi carregado. Atualize a página.";
+                PodeAcessarAdmin = false;
+                PodeVisualizarTarefas = false;
+                return;
+            }
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ACESSAR"
+            );
+
+            PodeVisualizarTarefas = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_TAREFAS_VISUALIZAR"
+            );
+
+            if (!PodeAcessarAdmin || !PodeVisualizarTarefas)
+            {
+                MensagemPermissao = "Você não tem permissão para acessar a tela de tarefas.";
+                return;
+            }
+
+            ClientesTarefas = await AdminService.ListarClientesSemAberturaTarefasAsync();
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao carregar tarefas: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private IEnumerable<AdminClienteTarefaDto> ClientesTarefasFiltrados =>
+        string.IsNullOrWhiteSpace(FiltroTarefas)
+            ? ClientesTarefas
+            : ClientesTarefas.Where(c =>
+                c.Codigo.ToString().Contains(FiltroTarefas)
+                || (c.Nome ?? "").Contains(FiltroTarefas, StringComparison.OrdinalIgnoreCase)
+                || (c.Apelido ?? "").Contains(FiltroTarefas, StringComparison.OrdinalIgnoreCase));
+}

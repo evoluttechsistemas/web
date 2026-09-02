@@ -1,0 +1,730 @@
+﻿@page "/banco-talentos"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject CurriculoOnlineService CurriculoOnlineService
+@inject EvolutCRM.Services.UserState UserState
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Banco de Talentos</PageTitle>
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    .bt-page {
+        min-height: 100vh;
+        padding: 22px;
+        background: #f4f6fb;
+        color: #0b1220;
+        font-family: 'Inter', 'IBM Plex Sans', -apple-system, sans-serif;
+    }
+
+    /* ── Header ── */
+    .bt-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    .bt-kicker {
+        color: #2952e3;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .bt-head h1 {
+        font-size: 26px;
+        font-weight: 800;
+        margin: 4px 0 2px;
+        letter-spacing: -.01em;
+    }
+
+    .bt-head p {
+        color: #64748b;
+        font-size: 13.5px;
+        font-weight: 500;
+    }
+
+    .bt-link {
+        border: none;
+        border-radius: 9px;
+        background: #2952e3;
+        color: #fff;
+        font-weight: 700;
+        font-size: 13.5px;
+        padding: 11px 16px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 40px;
+        white-space: nowrap;
+        transition: background .15s;
+    }
+
+        .bt-link:hover {
+            background: #1f3fbb;
+        }
+
+    /* ── Stat cards ── */
+    .bt-stats {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .bt-stat {
+        background: #fff;
+        border: 1px solid #e6e8f0;
+        border-radius: 12px;
+        padding: 13px 16px;
+        cursor: pointer;
+        transition: border-color .15s, box-shadow .15s;
+    }
+
+        .bt-stat:hover {
+            border-color: #c7d2f5;
+        }
+
+        .bt-stat.active {
+            border-color: #2952e3;
+            box-shadow: 0 0 0 3px rgba(41,82,227,.1);
+        }
+
+    .bt-stat-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: #8a91a3;
+        margin-bottom: 6px;
+    }
+
+    .bt-stat-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: #0b1220;
+    }
+
+    .bt-stat.novo .bt-stat-value {
+        color: #1d5fd6;
+    }
+
+    .bt-stat.analise .bt-stat-value {
+        color: #b3680c;
+    }
+
+    .bt-stat.aprovado .bt-stat-value {
+        color: #15803d;
+    }
+
+    /* ── Toolbar ── */
+    .bt-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 190px;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+    .bt-search-wrap {
+        position: relative;
+    }
+
+    .bt-search-ico {
+        position: absolute;
+        left: 13px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9aa1b3;
+        font-size: 14px;
+        pointer-events: none;
+    }
+
+    .bt-toolbar input,
+    .bt-toolbar select,
+    .bt-status-row select {
+        width: 100%;
+        border: 1.5px solid #e2e5ee;
+        border-radius: 9px;
+        background: #fff;
+        color: #0b1220;
+        font: inherit;
+        font-size: 13.5px;
+        padding: 10px 12px;
+        outline: none;
+        transition: border-color .15s, box-shadow .15s;
+    }
+
+    .bt-toolbar input {
+        padding-left: 36px;
+    }
+
+        .bt-toolbar input:focus,
+        .bt-toolbar select:focus,
+        .bt-status-row select:focus {
+            border-color: #2952e3;
+            box-shadow: 0 0 0 3px rgba(41,82,227,.12);
+        }
+
+    /* ── Layout ── */
+    .bt-layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+    }
+
+    .bt-list,
+    .bt-detail {
+        background: #fff;
+        border: 1px solid #e6e8f0;
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(11,18,32,.04), 0 6px 18px rgba(11,18,32,.05);
+    }
+
+    .bt-list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-bottom: 1px solid #f0f1f6;
+    }
+
+    .bt-list-count {
+        font-size: 12px;
+        font-weight: 700;
+        color: #8a91a3;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+
+    .bt-sort-btn {
+        border: none;
+        background: transparent;
+        color: #2952e3;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .bt-list-scroll {
+        padding: 8px;
+        max-height: calc(100vh - 320px);
+        overflow: auto;
+    }
+
+    .bt-candidate {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        gap: 11px;
+        align-items: center;
+        border: 1.5px solid transparent;
+        background: transparent;
+        padding: 9px 10px;
+        border-radius: 10px;
+        text-align: left;
+        cursor: pointer;
+        transition: background .12s, border-color .12s;
+        position: relative;
+    }
+
+        .bt-candidate:hover {
+            background: #f7f8fc;
+        }
+
+        .bt-candidate.active {
+            background: #eef1fc;
+            border-color: #c7d2f5;
+        }
+
+    .bt-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        object-fit: cover;
+        background: #dde4f8;
+        flex-shrink: 0;
+    }
+
+    .bt-avatar-fallback {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        background: #dde4f8;
+        color: #2952e3;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    .bt-candidate-name {
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #0b1220;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .bt-candidate-meta {
+        font-size: 12px;
+        color: #8a91a3;
+        font-weight: 500;
+        margin-top: 2px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .bt-badge {
+        font-size: 10.5px;
+        font-weight: 700;
+        padding: 4px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+        .bt-badge.st-novo {
+            background: #e6f0ff;
+            color: #1d5fd6;
+        }
+
+        .bt-badge.st-analise {
+            background: #fdf1de;
+            color: #b3680c;
+        }
+
+        .bt-badge.st-aprovado {
+            background: #e3f6ea;
+            color: #15803d;
+        }
+
+        .bt-badge.st-arquivado {
+            background: #eef0f4;
+            color: #5b6478;
+        }
+
+    /* ── Detail ── */
+    .bt-detail {
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .bt-detail-head {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        padding: 22px 24px;
+        border-bottom: 1px solid #f0f1f6;
+    }
+
+    .bt-detail-avatar {
+        width: 84px;
+        height: 84px;
+        border-radius: 14px;
+        object-fit: cover;
+        background: #dde4f8;
+        flex-shrink: 0;
+    }
+
+    .bt-detail-avatar-fallback {
+        width: 84px;
+        height: 84px;
+        border-radius: 14px;
+        background: #dde4f8;
+        color: #2952e3;
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 26px;
+        flex-shrink: 0;
+    }
+
+    .bt-detail-head h2 {
+        margin: 0;
+        font-size: 21px;
+        font-weight: 800;
+        color: #0b1220;
+    }
+
+    .bt-detail-head .bt-role {
+        color: #2952e3;
+        font-weight: 600;
+        font-size: 13.5px;
+        margin-top: 3px;
+    }
+
+    .bt-detail-head .bt-sub {
+        color: #8a91a3;
+        font-size: 12.5px;
+        font-weight: 500;
+        margin-top: 4px;
+    }
+
+    .bt-detail-body {
+        padding: 22px 24px 26px;
+    }
+
+    .bt-status-row {
+        max-width: 240px;
+        margin-bottom: 18px;
+    }
+
+        .bt-status-row label {
+            display: block;
+            color: #313a4d;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+    .bt-info-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .bt-info-cell {
+        background: #f7f8fc;
+        border-radius: 10px;
+        padding: 11px 13px;
+    }
+
+        .bt-info-cell strong {
+            display: block;
+            color: #8a91a3;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+            margin-bottom: 4px;
+        }
+
+        .bt-info-cell span {
+            display: block;
+            color: #0b1220;
+            font-size: 13.5px;
+            font-weight: 600;
+        }
+
+    .bt-text-block {
+        margin-top: 20px;
+    }
+
+        .bt-text-block h3 {
+            font-size: 13px;
+            font-weight: 700;
+            color: #313a4d;
+            margin: 0 0 8px;
+            text-transform: uppercase;
+            letter-spacing: .03em;
+        }
+
+        .bt-text-block p {
+            color: #313a4d;
+            font-size: 14px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin: 0;
+        }
+
+    .bt-empty {
+        padding: 48px 24px;
+        color: #8a91a3;
+        text-align: center;
+        font-size: 13.5px;
+        font-weight: 500;
+    }
+
+    @@media (max-width: 900px) {
+        .bt-layout,
+        .bt-toolbar {
+            grid-template-columns: 1fr;
+        }
+
+        .bt-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .bt-info-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .bt-head {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .bt-list-scroll {
+            max-height: 420px;
+        }
+    }
+</style>
+
+<div class="bt-page">
+    <section class="bt-head">
+        <div>
+            <span class="bt-kicker">Help</span>
+            <h1>Banco de talentos</h1>
+            <p>Consulte e avalie os currículos recebidos pelo formulário online.</p>
+        </div>
+        <a class="bt-link" href="/curriculo-online/@UserState.CurrentCompanyId" target="_blank">Abrir currículo online</a>
+    </section>
+
+    <section class="bt-stats">
+        <div class="bt-stat @(status == "" ? "active" : "")" @onclick='() => DefinirStatus("")'>
+            <div class="bt-stat-label">Total</div>
+            <div class="bt-stat-value">@candidatos.Count</div>
+        </div>
+        <div class="bt-stat novo @(status == "Novo" ? "active" : "")" @onclick='() => DefinirStatus("Novo")'>
+            <div class="bt-stat-label">Novos</div>
+            <div class="bt-stat-value">@candidatos.Count(c => c.Status == "Novo")</div>
+        </div>
+        <div class="bt-stat analise @(status == "Em análise" ? "active" : "")" @onclick='() => DefinirStatus("Em análise")'>
+            <div class="bt-stat-label">Em análise</div>
+            <div class="bt-stat-value">@candidatos.Count(c => c.Status == "Em análise")</div>
+        </div>
+        <div class="bt-stat aprovado @(status == "Aprovado" ? "active" : "")" @onclick='() => DefinirStatus("Aprovado")'>
+            <div class="bt-stat-label">Aprovados</div>
+            <div class="bt-stat-value">@candidatos.Count(c => c.Status == "Aprovado")</div>
+        </div>
+    </section>
+
+    <section class="bt-toolbar">
+        <div class="bt-search-wrap">
+            <span class="bt-search-ico">🔍</span>
+            <input placeholder="Buscar por nome, cidade, área ou cargo" @bind="busca" @bind:event="oninput" />
+        </div>
+        <select @bind="status">
+            <option value="">Todos os status</option>
+            <option>Novo</option>
+            <option>Em análise</option>
+            <option>Aprovado</option>
+            <option>Arquivado</option>
+        </select>
+    </section>
+
+    <section class="bt-layout">
+        <div class="bt-list">
+            <div class="bt-list-head">
+                <span class="bt-list-count">@CandidatosFiltrados.Count() candidato(s)</span>
+                <button class="bt-sort-btn" @onclick="AlternarOrdenacao">
+                    @(ordenarMaisRecentePrimeiro ? "Mais recentes" : "Mais antigos")
+                </button>
+            </div>
+            <div class="bt-list-scroll">
+                @if (!CandidatosFiltrados.Any())
+                {
+                    <div class="bt-empty">Nenhum currículo encontrado com esses filtros.</div>
+                }
+                else
+                {
+                    @foreach (var candidato in CandidatosFiltrados)
+                    {
+                        <button class="bt-candidate @(selecionado?.Id == candidato.Id ? "active" : "")"
+                                @onclick="() => Selecionar(candidato)">
+                            @if (!string.IsNullOrWhiteSpace(candidato.FotoDataUrl))
+                            {
+                                <img class="bt-avatar" src="@candidato.FotoDataUrl" alt="Foto de @candidato.NomeCompleto" />
+                            }
+                            else
+                            {
+                                <div class="bt-avatar-fallback">@ObterIniciais(candidato.NomeCompleto)</div>
+                            }
+                            <span>
+                                <span class="bt-candidate-name">@candidato.NomeCompleto</span>
+                                <span class="bt-candidate-meta">@candidato.AreaInteresse · @candidato.Cidade/@candidato.Estado</span>
+                            </span>
+                            <span class="bt-badge @ClasseStatus(candidato.Status)">@candidato.Status</span>
+                        </button>
+                    }
+                }
+            </div>
+        </div>
+
+        <article class="bt-detail">
+            @if (selecionado is null)
+            {
+                <div class="bt-empty">Selecione um currículo na lista para visualizar os detalhes.</div>
+            }
+            else
+            {
+                <div class="bt-detail-head">
+                    @if (!string.IsNullOrWhiteSpace(selecionado.FotoDataUrl))
+                    {
+                        <img class="bt-detail-avatar" src="@selecionado.FotoDataUrl" alt="Foto de @selecionado.NomeCompleto" />
+                    }
+                    else
+                    {
+                        <div class="bt-detail-avatar-fallback">@ObterIniciais(selecionado.NomeCompleto)</div>
+                    }
+                    <div>
+                        <h2>@selecionado.NomeCompleto</h2>
+                        @if (!string.IsNullOrWhiteSpace(selecionado.CargoPretendido))
+                        {
+                            <div class="bt-role">@selecionado.CargoPretendido</div>
+                        }
+                        <div class="bt-sub">@selecionado.Cidade/@selecionado.Estado · Recebido em @selecionado.DataCadastro.ToString("dd/MM/yyyy 'às' HH:mm")</div>
+                    </div>
+                </div>
+
+                <div class="bt-detail-body">
+                    <div class="bt-status-row">
+                        <label>Status da candidatura</label>
+                        <select value="@selecionado.Status" @onchange="AlterarStatusAsync">
+                            <option>Novo</option>
+                            <option>Em análise</option>
+                            <option>Aprovado</option>
+                            <option>Arquivado</option>
+                        </select>
+                    </div>
+
+                    <div class="bt-info-grid">
+                        <div class="bt-info-cell"><strong>Telefone</strong><span>@TextoOuVazio(selecionado.Telefone)</span></div>
+                        <div class="bt-info-cell"><strong>E-mail</strong><span>@TextoOuVazio(selecionado.Email)</span></div>
+                        <div class="bt-info-cell"><strong>Área</strong><span>@TextoOuVazio(selecionado.AreaInteresse)</span></div>
+                        <div class="bt-info-cell"><strong>Escolaridade</strong><span>@TextoOuVazio(selecionado.Escolaridade)</span></div>
+                        <div class="bt-info-cell"><strong>Disponibilidade</strong><span>@TextoOuVazio(selecionado.Disponibilidade)</span></div>
+                        <div class="bt-info-cell"><strong>Pretensão</strong><span>@TextoOuVazio(selecionado.PretensaoSalarial)</span></div>
+                    </div>
+
+                    <section class="bt-text-block">
+                        <h3>Experiências</h3>
+                        <p>@TextoOuVazio(selecionado.Experiencias)</p>
+                    </section>
+
+                    <section class="bt-text-block">
+                        <h3>Cursos</h3>
+                        <p>@TextoOuVazio(selecionado.Cursos)</p>
+                    </section>
+
+                    <section class="bt-text-block">
+                        <h3>Habilidades</h3>
+                        <p>@TextoOuVazio(selecionado.Habilidades)</p>
+                    </section>
+
+                    <section class="bt-text-block">
+                        <h3>Observações</h3>
+                        <p>@TextoOuVazio(selecionado.Observacoes)</p>
+                    </section>
+                </div>
+            }
+        </article>
+    </section>
+</div>
+
+@code {
+    private List<CandidatoTalentoModel> candidatos = new();
+    private CandidatoTalentoModel? selecionado;
+    private string busca = string.Empty;
+    private string status = string.Empty;
+    private bool ordenarMaisRecentePrimeiro = true;
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine($"[BT] OnInitialized | IsReady={UserState.IsReady} | CodEmp={UserState.CurrentCompanyId}");
+        UserState.OnChange += OnUserStateChanged;
+
+        if (UserState.IsReady)
+            _ = CarregarAsync();
+        else
+            Console.WriteLine("[BT] OnInitialized: UserState não pronto, aguardando OnChange...");
+    }
+
+    private async Task CarregarAsync()
+    {
+        Console.WriteLine($"[BT] CarregarAsync | IsReady={UserState.IsReady} | CodEmp={UserState.CurrentCompanyId}");
+        candidatos = await CurriculoOnlineService.ListarAsync();
+        Console.WriteLine($"[BT] CarregarAsync concluído | {candidatos.Count} candidato(s)");
+        selecionado = CandidatosFiltrados.FirstOrDefault();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnUserStateChanged()
+    {
+        Console.WriteLine($"[BT] OnUserStateChanged | IsReady={UserState.IsReady} | CodEmp={UserState.CurrentCompanyId}");
+        if (!UserState.IsReady) return;
+        await CarregarAsync();
+    }
+
+    public void Dispose()
+    {
+        UserState.OnChange -= OnUserStateChanged;
+    }
+
+    private IEnumerable<CandidatoTalentoModel> CandidatosFiltrados
+    {
+        get
+        {
+            var query = candidatos.Where(c =>
+                (string.IsNullOrWhiteSpace(status) || c.Status == status) &&
+                (string.IsNullOrWhiteSpace(busca) ||
+                 c.NomeCompleto.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                 c.Cidade.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                 c.AreaInteresse.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
+                 c.CargoPretendido.Contains(busca, StringComparison.OrdinalIgnoreCase)));
+
+            return ordenarMaisRecentePrimeiro
+                ? query.OrderByDescending(c => c.DataCadastro)
+                : query.OrderBy(c => c.DataCadastro);
+        }
+    }
+
+    private void Selecionar(CandidatoTalentoModel candidato)
+    {
+        selecionado = candidato;
+    }
+
+    private void DefinirStatus(string novoStatus)
+    {
+        status = novoStatus;
+    }
+
+    private void AlternarOrdenacao()
+    {
+        ordenarMaisRecentePrimeiro = !ordenarMaisRecentePrimeiro;
+    }
+
+    private async Task AlterarStatusAsync(ChangeEventArgs e)
+    {
+        if (selecionado is null)
+            return;
+
+        var novoStatus = e.Value?.ToString() ?? "Novo";
+        await CurriculoOnlineService.AtualizarStatusAsync(selecionado.Id, novoStatus);
+        selecionado.Status = novoStatus;
+    }
+
+    private static string TextoOuVazio(string valor) =>
+        string.IsNullOrWhiteSpace(valor) ? "Não informado." : valor;
+
+    private static string ClasseStatus(string status) => status switch
+    {
+        "Novo" => "st-novo",
+        "Em análise" => "st-analise",
+        "Aprovado" => "st-aprovado",
+        "Arquivado" => "st-arquivado",
+        _ => "st-novo"
+    };
+
+    private static string ObterIniciais(string nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "?";
+        var partes = nome.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length == 1) return partes[0][0].ToString().ToUpperInvariant();
+        return (partes[0][0].ToString() + partes[^1][0].ToString()).ToUpperInvariant();
+    }
+}

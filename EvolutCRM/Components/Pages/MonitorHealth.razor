@@ -1,0 +1,1023 @@
+﻿@page "/admin/monitor"
+@using EvolutCRM.Services
+@inject HealthMonitorService Monitor
+@implements IDisposable
+
+<style>
+    .mon-wrap {
+        padding: 1rem 1.25rem;
+        font-family: 'IBM Plex Sans', sans-serif;
+        background: #f0f4fd;
+        min-height: 100%;
+    }
+
+    /* ── HEADER ── */
+    .mon-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.25rem;
+        flex-wrap: wrap;
+        gap: .5rem;
+    }
+
+    .mon-header-left {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+    }
+
+    .mon-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .mon-live {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #16a34a;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        padding: 2px 10px;
+        border-radius: 999px;
+    }
+
+    .mon-live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #22c55e;
+        animation: livepulse 1.6s infinite;
+    }
+
+    @@keyframes livepulse {
+        0%, 100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: .25;
+        }
+    }
+
+    .mon-header-right {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .mon-ts {
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    .mon-btn-clear {
+        font-size: 11px;
+        padding: 4px 12px;
+        border: 1px solid #fca5a5;
+        border-radius: 6px;
+        background: transparent;
+        color: #dc2626;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background .12s;
+    }
+
+        .mon-btn-clear:hover {
+            background: #fef2f2;
+        }
+
+    /* ── STAT CARDS ── */
+    .mon-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+        margin-bottom: 1.25rem;
+    }
+
+    .mon-stat {
+        border-radius: 8px;
+        padding: .7rem 1rem;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+    }
+
+        .mon-stat.s-ok {
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        .mon-stat.s-err {
+            border-color: #fca5a5;
+            background: #fef2f2;
+        }
+
+        .mon-stat.s-warn {
+            border-color: #fde68a;
+            background: #fffbeb;
+        }
+
+    .mon-stat-lbl {
+        font-size: 10.5px;
+        color: #64748b;
+        margin-bottom: 4px;
+        font-weight: 600;
+    }
+
+    .mon-stat-val {
+        font-size: 22px;
+        font-weight: 700;
+        color: #0f172a;
+        line-height: 1.1;
+    }
+
+        .mon-stat-val.small {
+            font-size: 13px;
+            padding-top: 4px;
+        }
+
+    .mon-stat-sub {
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 3px;
+    }
+
+    /* ── LOG GRID ── */
+    .mon-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    @@media (max-width: 700px) {
+        .mon-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .mon-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    /* ── LOG PANEL ── */
+    .mon-panel {
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .mon-panel-head {
+        padding: .45rem .75rem;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+    }
+
+    .mon-panel-title {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #0f172a;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+        .mon-panel-title i {
+            color: #2563eb;
+            font-size: 12px;
+        }
+
+    .mon-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+    }
+
+    .mb-ok {
+        background: #f0fdf4;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+
+    .mb-err {
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fca5a5;
+    }
+
+    .mb-warn {
+        background: #fffbeb;
+        color: #d97706;
+        border: 1px solid #fde68a;
+    }
+
+    /* filtros */
+    .mon-filters {
+        display: flex;
+        gap: 5px;
+        padding: .35rem .75rem;
+        border-bottom: 1px solid #f1f5f9;
+        flex-shrink: 0;
+    }
+
+    .mon-filter {
+        font-size: 10px;
+        padding: 2px 9px;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all .1s;
+    }
+
+        .mon-filter.active {
+            background: #0f172a;
+            color: #fff;
+            border-color: #0f172a;
+        }
+
+    /* lista de logs */
+    .mon-log-list {
+        overflow-y: auto;
+        max-height: 200px;
+        flex: 1;
+    }
+
+    .mon-log-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 7px;
+        padding: .3rem .75rem;
+        border-bottom: 1px solid #f8fafc;
+        font-size: 11px;
+    }
+
+        .mon-log-item:last-child {
+            border-bottom: none;
+        }
+
+    .mon-log-time {
+        color: #94a3b8;
+        min-width: 38px;
+        flex-shrink: 0;
+        padding-top: 1px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .mon-log-icon {
+        flex-shrink: 0;
+        font-size: 11px;
+        margin-top: 1px;
+    }
+
+    .mon-log-msg {
+        color: #334155;
+        flex: 1;
+        line-height: 1.4;
+    }
+
+    .mon-log-detail {
+        display: block;
+        font-size: 10px;
+        color: #94a3b8;
+        margin-top: 1px;
+        word-break: break-all;
+    }
+
+    .mon-empty {
+        padding: .6rem .75rem;
+        font-size: 11px;
+        color: #94a3b8;
+    }
+
+    /* cores de severidade */
+    .sev-info {
+        color: #2563eb;
+    }
+
+    .sev-success {
+        color: #16a34a;
+    }
+
+    .sev-warning {
+        color: #d97706;
+    }
+
+    .sev-error {
+        color: #dc2626;
+    }
+
+    .sev-critical {
+        color: #7f1d1d;
+    }
+
+
+    /* ── DETALHES DE ERRO ── */
+
+.mon-log-item.is-error {
+    background: #fffafa;
+}
+
+.mon-error-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.mon-error-summary {
+    margin-top: 4px;
+    font-size: 10px;
+    color: #64748b;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px 12px;
+}
+
+.mon-error-summary-item {
+    white-space: nowrap;
+}
+
+.mon-error-summary strong {
+    color: #475569;
+    font-weight: 700;
+}
+
+.mon-error-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 5px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #2563eb;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.mon-error-toggle:hover {
+    text-decoration: underline;
+}
+
+.mon-error-detail-box {
+    margin-top: 7px;
+    border: 1px solid #fecaca;
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.mon-error-section {
+    padding: 7px 9px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.mon-error-section:last-child {
+    border-bottom: none;
+}
+
+.mon-error-section-title {
+    font-size: 9px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 5px;
+}
+
+.mon-error-row {
+    display: grid;
+    grid-template-columns: 115px minmax(0, 1fr);
+    gap: 6px;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.mon-error-label {
+    color: #94a3b8;
+}
+
+.mon-error-value {
+    color: #334155;
+    word-break: break-word;
+}
+
+.mon-error-message {
+    color: #b91c1c;
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mon-stacktrace {
+    margin: 0;
+    padding: 7px;
+    max-height: 220px;
+    overflow: auto;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 4px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 9px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mon-source {
+    font-family: Consolas, "Courier New", monospace;
+    color: #475569;
+}
+
+.mon-log-list {
+    max-height: 350px;
+}
+</style>
+
+<div class="mon-wrap">
+
+    <!-- Cabeçalho -->
+    <div class="mon-header">
+        <div class="mon-header-left">
+            <div class="mon-title">
+                <i class="fas fa-heart-pulse" style="color:#2563eb;"></i>
+                Monitor HELP
+            </div>
+            <div class="mon-live">
+                <span class="mon-live-dot"></span>
+                ao vivo
+            </div>
+        </div>
+        <div class="mon-header-right">
+            <span class="mon-ts">@ultimaAtualizacao</span>
+            <button class="mon-btn-clear" @onclick="LimparLogs">
+                <i class="fas fa-trash" style="margin-right:4px;"></i>Limpar
+            </button>
+        </div>
+    </div>
+
+    <!-- Cards de resumo -->
+    <div class="mon-stats">
+        <div class="mon-stat @(snap.SendFailures > 0 ? "s-err" : "s-ok")">
+            <div class="mon-stat-lbl">Msgs enviadas</div>
+            <div class="mon-stat-val">@snap.MsgsSent</div>
+        </div>
+        <div class="mon-stat @(snap.SendFailures > 0 ? "s-err" : "s-ok")">
+            <div class="mon-stat-lbl">Falhas de envio</div>
+            <div class="mon-stat-val">@snap.SendFailures</div>
+        </div>
+        <div class="mon-stat @(snap.BaileysStatus.Contains("Conectado") ? "s-ok" : "s-err")">
+            <div class="mon-stat-lbl">Conexão Baileys</div>
+            <div class="mon-stat-val small">@snap.BaileysStatus</div>
+            @if (snap.BaileysUptime.TotalMinutes > 0 && snap.BaileysUptime.TotalDays < 365)
+            {
+                <div class="mon-stat-sub">uptime @((int)snap.BaileysUptime.TotalMinutes)min</div>
+            }
+        </div>
+        <div class="mon-stat @(snap.SlowQueries > 0 ? "s-warn" : "s-ok")">
+            <div class="mon-stat-lbl">Queries lentas</div>
+            <div class="mon-stat-val">@snap.SlowQueries</div>
+        </div>
+        <div class="mon-stat @(snap.Exceptions > 0 ? "s-err" : "s-ok")">
+            <div class="mon-stat-lbl">Exceptions</div>
+            <div class="mon-stat-val">@snap.Exceptions</div>
+        </div>
+    </div>
+
+    <!-- Painéis por categoria -->
+    <div class="mon-grid">
+        @foreach (var cat in Enum.GetValues<LogCategory>())
+        {
+            var todos = Monitor.GetLogs(cat);
+            var erros = todos.Count(x => x.Severity == LogSeverity.Error || x.Severity == LogSeverity.Critical);
+            var avisos = todos.Count(x => x.Severity == LogSeverity.Warning);
+            var filtro = filtros[cat];
+
+            var visiveis = filtro switch
+            {
+                "err" => todos.Where(x => x.Severity == LogSeverity.Error || x.Severity == LogSeverity.Critical).ToList(),
+                "warn" => todos.Where(x => x.Severity == LogSeverity.Warning).ToList(),
+                _ => todos.ToList()
+            };
+
+            <div class="mon-panel">
+                <!-- cabeçalho do painel -->
+                <div class="mon-panel-head">
+                    <div class="mon-panel-title">
+                        <i class="@GetCatIcon(cat)"></i>
+                        @GetCatLabel(cat)
+                    </div>
+                    @if (erros > 0)
+                    {
+                        <span class="mon-badge mb-err">@erros erro@(erros > 1 ? "s" : "")</span>
+                    }
+                    else if (avisos > 0)
+                    {
+                        <span class="mon-badge mb-warn">@avisos aviso@(avisos > 1 ? "s" : "")</span>
+                    }
+                    else
+                    {
+                        <span class="mon-badge mb-ok">OK</span>
+                    }
+                </div>
+
+                <!-- filtros -->
+                <div class="mon-filters">
+                    @{
+                        var catLocal = cat;
+                        var filtroAll = "all";
+                        var filtroErr = "err";
+                        var filtroWarn = "warn";
+                    }
+
+                    <button class="mon-filter @(filtro == "all" ? "active" : "")" @onclick="() => SetFiltro(catLocal, filtroAll)">Tudo</button>
+                    <button class="mon-filter @(filtro == "err" ? "active" : "")" @onclick="() => SetFiltro(catLocal, filtroErr)">Erros</button>
+                    <button class="mon-filter @(filtro == "warn" ? "active" : "")" @onclick="() => SetFiltro(catLocal, filtroWarn)">Avisos</button>
+                </div>
+
+                <!-- lista -->
+                <div class="mon-log-list">
+                    @if (!visiveis.Any())
+                    {
+                        <div class="mon-empty">Nenhum evento registrado.</div>
+                    }
+                    else
+                    {
+                        @foreach (var log in visiveis.Take(60))
+                        {
+                            var isErro = log.Severity == LogSeverity.Error ||
+                                         log.Severity == LogSeverity.Critical;
+
+                            var expandido = logExpandido == log;
+
+                            <div class="mon-log-item @(isErro ? "is-error" : "")">
+
+                                <span class="mon-log-time">
+                                    @log.Timestamp.ToString("HH:mm")
+                                </span>
+
+                                <i class="@GetSevIcon(log.Severity) mon-log-icon @GetSevClass(log.Severity)"></i>
+
+                                @if (!isErro)
+                                {
+                                    // INFO / SUCCESS / WARNING
+                                    // Continua exatamente no modelo compacto atual
+                                    <span class="mon-log-msg">
+                                        @log.Message
+
+                                        @if (!string.IsNullOrWhiteSpace(log.Detail))
+                                        {
+                                            <span class="mon-log-detail">
+                                                @(log.Detail.Length > 120
+                                                    ? log.Detail[..120] + "…"
+                                                    : log.Detail)
+                                            </span>
+                                        }
+                                    </span>
+                                }
+                                else
+                                {
+                                    // ERROR / CRITICAL
+                                    <div class="mon-error-main">
+
+                                        <div class="mon-log-msg">
+                                            @log.Message
+                                        </div>
+
+                                        @if (!string.IsNullOrWhiteSpace(log.Detail))
+                                        {
+                                            <span class="mon-log-detail">
+                                                @(log.Detail.Length > 180
+                                                    ? log.Detail[..180] + "…"
+                                                    : log.Detail)
+                                            </span>
+                                        }
+
+                                        <!-- Resumo rápido do erro -->
+                                        @if (PossuiContextoErro(log))
+                                        {
+                                            <div class="mon-error-summary">
+
+                                                @if (log.CodTicketChamadoC.HasValue)
+                                                {
+                                                    <span class="mon-error-summary-item">
+                                                        <strong>Ticket:</strong>
+                                                        #@log.CodTicketChamadoC
+                                                    </span>
+                                                }
+
+                                                @if (log.CodTicketChamadoD.HasValue)
+                                                {
+                                                    <span class="mon-error-summary-item">
+                                                        <strong>Mensagem:</strong>
+                                                        #@log.CodTicketChamadoD
+                                                    </span>
+                                                }
+
+                                                @if (!string.IsNullOrWhiteSpace(log.Cliente))
+                                                {
+                                                    <span class="mon-error-summary-item">
+                                                        <strong>Cliente:</strong>
+                                                        @log.Cliente
+                                                    </span>
+                                                }
+
+                                                @if (!string.IsNullOrWhiteSpace(log.TelefoneWhatsApp))
+                                                {
+                                                    <span class="mon-error-summary-item">
+                                                        <strong>WhatsApp:</strong>
+                                                        @log.TelefoneWhatsApp
+                                                    </span>
+                                                }
+                                            </div>
+                                        }
+
+                                        <button type="button"
+                                                class="mon-error-toggle"
+                                                @onclick="() => ToggleErro(log)">
+
+                                            <i class="fas @(expandido ? "fa-chevron-down" : "fa-chevron-right")"></i>
+
+                                            @(expandido
+                                                ? "Ocultar detalhes técnicos"
+                                                : "Ver detalhes técnicos")
+                                        </button>
+
+                                        @if (expandido)
+                                        {
+                                            <div class="mon-error-detail-box">
+
+                                                <!-- ATENDIMENTO -->
+                                                @if (PossuiDadosAtendimento(log))
+                                                {
+                                                    <div class="mon-error-section">
+
+                                                        <div class="mon-error-section-title">
+                                                            Atendimento
+                                                        </div>
+
+                                                        @if (log.CodTicketChamadoC.HasValue)
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">TicketChamadoC</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.CodTicketChamadoC
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (log.CodTicketChamadoD.HasValue)
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">TicketChamadoD</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.CodTicketChamadoD
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (log.CodCliente.HasValue)
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Código cliente</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.CodCliente
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.Cliente))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Cliente</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.Cliente
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.TelefoneWhatsApp))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">WhatsApp</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.TelefoneWhatsApp
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.MessageIdWhatsApp))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">MessageId</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.MessageIdWhatsApp
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.InstanciaWhatsApp))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Instância</span>
+                                                                <span class="mon-error-value">
+                                                                    @log.InstanciaWhatsApp
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                    </div>
+                                                }
+
+
+                                                <!-- ERRO -->
+                                                <div class="mon-error-section">
+
+                                                    <div class="mon-error-section-title">
+                                                        Erro
+                                                    </div>
+
+                                                    @if (!string.IsNullOrWhiteSpace(log.ExceptionType))
+                                                    {
+                                                        <div class="mon-error-row">
+                                                            <span class="mon-error-label">Exception</span>
+                                                            <span class="mon-error-value mon-source">
+                                                                @log.ExceptionType
+                                                            </span>
+                                                        </div>
+                                                    }
+
+                                                    @if (!string.IsNullOrWhiteSpace(log.ExceptionMessage))
+                                                    {
+                                                        <div class="mon-error-message">
+                                                            @log.ExceptionMessage
+                                                        </div>
+                                                    }
+                                                    else if (!string.IsNullOrWhiteSpace(log.Detail))
+                                                    {
+                                                        <div class="mon-error-message">
+                                                            @log.Detail
+                                                        </div>
+                                                    }
+
+                                                </div>
+
+
+                                                <!-- LOCAL ONDE O LOG FOI REGISTRADO -->
+                                                @if (PossuiOrigemLog(log))
+                                                {
+                                                    <div class="mon-error-section">
+
+                                                        <div class="mon-error-section-title">
+                                                            Origem do log
+                                                        </div>
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.SourceFile))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Arquivo</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.SourceFile
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.SourceMember))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Método</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.SourceMember
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (log.SourceLine.HasValue)
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Linha</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.SourceLine
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                    </div>
+                                                }
+
+
+                                                <!-- LOCAL REAL DA EXCEPTION -->
+                                                @if (PossuiOrigemException(log))
+                                                {
+                                                    <div class="mon-error-section">
+
+                                                        <div class="mon-error-section-title">
+                                                            Origem da Exception
+                                                        </div>
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.ExceptionFile))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Arquivo</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.ExceptionFile
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (!string.IsNullOrWhiteSpace(log.ExceptionMethod))
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Método</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.ExceptionMethod
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                        @if (log.ExceptionLine.HasValue)
+                                                        {
+                                                            <div class="mon-error-row">
+                                                                <span class="mon-error-label">Linha</span>
+                                                                <span class="mon-error-value mon-source">
+                                                                    @log.ExceptionLine
+                                                                </span>
+                                                            </div>
+                                                        }
+
+                                                    </div>
+                                                }
+
+
+                                                <!-- STACK TRACE -->
+                                                @if (!string.IsNullOrWhiteSpace(log.StackTrace))
+                                                {
+                                                    <div class="mon-error-section">
+
+                                                        <div class="mon-error-section-title">
+                                                            Stack Trace
+                                                        </div>
+
+                                                        <pre class="mon-stacktrace">@log.StackTrace</pre>
+
+                                                    </div>
+                                                }
+
+                                            </div>
+                                        }
+
+                                    </div>
+                                }
+
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+    private HealthSnapshot snap = new(0, 0, 0, 0, "—", TimeSpan.Zero);
+    private string ultimaAtualizacao = "";
+    private System.Threading.Timer? _timer;
+    private HealthLogEntry? logExpandido;
+
+    private Dictionary<LogCategory, string> filtros = Enum
+        .GetValues<LogCategory>()
+        .ToDictionary(c => c, _ => "all");
+
+    protected override void OnInitialized()
+    {
+        Monitor.OnNewLog += OnNovoLog;
+        _timer = new System.Threading.Timer(_ => InvokeAsync(Refresh), null,
+            TimeSpan.Zero, TimeSpan.FromSeconds(5));
+    }
+
+    private void OnNovoLog() => InvokeAsync(Refresh);
+
+    private async Task Refresh()
+    {
+        snap = Monitor.GetSnapshot();
+        ultimaAtualizacao = "atualizado " + DateTime.Now.ToString("HH:mm:ss");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SetFiltro(LogCategory cat, string valor)
+    {
+        filtros[cat] = valor;
+    }
+
+    private void LimparLogs()
+    {
+        Monitor.ClearAll();
+    }
+
+    private string GetCatLabel(LogCategory cat) => cat switch
+    {
+        LogCategory.Tickets => "Tickets / WhatsApp",
+        LogCategory.CRM => "CRM / Cards",
+        LogCategory.SQL => "SQL Server",
+        LogCategory.Baileys => "Baileys / Gateway",
+        LogCategory.Sistema => "Sistema",
+        _ => cat.ToString()
+    };
+
+    private string GetCatIcon(LogCategory cat) => cat switch
+    {
+        LogCategory.Tickets => "fas fa-headset",
+        LogCategory.CRM => "fas fa-briefcase",
+        LogCategory.SQL => "fas fa-database",
+        LogCategory.Baileys => "fab fa-whatsapp",
+        LogCategory.Sistema => "fas fa-server",
+        _ => "fas fa-circle"
+    };
+
+    private string GetSevIcon(LogSeverity sev) => sev switch
+    {
+        LogSeverity.Success => "fas fa-circle-check",
+        LogSeverity.Warning => "fas fa-triangle-exclamation",
+        LogSeverity.Error => "fas fa-circle-xmark",
+        LogSeverity.Critical => "fas fa-skull-crossbones",
+        _ => "fas fa-circle-info"
+    };
+
+    private string GetSevClass(LogSeverity sev) => sev switch
+    {
+        LogSeverity.Success => "sev-success",
+        LogSeverity.Warning => "sev-warning",
+        LogSeverity.Error => "sev-error",
+        LogSeverity.Critical => "sev-critical",
+        _ => "sev-info"
+    };
+
+    public void Dispose()
+    {
+        Monitor.OnNewLog -= OnNovoLog;
+        _timer?.Dispose();
+    }
+
+    private void ToggleErro(HealthLogEntry log)
+    {
+        if (logExpandido == log)
+            logExpandido = null;
+        else
+            logExpandido = log;
+    }
+
+    private bool PossuiContextoErro(HealthLogEntry log)
+    {
+        return
+            log.CodTicketChamadoC.HasValue ||
+            log.CodTicketChamadoD.HasValue ||
+            log.CodCliente.HasValue ||
+            !string.IsNullOrWhiteSpace(log.Cliente) ||
+            !string.IsNullOrWhiteSpace(log.TelefoneWhatsApp);
+    }
+
+    private bool PossuiDadosAtendimento(HealthLogEntry log)
+    {
+        return
+            log.CodTicketChamadoC.HasValue ||
+            log.CodTicketChamadoD.HasValue ||
+            log.CodCliente.HasValue ||
+            !string.IsNullOrWhiteSpace(log.Cliente) ||
+            !string.IsNullOrWhiteSpace(log.TelefoneWhatsApp) ||
+            !string.IsNullOrWhiteSpace(log.MessageIdWhatsApp) ||
+            !string.IsNullOrWhiteSpace(log.InstanciaWhatsApp);
+    }
+
+    private bool PossuiOrigemLog(HealthLogEntry log)
+    {
+        return
+            !string.IsNullOrWhiteSpace(log.SourceFile) ||
+            !string.IsNullOrWhiteSpace(log.SourceMember) ||
+            log.SourceLine.HasValue;
+    }
+
+    private bool PossuiOrigemException(HealthLogEntry log)
+    {
+        return
+            !string.IsNullOrWhiteSpace(log.ExceptionFile) ||
+            !string.IsNullOrWhiteSpace(log.ExceptionMethod) ||
+            log.ExceptionLine.HasValue;
+    }
+}

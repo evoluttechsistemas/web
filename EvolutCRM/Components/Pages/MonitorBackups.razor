@@ -1,0 +1,1620 @@
+﻿@page "/admin/monitor-backups"
+@using EvolutCRM.Services
+@inject MonitorBackupService MonitorBackupService
+@inject IJSRuntime JS
+@implements IDisposable
+
+<style>
+    .mb-wrap {
+        --mb-ink: #0f172a;
+        --mb-ink2: #334155;
+        --mb-muted: #64748b;
+        --mb-soft: #94a3b8;
+        --mb-line: #e2e8f0;
+        --mb-bg: #f0f4fd;
+        --mb-card: #ffffff;
+        --mb-blue: #2563eb;
+        --mb-blue-d: #1e3a8a;
+        --mb-green: #16a34a;
+        --mb-amber: #f59e0b;
+        --mb-orange: #ea580c;
+        --mb-red: #dc2626;
+        --mb-rad: 14px;
+        --mb-rad-sm: 10px;
+        --mb-tr: .16s ease;
+        height: 100%;
+        overflow-y: auto;
+        background: var(--mb-bg);
+        font-family: 'IBM Plex Sans', sans-serif;
+        color: var(--mb-ink);
+        padding: 20px 22px 40px;
+    }
+
+        .mb-wrap::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .mb-wrap::-webkit-scrollbar-thumb {
+            background: #c7d2e8;
+            border-radius: 999px;
+        }
+
+    /* ─── HEADER ─── */
+    .mb-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .mb-title-block {
+        min-width: 0;
+    }
+
+    .mb-title {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--mb-blue-d);
+        line-height: 1.15;
+    }
+
+    .mb-title-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: linear-gradient(135deg, var(--mb-blue), var(--mb-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 4px 12px rgba(37,99,235,.32);
+    }
+
+    .mb-subtitle {
+        font-size: 12.5px;
+        color: var(--mb-muted);
+        margin-top: 6px;
+        margin-left: 51px;
+    }
+
+    .mb-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .mb-auto {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--mb-muted);
+        background: var(--mb-card);
+        border: 1px solid var(--mb-line);
+        border-radius: 999px;
+        padding: 7px 13px;
+        user-select: none;
+    }
+
+    .mb-auto-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--mb-green);
+        box-shadow: 0 0 0 0 rgba(22,163,74,.5);
+        animation: mbPulse 2s infinite;
+    }
+
+    .mb-auto.off .mb-auto-dot {
+        background: var(--mb-soft);
+        animation: none;
+        box-shadow: none;
+    }
+
+    @@keyframes mbPulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(22,163,74,.5);
+        }
+
+        70% {
+            box-shadow: 0 0 0 7px rgba(22,163,74,0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(22,163,74,0);
+        }
+    }
+
+    .mb-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 38px;
+        padding: 0 15px;
+        border-radius: var(--mb-rad-sm);
+        border: 1px solid var(--mb-line);
+        background: var(--mb-card);
+        color: var(--mb-ink2);
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--mb-tr);
+    }
+
+        .mb-btn:hover {
+            border-color: var(--mb-blue);
+            color: var(--mb-blue);
+            background: #f5f9ff;
+        }
+
+        .mb-btn.primary {
+            background: linear-gradient(135deg, var(--mb-blue), var(--mb-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(37,99,235,.28);
+        }
+
+            .mb-btn.primary:hover {
+                filter: brightness(1.06);
+                color: #fff;
+            }
+
+        .mb-btn.spinning svg {
+            animation: mbSpin .7s linear infinite;
+        }
+
+    @@keyframes mbSpin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* ─── STAT BAR ─── */
+    .mb-stats {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        margin-bottom: 20px;
+        background: var(--mb-card);
+        border: 1px solid var(--mb-line);
+        border-radius: var(--mb-rad);
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+
+    .mb-stat {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 14px 10px;
+        cursor: pointer;
+        transition: var(--mb-tr);
+        border-right: 1px solid var(--mb-line);
+        border-radius: 0;
+        border: none;
+        border-right: 1px solid var(--mb-line);
+        position: relative;
+        text-align: center;
+        overflow: hidden;
+    }
+
+        .mb-stat:last-child {
+            border-right: none;
+        }
+
+        .mb-stat::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            height: 3px;
+            background: var(--st-c, var(--mb-blue));
+            opacity: 0;
+            transition: var(--mb-tr);
+        }
+
+        .mb-stat:hover {
+            background: #f8faff;
+            transform: none;
+            box-shadow: none;
+        }
+
+            .mb-stat:hover::before,
+            .mb-stat.active::before {
+                opacity: 1;
+            }
+
+        .mb-stat.active {
+            background: #f5f9ff;
+            box-shadow: none;
+            border-color: transparent;
+        }
+
+    .mb-stat-lbl {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--mb-muted);
+    }
+
+    .mb-stat-num {
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--mb-ink);
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .mb-stat.active .mb-stat-num {
+        color: var(--st-c, var(--mb-blue));
+    }
+
+    .mb-stat-sub {
+        font-size: 9.5px;
+        color: var(--mb-soft);
+        font-weight: 500;
+    }
+
+    /* remover o ícone — não cabe na barra minimalista */
+    .mb-stat-ico {
+        display: none;
+    }
+
+    .mb-stat-top {
+        display: contents;
+    }
+
+    /* ─── TOOLBAR ─── */
+    .mb-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+
+    .mb-search {
+        position: relative;
+        flex: 1;
+        min-width: 220px;
+    }
+
+        .mb-search svg {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--mb-soft);
+            pointer-events: none;
+        }
+
+        .mb-search input {
+            width: 100%;
+            height: 40px;
+            padding: 0 14px 0 38px;
+            border-radius: var(--mb-rad-sm);
+            border: 1px solid var(--mb-line);
+            background: var(--mb-card);
+            font-size: 13px;
+            font-family: inherit;
+            color: var(--mb-ink);
+            transition: var(--mb-tr);
+            outline: none;
+        }
+
+            .mb-search input:focus {
+                border-color: var(--mb-blue);
+                box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+            }
+
+            .mb-search input::placeholder {
+                color: var(--mb-soft);
+            }
+
+    .mb-chips {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+    }
+
+    .mb-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 40px;
+        padding: 0 14px;
+        border-radius: var(--mb-rad-sm);
+        border: 1px solid var(--mb-line);
+        background: var(--mb-card);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--mb-ink2);
+        cursor: pointer;
+        transition: var(--mb-tr);
+        white-space: nowrap;
+    }
+
+        .mb-chip:hover {
+            border-color: var(--chip-c, var(--mb-blue));
+        }
+
+        .mb-chip.active {
+            background: var(--chip-c, var(--mb-blue));
+            border-color: var(--chip-c, var(--mb-blue));
+            color: #fff;
+        }
+
+    .mb-chip-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--chip-c);
+    }
+
+    .mb-chip.active .mb-chip-dot {
+        background: #fff;
+    }
+
+    .mb-chip-count {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(15,23,42,.08);
+        font-size: 10px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mb-chip.active .mb-chip-count {
+        background: rgba(255,255,255,.25);
+        color: #fff;
+    }
+
+    /* ─── TABLE (desktop) ─── */
+    .mb-table-card {
+        background: var(--mb-card);
+        border: 1px solid var(--mb-line);
+        border-radius: var(--mb-rad);
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+
+    .mb-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .mb-table thead th {
+            text-align: left;
+            font-size: 10.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            color: var(--mb-muted);
+            padding: 13px 16px;
+            background: #f8faff;
+            border-bottom: 1.5px solid var(--mb-line);
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+            transition: var(--mb-tr);
+        }
+
+            .mb-table thead th:hover {
+                color: var(--mb-blue);
+                background: #eef4ff;
+            }
+
+            .mb-table thead th.no-sort {
+                cursor: default;
+            }
+
+                .mb-table thead th.no-sort:hover {
+                    color: var(--mb-muted);
+                    background: #f8faff;
+                }
+
+    .mb-sort-ico {
+        font-size: 9px;
+        margin-left: 4px;
+        opacity: .5;
+    }
+
+    .mb-table thead th.sorted .mb-sort-ico {
+        opacity: 1;
+        color: var(--mb-blue);
+    }
+
+    .mb-table tbody tr {
+        border-bottom: 1px solid #f1f5f9;
+        transition: var(--mb-tr);
+    }
+
+        .mb-table tbody tr:hover {
+            background: #f8faff;
+        }
+
+        .mb-table tbody tr:last-child {
+            border-bottom: none;
+        }
+
+    .mb-table td {
+        padding: 13px 16px;
+        font-size: 12.5px;
+        color: var(--mb-ink2);
+        vertical-align: middle;
+    }
+
+    .mb-cli {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .mb-cli-ava {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .mb-cli-info {
+        min-width: 0;
+    }
+
+    .mb-cli-name {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--mb-ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+    }
+
+    .mb-cli-cnpj {
+        font-size: 10.5px;
+        color: var(--mb-soft);
+        font-family: 'IBM Plex Mono', monospace;
+        margin-top: 2px;
+    }
+
+    .mb-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .mb-badge-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+    }
+
+    .mb-badge.s-emcurso {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+
+        .mb-badge.s-emcurso .mb-badge-dot {
+            background: var(--mb-blue);
+            animation: mbPulse 1.4s infinite;
+        }
+
+    .mb-badge.s-ok {
+        background: #dcfce7;
+        color: #15803d;
+    }
+
+        .mb-badge.s-ok .mb-badge-dot {
+            background: var(--mb-green);
+        }
+
+    .mb-badge.s-atencao {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
+        .mb-badge.s-atencao .mb-badge-dot {
+            background: var(--mb-amber);
+        }
+
+    .mb-badge.s-critico {
+        background: #ffedd5;
+        color: #c2410c;
+    }
+
+        .mb-badge.s-critico .mb-badge-dot {
+            background: var(--mb-orange);
+        }
+
+    .mb-badge.s-sembackup {
+        background: #fee2e2;
+        color: #b91c1c;
+    }
+
+        .mb-badge.s-sembackup .mb-badge-dot {
+            background: var(--mb-red);
+        }
+
+    .mb-when {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .mb-when-abs {
+        font-size: 12px;
+        color: var(--mb-ink2);
+        font-weight: 500;
+    }
+
+    .mb-when-rel {
+        font-size: 10.5px;
+        color: var(--mb-soft);
+    }
+
+    .mb-file {
+        font-size: 11.5px;
+        color: var(--mb-ink2);
+        font-family: 'IBM Plex Mono', monospace;
+        max-width: 180px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .mb-size {
+        font-size: 10.5px;
+        color: var(--mb-soft);
+        margin-top: 2px;
+    }
+
+    .mb-pc {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        color: var(--mb-ink2);
+    }
+
+        .mb-pc svg {
+            color: var(--mb-soft);
+            flex-shrink: 0;
+        }
+
+    .mb-ver {
+        display: inline-block;
+        padding: 3px 9px;
+        border-radius: 6px;
+        background: #f1f5f9;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--mb-ink2);
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .mb-syncs {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 7px;
+        background: #eff6ff;
+        color: var(--mb-blue);
+        font-size: 12px;
+        font-weight: 700;
+        font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* ─── MOBILE CARDS ─── */
+    .mb-cards {
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .mb-mcard {
+        background: var(--mb-card);
+        border: 1px solid var(--mb-line);
+        border-radius: var(--mb-rad);
+        padding: 15px;
+        border-left: 4px solid var(--mc-c, var(--mb-blue));
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+
+    .mb-mcard-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .mb-mcard-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px 14px;
+    }
+
+    .mb-mrow {
+        min-width: 0;
+    }
+
+        .mb-mrow.full {
+            grid-column: 1 / -1;
+        }
+
+    .mb-mlbl {
+        font-size: 9.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--mb-soft);
+        margin-bottom: 3px;
+    }
+
+    .mb-mval {
+        font-size: 12px;
+        color: var(--mb-ink2);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ─── EMPTY / LOADING ─── */
+    .mb-empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: var(--mb-muted);
+    }
+
+    .mb-empty-ico {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 16px;
+        border-radius: 18px;
+        background: #eff6ff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--mb-blue);
+    }
+
+    .mb-empty-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--mb-ink2);
+        margin-bottom: 5px;
+    }
+
+    .mb-empty-text {
+        font-size: 12.5px;
+    }
+
+    .mb-skeleton {
+        height: 58px;
+        border-radius: var(--mb-rad-sm);
+        background: linear-gradient(90deg, #eef2f9 25%, #f6f9ff 50%, #eef2f9 75%);
+        background-size: 200% 100%;
+        animation: mbShimmer 1.3s infinite;
+        margin-bottom: 8px;
+    }
+
+    @@keyframes mbShimmer {
+        0% {
+            background-position: 200% 0;
+        }
+
+        100% {
+            background-position: -200% 0;
+        }
+    }
+
+    .mb-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+        font-size: 11.5px;
+        color: var(--mb-muted);
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @@media (max-width: 900px) {
+        .mb-wrap {
+            padding: 16px 14px 32px;
+        }
+
+        .mb-table-card {
+            display: none;
+        }
+
+        .mb-cards {
+            display: flex;
+        }
+
+        .mb-title {
+            font-size: 19px;
+        }
+
+        .mb-subtitle {
+            margin-left: 0;
+        }
+
+        .mb-stat-num {
+            font-size: 26px;
+        }
+
+        .mb-stats {
+            flex-wrap: wrap;
+        }
+
+        .mb-stat {
+            flex: 1 1 calc(33% - 1px);
+            border-right: 1px solid var(--mb-line);
+            border-bottom: 1px solid var(--mb-line);
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .mb-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .mb-header-actions {
+            width: 100%;
+        }
+
+        .mb-search {
+            min-width: 100%;
+        }
+    }
+
+
+    /* ─── PAGINAÇÃO ─── */
+    .mb-pager {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+    }
+
+    .mb-pg-btn {
+        min-width: 36px;
+        height: 36px;
+        padding: 0 10px;
+        border-radius: var(--mb-rad-sm);
+        border: 1px solid var(--mb-line);
+        background: var(--mb-card);
+        color: var(--mb-ink2);
+        font-size: 12.5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--mb-tr);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .mb-pg-btn:hover:not(:disabled) {
+            border-color: var(--mb-blue);
+            color: var(--mb-blue);
+            background: #f5f9ff;
+        }
+
+        .mb-pg-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+        .mb-pg-btn.active {
+            background: linear-gradient(135deg, var(--mb-blue), var(--mb-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 8px rgba(37,99,235,.28);
+        }
+
+    .mb-pg-dots {
+        color: var(--mb-soft);
+        padding: 0 4px;
+        font-weight: 700;
+    }
+
+    .mb-pg-info {
+        font-size: 11.5px;
+        color: var(--mb-muted);
+        margin: 0 8px;
+    }
+</style>
+
+<div class="mb-wrap">
+
+    <!-- HEADER -->
+    <div class="mb-header">
+        <div class="mb-title-block">
+            <div class="mb-title">
+                <span class="mb-title-ico">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <ellipse cx="12" cy="5" rx="9" ry="3" />
+                        <path d="M21 5v14c0 1.66-4 3-9 3s-9-1.34-9-3V5" />
+                        <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" />
+                    </svg>
+                </span>
+                Monitor de Backups
+            </div>
+            <div class="mb-subtitle">Acompanhamento das sincronizações de backup de todos os clientes em tempo real</div>
+        </div>
+
+        <div class="mb-header-actions">
+            <div class="mb-auto @(_autoRefresh ? "" : "off")" @onclick="ToggleAutoRefresh" title="Atualização automática">
+                <span class="mb-auto-dot"></span>
+                @(_autoRefresh ? "Auto-refresh ativo" : "Auto-refresh pausado")
+            </div>
+            <button class="mb-btn primary @(_carregando ? "spinning" : "")" @onclick="AtualizarAsync">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 4v6h-6" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+                Atualizar
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_erroDebug))
+    {
+        <div style="background:#fee2e2;color:#b91c1c;padding:12px;border-radius:10px;margin-bottom:16px;font-size:12px;">
+            <strong>Erro:</strong> @_erroDebug
+        </div>
+    }
+
+    <!-- STAT CARDS -->
+    <div class="mb-stats">
+        <div class="mb-stat @(_filtroStatus == null ? "active" : "")"
+             style="--st-c:#2563eb; --st-bg:#eff6ff;"
+             @onclick="() => FiltrarPorStatus(null)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Total</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@_todos.Count</div>
+            <div class="mb-stat-sub">clientes monitorados</div>
+        </div>
+
+        <div class="mb-stat @(_filtroStatus == StatusBackup.EmCurso ? "active" : "")"
+             style="--st-c:#2563eb; --st-bg:#dbeafe;"
+             @onclick="() => FiltrarPorStatus(StatusBackup.EmCurso)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Em curso</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@Contar(StatusBackup.EmCurso)</div>
+            <div class="mb-stat-sub">sincronizando agora</div>
+        </div>
+
+        <div class="mb-stat @(_filtroStatus == StatusBackup.Ok ? "active" : "")"
+             style="--st-c:#16a34a; --st-bg:#dcfce7;"
+             @onclick="() => FiltrarPorStatus(StatusBackup.Ok)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Em dia</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@Contar(StatusBackup.Ok)</div>
+            <div class="mb-stat-sub">últimas 24h</div>
+        </div>
+
+        <div class="mb-stat @(_filtroStatus == StatusBackup.Atencao ? "active" : "")"
+             style="--st-c:#f59e0b; --st-bg:#fef3c7;"
+             @onclick="() => FiltrarPorStatus(StatusBackup.Atencao)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Atenção</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@Contar(StatusBackup.Atencao)</div>
+            <div class="mb-stat-sub">1 a 2 dias</div>
+        </div>
+
+        <div class="mb-stat @(_filtroStatus == StatusBackup.Critico ? "active" : "")"
+             style="--st-c:#ea580c; --st-bg:#ffedd5;"
+             @onclick="() => FiltrarPorStatus(StatusBackup.Critico)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Crítico</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@Contar(StatusBackup.Critico)</div>
+            <div class="mb-stat-sub">2 a 5 dias</div>
+        </div>
+
+        <div class="mb-stat @(_filtroStatus == StatusBackup.SemBackup ? "active" : "")"
+             style="--st-c:#dc2626; --st-bg:#fee2e2;"
+             @onclick="() => FiltrarPorStatus(StatusBackup.SemBackup)">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Sem backup</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@Contar(StatusBackup.SemBackup)</div>
+            <div class="mb-stat-sub">5+ dias ou nunca</div>
+        </div>
+
+        <div class="mb-stat @(_filtroNuncaSincronizou ? "active" : "")"
+             style="--st-c:#7c3aed; --st-bg:#ede9fe;"
+             @onclick="FiltrarNuncaSincronizou">
+            <div class="mb-stat-top">
+                <span class="mb-stat-lbl">Nunca sincronizou</span>
+                <span class="mb-stat-ico">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
+                </span>
+            </div>
+            <div class="mb-stat-num">@_semBackup.Count</div>
+            <div class="mb-stat-sub">mensalistas sem registro</div>
+        </div>
+    </div>
+
+    @if (_semBackup.Any() && _filtroNuncaSincronizou)
+    {
+        <div class="mb-table-card" style="margin-bottom:20px;border-color:#fca5a5;">
+            <div style="padding:14px 16px;background:#fff7f7;border-bottom:1.5px solid #fca5a5;display:flex;align-items:center;gap:10px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span style="font-size:12.5px;font-weight:700;color:#b91c1c;">
+                    @_semBackup.Count cliente(s) mensalista(s) nunca sincronizaram backup
+                </span>
+            </div>
+            <table class="mb-table">
+                <thead>
+                    <tr>
+                        <th class="no-sort">Cliente</th>
+                        <th class="no-sort">CNPJ</th>
+                        <th class="no-sort">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in _paginaSemBackupItens)
+                    {
+                        <tr>
+                            <td>
+                                <div class="mb-cli">
+                                    <div class="mb-cli-ava" style="background:@CorAvatar(c.Apelido ?? c.NomeCliente);">@Iniciais(c.Apelido ?? c.NomeCliente)</div>
+                                    <div class="mb-cli-info">
+                                        <div class="mb-cli-name" title="@(string.IsNullOrWhiteSpace(c.Apelido) ? c.NomeCliente : c.Apelido)">
+                                            @(string.IsNullOrWhiteSpace(c.Apelido) ? c.NomeCliente : c.Apelido)
+                                        </div>
+                                        <div class="mb-cli-cnpj">@FormatarCnpj(c.Cnpj)</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;">@FormatarCnpj(c.Cnpj)</span></td>
+                            <td>
+                                <span class="mb-badge s-sembackup">
+                                    <span class="mb-badge-dot"></span> Nunca sincronizou
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (_totalPaginasSemBackup > 1)
+            {
+                <div class="mb-pager" style="padding:14px 0;">
+                    <button class="mb-pg-btn" disabled="@(_paginaSemBackup == 1)" @onclick="() => IrParaPaginaSemBackup(_paginaSemBackup - 1)">‹</button>
+                    @foreach (var p in PaginasVisiveisSemBackup())
+                    {
+                        @if (p == -1)
+                        {
+                            <span class="mb-pg-dots">…</span>
+                        }
+                        else
+                        {
+                            <button class="mb-pg-btn @(p == _paginaSemBackup ? "active" : "")" @onclick="() => IrParaPaginaSemBackup(p)">@p</button>
+                        }
+                    }
+                    <button class="mb-pg-btn" disabled="@(_paginaSemBackup == _totalPaginasSemBackup)" @onclick="() => IrParaPaginaSemBackup(_paginaSemBackup + 1)">›</button>
+                    <span class="mb-pg-info">Página @_paginaSemBackup de @_totalPaginasSemBackup</span>
+                </div>
+            }
+        </div>
+    }
+
+
+    @if (!_filtroNuncaSincronizou)
+    {
+        <!-- TOOLBAR -->
+        <div class="mb-toolbar">
+            <div class="mb-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                <input type="text" placeholder="Buscar por cliente, CNPJ, arquivo ou computador..."
+                value="@_busca" @oninput="OnBuscaInput" />
+            </div>
+            <div class="mb-chips">
+                <div class="mb-chip @(_filtroStatus == null ? "active" : "")" @onclick="() => FiltrarPorStatus(null)">
+                    Todos <span class="mb-chip-count">@_todos.Count</span>
+                </div>
+                <div class="mb-chip @(_filtroStatus == StatusBackup.Critico ? "active" : "")" style="--chip-c:#ea580c;" @onclick="() => FiltrarPorStatus(StatusBackup.Critico)">
+                    <span class="mb-chip-dot"></span> Crítico <span class="mb-chip-count">@Contar(StatusBackup.Critico)</span>
+                </div>
+                <div class="mb-chip @(_filtroStatus == StatusBackup.SemBackup ? "active" : "")" style="--chip-c:#dc2626;" @onclick="() => FiltrarPorStatus(StatusBackup.SemBackup)">
+                    <span class="mb-chip-dot"></span> Sem backup <span class="mb-chip-count">@Contar(StatusBackup.SemBackup)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE (desktop) -->
+        <div class="mb-table-card">
+            @if (_carregando && !_todos.Any())
+            {
+                <div style="padding:16px;">
+                    @for (int i = 0; i < 6; i++)
+                    {
+                        <div class="mb-skeleton"></div>
+                    }
+                </div>
+            }
+            else if (!_filtrados.Any())
+            {
+                @EmptyState
+            }
+            else
+            {
+                <table class="mb-table">
+                    <thead>
+                        <tr>
+                            <th class="@SortClass("nome")" @onclick='() => Ordenar("nome")'>Cliente <span class="mb-sort-ico">@SortArrow("nome")</span></th>
+                            <th class="@SortClass("status")" @onclick='() => Ordenar("status")'>Status <span class="mb-sort-ico">@SortArrow("status")</span></th>
+                            <th class="@SortClass("data")" @onclick='() => Ordenar("data")'>Última sincronização <span class="mb-sort-ico">@SortArrow("data")</span></th>
+                            <th class="no-sort">Arquivo</th>
+                            <th class="no-sort">Computador</th>
+                            <th class="@SortClass("versao")" @onclick='() => Ordenar("versao")'>Versão <span class="mb-sort-ico">@SortArrow("versao")</span></th>
+                            <th class="@SortClass("syncs")" @onclick='() => Ordenar("syncs")'>Syncs <span class="mb-sort-ico">@SortArrow("syncs")</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _pagina)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="mb-cli">
+                                        <div class="mb-cli-ava" style="background:@CorAvatar(c.Apelido ?? c.NomeCliente);">@Iniciais(c.Apelido ?? c.NomeCliente)</div>
+                                        <div class="mb-cli-info">
+                                            <div class="mb-cli-name" title="@(string.IsNullOrWhiteSpace(c.Apelido) ? c.NomeCliente : c.Apelido)">
+                                                @(string.IsNullOrWhiteSpace(c.Apelido) ? c.NomeCliente : c.Apelido)
+                                            </div>
+                                            <div class="mb-cli-cnpj">@FormatarCnpj(c.Cnpj)</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="mb-badge @StatusClass(c.Status)">
+                                        <span class="mb-badge-dot"></span> @StatusLabel(c.Status)
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (c.DataHoraUltimaSincronizacao.HasValue)
+                                    {
+                                        <div class="mb-when">
+                                            <span class="mb-when-abs">@c.DataHoraUltimaSincronizacao.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                            <span class="mb-when-rel">@TempoRelativo(c.DataHoraUltimaSincronizacao.Value)</span>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <span class="mb-when-rel">—</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div class="mb-file" title="@c.Arquivo">@(string.IsNullOrWhiteSpace(c.Arquivo) ? "—" : c.Arquivo)</div>
+                                    @if (c.TamanhoBytes > 0)
+                                    {
+                                        <div class="mb-size">@FormatarTamanho(c.TamanhoBytes)</div>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="mb-pc">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+                                        @(string.IsNullOrWhiteSpace(c.Computador) ? "—" : c.Computador)
+                                    </span>
+                                </td>
+                                <td><span class="mb-ver">@(string.IsNullOrWhiteSpace(c.VersaoSistema) ? "—" : c.VersaoSistema)</span></td>
+                                <td><span class="mb-syncs">@c.QuantidadeSincronizacoes</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+
+        <!-- CARDS (mobile) -->
+        <div class="mb-cards">
+            @if (_carregando && !_todos.Any())
+            {
+                @for (int i = 0; i < 4; i++)
+                {
+                    <div class="mb-skeleton" style="height:120px;"></div>
+                }
+            }
+            else if (!_filtrados.Any())
+            {
+                <div class="mb-table-card">@EmptyState</div>
+            }
+            else
+            {
+                @foreach (var c in _pagina)
+                {
+                    <div class="mb-mcard" style="--mc-c:@CorStatus(c.Status);">
+                        <div class="mb-mcard-head">
+                            <div class="mb-cli">
+                                <div class="mb-cli-info">
+                                    <div class="mb-cli-name" title="@c.NomeCliente">@c.NomeCliente</div>
+                                    @if (!string.IsNullOrWhiteSpace(c.Apelido))
+                                    {
+                                        <div class="mb-cli-cnpj" style="color:#7c3aed;">@c.Apelido</div>
+                                    }
+                                    <div class="mb-cli-cnpj">@FormatarCnpj(c.Cnpj)</div>
+                                </div>
+                            </div>
+                            <span class="mb-badge @StatusClass(c.Status)">
+                                <span class="mb-badge-dot"></span> @StatusLabel(c.Status)
+                            </span>
+                        </div>
+                        <div class="mb-mcard-body">
+                            <div class="mb-mrow full">
+                                <div class="mb-mlbl">Última sincronização</div>
+                                <div class="mb-mval">
+                                    @if (c.DataHoraUltimaSincronizacao.HasValue)
+                                    {
+                                        @($"{c.DataHoraUltimaSincronizacao.Value:dd/MM/yyyy HH:mm} · {TempoRelativo(c.DataHoraUltimaSincronizacao.Value)}")
+                                    }
+                                    else
+                                    {
+                                        @("Nenhum backup registrado")
+                                    }
+                                </div>
+                            </div>
+                            <div class="mb-mrow full">
+                                <div class="mb-mlbl">Arquivo</div>
+                                <div class="mb-mval">@(string.IsNullOrWhiteSpace(c.Arquivo) ? "—" : c.Arquivo)@(c.TamanhoBytes > 0 ? $" ({FormatarTamanho(c.TamanhoBytes)})" : "")</div>
+                            </div>
+                            <div class="mb-mrow">
+                                <div class="mb-mlbl">Computador</div>
+                                <div class="mb-mval">@(string.IsNullOrWhiteSpace(c.Computador) ? "—" : c.Computador)</div>
+                            </div>
+                            <div class="mb-mrow">
+                                <div class="mb-mlbl">Versão</div>
+                                <div class="mb-mval">@(string.IsNullOrWhiteSpace(c.VersaoSistema) ? "—" : c.VersaoSistema)</div>
+                            </div>
+                            <div class="mb-mrow">
+                                <div class="mb-mlbl">Sincronizações</div>
+                                <div class="mb-mval">@c.QuantidadeSincronizacoes</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- PAGINAÇÃO -->
+        @if (_totalPaginas > 1)
+        {
+            <div class="mb-pager">
+                <button class="mb-pg-btn" disabled="@(_paginaAtual == 1)" @onclick="() => IrParaPagina(_paginaAtual - 1)">‹</button>
+
+                @foreach (var p in PaginasVisiveis())
+                {
+                    @if (p == -1)
+                    {
+                        <span class="mb-pg-dots">…</span>
+                    }
+                    else
+                    {
+                        <button class="mb-pg-btn @(p == _paginaAtual ? "active" : "")" @onclick="() => IrParaPagina(p)">@p</button>
+                    }
+                }
+
+                <button class="mb-pg-btn" disabled="@(_paginaAtual == _totalPaginas)" @onclick="() => IrParaPagina(_paginaAtual + 1)">›</button>
+                <span class="mb-pg-info">Página @_paginaAtual de @_totalPaginas</span>
+            </div>
+        }
+
+        <!-- FOOTER -->
+        <div class="mb-foot">
+            <span>
+                @if (_filtrados.Any())
+                {
+                    var ini = (_paginaAtual - 1) * _porPagina + 1;
+                    var fim = Math.Min(_paginaAtual * _porPagina, _filtrados.Count);
+                    @($"Exibindo {ini}–{fim} de {_filtrados.Count} cliente(s)")
+                }
+                else
+                {
+                    @("Nenhum cliente")
+                }
+            </span>
+            <span>@(_ultimaAtualizacao == DateTime.MinValue ? "" : $"Atualizado às {_ultimaAtualizacao:HH:mm:ss}")</span>
+        </div>
+
+    }
+
+</div>
+
+@code {
+
+    private bool _filtroNuncaSincronizou = false;
+    private List<ClienteSemBackupModel> _semBackup = new();
+    private int _paginaAtual = 1;
+    private const int _porPagina = 15;
+    private int _totalPaginas => (int)Math.Ceiling(_filtrados.Count / (double)_porPagina);
+    private List<MonitorBackupModel> _pagina = new();
+    private List<MonitorBackupModel> _todos = new();
+    private List<MonitorBackupModel> _filtrados = new();
+    private bool _carregando = true;
+    private bool _autoRefresh = true;
+    private string _busca = "";
+    private StatusBackup? _filtroStatus = null;
+    private string _sortCampo = "data";
+    private bool _sortAsc = true;
+    private DateTime _ultimaAtualizacao = DateTime.MinValue;
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
+
+    private int _paginaSemBackup = 1;
+    private const int _porPaginaSemBackup = 15;
+    private int _totalPaginasSemBackup => (int)Math.Ceiling(_semBackup.Count / (double)_porPaginaSemBackup);
+    private List<ClienteSemBackupModel> _paginaSemBackupItens = new();
+
+    private void IrParaPaginaSemBackup(int p)
+    {
+        if (p < 1 || p > _totalPaginasSemBackup) return;
+        _paginaSemBackup = p;
+        _paginaSemBackupItens = _semBackup
+            .Skip((_paginaSemBackup - 1) * _porPaginaSemBackup)
+            .Take(_porPaginaSemBackup)
+            .ToList();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await AtualizarAsync();
+        IniciarTimer();
+    }
+
+    private void IniciarTimer()
+    {
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timer.WaitForNextTickAsync(_cts.Token))
+                {
+                    if (_disposed) break;
+                    if (_autoRefresh)
+                        await InvokeAsync(AtualizarAsync);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private string _erroDebug = "";
+
+    private async Task AtualizarAsync()
+    {
+        _carregando = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _todos = await MonitorBackupService.ObterStatusBackupsAsync();
+            _semBackup = await MonitorBackupService.ObterClientesSemBackupAsync();
+            _paginaSemBackup = 1;
+            _paginaSemBackupItens = _semBackup.Skip(0).Take(_porPaginaSemBackup).ToList();
+            _ultimaAtualizacao = DateTime.Now;
+            _erroDebug = "";
+            AplicarFiltros();
+        }
+        catch (Exception ex)
+        {
+            _erroDebug = ex.Message;
+            await JS.InvokeVoidAsync("console.error", "[MonitorBackup] " + ex.ToString());
+        }
+        finally
+        {
+            _carregando = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void AplicarFiltros()
+    {
+        IEnumerable<MonitorBackupModel> q = _todos;
+
+        if (_filtroStatus.HasValue)
+            q = q.Where(x => x.Status == _filtroStatus.Value);
+
+        if (!string.IsNullOrWhiteSpace(_busca))
+        {
+            var b = _busca.Trim().ToLowerInvariant();
+            q = q.Where(x =>
+    (x.NomeCliente ?? "").ToLowerInvariant().Contains(b) ||
+    (x.Apelido ?? "").ToLowerInvariant().Contains(b) ||
+    (x.Cnpj ?? "").ToLowerInvariant().Contains(b) ||
+    (x.Arquivo ?? "").ToLowerInvariant().Contains(b) ||
+    (x.Computador ?? "").ToLowerInvariant().Contains(b));
+        }
+
+        q = _sortCampo switch
+        {
+            "nome" => _sortAsc ? q.OrderBy(x => x.NomeCliente) : q.OrderByDescending(x => x.NomeCliente),
+            "status" => _sortAsc ? q.OrderBy(x => x.Status) : q.OrderByDescending(x => x.Status),
+            "versao" => _sortAsc ? q.OrderBy(x => x.VersaoSistema) : q.OrderByDescending(x => x.VersaoSistema),
+            "syncs" => _sortAsc ? q.OrderBy(x => x.QuantidadeSincronizacoes) : q.OrderByDescending(x => x.QuantidadeSincronizacoes),
+            _ => _sortAsc ? q.OrderBy(x => x.DataHoraUltimaSincronizacao ?? DateTime.MinValue)
+                                 : q.OrderByDescending(x => x.DataHoraUltimaSincronizacao ?? DateTime.MinValue),
+        };
+
+        _filtrados = q.ToList();
+
+        // Volta pra página 1 sempre que o filtro/busca muda o conjunto
+        if (_paginaAtual > _totalPaginas)
+            _paginaAtual = 1;
+
+        AplicarPagina();
+    }
+
+    private void AplicarPagina()
+    {
+        _pagina = _filtrados
+            .Skip((_paginaAtual - 1) * _porPagina)
+            .Take(_porPagina)
+            .ToList();
+    }
+
+    private void IrParaPagina(int p)
+    {
+        if (p < 1 || p > _totalPaginas) return;
+        _paginaAtual = p;
+        AplicarPagina();
+    }
+
+    // Mostra: 1 ... 4 5 [6] 7 8 ... 20  (janela ao redor da atual)
+    private IEnumerable<int> PaginasVisiveis()
+    {
+        int total = _totalPaginas;
+        int atual = _paginaAtual;
+        var paginas = new List<int>();
+
+        if (total <= 7)
+        {
+            for (int i = 1; i <= total; i++) paginas.Add(i);
+            return paginas;
+        }
+
+        paginas.Add(1);
+        if (atual > 3) paginas.Add(-1); // reticências
+
+        int ini = Math.Max(2, atual - 1);
+        int fim = Math.Min(total - 1, atual + 1);
+        for (int i = ini; i <= fim; i++) paginas.Add(i);
+
+        if (atual < total - 2) paginas.Add(-1); // reticências
+        paginas.Add(total);
+
+        return paginas;
+    }
+
+
+    private void FiltrarPorStatus(StatusBackup? status)
+    {
+        _filtroNuncaSincronizou = false;
+        _filtroStatus = _filtroStatus == status ? null : status;
+        _paginaAtual = 1;
+        AplicarFiltros();
+    }
+
+    private void Ordenar(string campo)
+    {
+        if (_sortCampo == campo) _sortAsc = !_sortAsc;
+        else { _sortCampo = campo; _sortAsc = true; }
+        AplicarFiltros();
+    }
+
+    private void ToggleAutoRefresh() => _autoRefresh = !_autoRefresh;
+
+    private void OnBuscaInput(ChangeEventArgs e)
+    {
+        _busca = e.Value?.ToString() ?? "";
+        _paginaAtual = 1;
+        AplicarFiltros();
+    }
+
+    private int Contar(StatusBackup s) => _todos.Count(x => x.Status == s);
+
+    private string SortClass(string campo) => _sortCampo == campo ? "sorted" : "";
+    private string SortArrow(string campo) => _sortCampo != campo ? "▾" : (_sortAsc ? "▴" : "▾");
+
+    private string StatusClass(StatusBackup s) => s switch
+    {
+        StatusBackup.EmCurso => "s-emcurso",
+        StatusBackup.Ok => "s-ok",
+        StatusBackup.Atencao => "s-atencao",
+        StatusBackup.Critico => "s-critico",
+        StatusBackup.SemBackup => "s-sembackup",
+        _ => ""
+    };
+
+    private string StatusLabel(StatusBackup s) => s switch
+    {
+        StatusBackup.EmCurso => "Em curso",
+        StatusBackup.Ok => "Em dia",
+        StatusBackup.Atencao => "Atenção",
+        StatusBackup.Critico => "Crítico",
+        StatusBackup.SemBackup => "Sem backup",
+        _ => "—"
+    };
+
+    private string CorStatus(StatusBackup s) => s switch
+    {
+        StatusBackup.EmCurso => "#2563eb",
+        StatusBackup.Ok => "#16a34a",
+        StatusBackup.Atencao => "#f59e0b",
+        StatusBackup.Critico => "#ea580c",
+        StatusBackup.SemBackup => "#dc2626",
+        _ => "#94a3b8"
+    };
+
+    private string Iniciais(string nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "?";
+        var p = nome.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (p.Length >= 2) return $"{p[0][0]}{p[1][0]}".ToUpperInvariant();
+        return nome.Length >= 2 ? nome.Substring(0, 2).ToUpperInvariant() : nome.ToUpperInvariant();
+    }
+
+    private static readonly string[] _cores =
+    {
+        "linear-gradient(135deg,#2563eb,#1e3a8a)",
+        "linear-gradient(135deg,#7c3aed,#5b21b6)",
+        "linear-gradient(135deg,#0891b2,#155e75)",
+        "linear-gradient(135deg,#16a34a,#166534)",
+        "linear-gradient(135deg,#ea580c,#9a3412)",
+        "linear-gradient(135deg,#db2777,#9d174d)",
+        "linear-gradient(135deg,#0d9488,#115e59)",
+    };
+    private string CorAvatar(string nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return _cores[0];
+        int h = 0;
+        foreach (var ch in nome) h = (h * 31 + ch) & 0x7fffffff;
+        return _cores[h % _cores.Length];
+    }
+
+    private string FormatarCnpj(string cnpj)
+    {
+        if (string.IsNullOrWhiteSpace(cnpj)) return "—";
+        var d = new string(cnpj.Where(char.IsDigit).ToArray());
+        if (d.Length != 14) return cnpj;
+        return $"{d.Substring(0, 2)}.{d.Substring(2, 3)}.{d.Substring(5, 3)}/{d.Substring(8, 4)}-{d.Substring(12, 2)}";
+    }
+
+    private string FormatarTamanho(long bytes)
+    {
+        string[] u = { "B", "KB", "MB", "GB", "TB" };
+        double t = bytes; int i = 0;
+        while (t >= 1024 && i < u.Length - 1) { t /= 1024; i++; }
+        return $"{t:0.##} {u[i]}";
+    }
+
+    private string TempoRelativo(DateTime dt)
+    {
+        var d = DateTime.Now - dt;
+        if (d.TotalMinutes < 1) return "agora mesmo";
+        if (d.TotalMinutes < 60) return $"há {(int)d.TotalMinutes} min";
+        if (d.TotalHours < 24) return $"há {(int)d.TotalHours}h";
+        if (d.TotalDays < 30) return $"há {(int)d.TotalDays} dia(s)";
+        return $"há {(int)(d.TotalDays / 30)} mês(es)";
+    }
+
+    private RenderFragment EmptyState => @<div class="mb-empty">
+        <div class="mb-empty-ico">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+        </div>
+        <div class="mb-empty-title">Nenhum resultado encontrado</div>
+        <div class="mb-empty-text">Ajuste os filtros ou o termo de busca para ver os backups.</div>
+    </div>;
+
+    public void Dispose()
+    {
+        _disposed = true;
+        try { _cts?.Cancel(); } catch { }
+        try { _timer?.Dispose(); } catch { }
+        try { _cts?.Dispose(); } catch { }
+    }
+
+    private IEnumerable<int> PaginasVisiveisSemBackup()
+    {
+        int total = _totalPaginasSemBackup;
+        int atual = _paginaSemBackup;
+        var paginas = new List<int>();
+
+        if (total <= 7)
+        {
+            for (int i = 1; i <= total; i++) paginas.Add(i);
+            return paginas;
+        }
+
+        paginas.Add(1);
+        if (atual > 3) paginas.Add(-1);
+
+        int ini = Math.Max(2, atual - 1);
+        int fim = Math.Min(total - 1, atual + 1);
+        for (int i = ini; i <= fim; i++) paginas.Add(i);
+
+        if (atual < total - 2) paginas.Add(-1);
+        paginas.Add(total);
+
+        return paginas;
+    }
+
+    private void FiltrarNuncaSincronizou()
+    {
+        _filtroNuncaSincronizou = !_filtroNuncaSincronizou;
+        _filtroStatus = null;
+        _paginaSemBackup = 1;
+        _paginaSemBackupItens = _semBackup.Skip(0).Take(_porPaginaSemBackup).ToList();
+        AplicarFiltros();
+    }
+}

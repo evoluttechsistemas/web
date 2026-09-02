@@ -1,0 +1,671 @@
+﻿@page "/admin/log-financeiro"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject LogFinanceiroService LogFinanceiroService
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+
+    :root {
+        --bg: #f4f7fb;
+        --surface: #fff;
+        --border: #d9e6f5;
+        --border-2: #bfd3ec;
+        --primary: #0d47a1;
+        --primary-3: #42a5f5;
+        --primary-soft: #eaf4ff;
+        --text: #172033;
+        --text-2: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --money: #059669;
+        --money-soft: #ecfdf5;
+        --shadow-sm: 0 3px 10px rgba(15,23,42,.06);
+        --shadow: 0 14px 36px rgba(13,71,161,.11);
+        --radius-lg: 26px;
+        --radius-md: 18px;
+        --radius-sm: 13px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    .lf-card {
+        position: relative;
+        width: 100%;
+        min-height: calc(100vh - 32px);
+        padding: 26px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: radial-gradient(circle at 95% 4%, rgba(5,150,105,.13), transparent 28%), linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+        box-shadow: var(--shadow);
+        font-family: 'Sora', Arial, sans-serif;
+        color: var(--text);
+        animation: fadeUp .28s ease both;
+    }
+
+        .lf-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--money), var(--primary-3), var(--primary));
+            border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+            z-index: 2;
+        }
+
+    .lf-title {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: -.04em;
+        margin-bottom: 5px;
+    }
+
+        .lf-title::before {
+            content: "💰";
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            flex: 0 0 auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--money), var(--primary));
+            font-size: 20px;
+            box-shadow: 0 12px 26px rgba(5,150,105,.22);
+        }
+
+    .lf-sub {
+        margin: 0 0 22px 57px;
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 500;
+    }
+
+    .filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: #fff;
+        box-shadow: var(--shadow-sm);
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+        .filter-group label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+    .lf-input {
+        height: 42px;
+        border: 1.5px solid var(--border);
+        border-radius: 13px;
+        padding: 0 14px;
+        background: #fff;
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        outline: none;
+        transition: .18s ease;
+    }
+
+        .lf-input:focus {
+            border-color: var(--primary-3);
+            box-shadow: 0 0 0 4px rgba(66,165,245,.14);
+        }
+
+        .lf-input[type="date"] {
+            padding: 0 10px;
+        }
+
+    select.lf-input {
+        appearance: none;
+        cursor: pointer;
+        padding-right: 36px;
+        background-image: url("data:image/svg+xml,%3Csvg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        background-size: 15px;
+    }
+
+    .btn-filtrar {
+        height: 42px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 13px;
+        background: linear-gradient(135deg, var(--primary), #1565c0);
+        color: #fff;
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 12.5px;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgba(13,71,161,.22);
+        transition: .16s ease;
+        align-self: flex-end;
+    }
+
+        .btn-filtrar:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.05);
+        }
+
+        .btn-filtrar:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+    .btn-limpar {
+        height: 42px;
+        padding: 0 16px;
+        border: 1.5px solid var(--border);
+        border-radius: 13px;
+        background: #f1f5f9;
+        color: var(--muted);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: .16s ease;
+        align-self: flex-end;
+    }
+
+        .btn-limpar:hover {
+            background: #e2e8f0;
+        }
+
+    /* stats */
+    .stats-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+
+    .stat-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 700;
+        border: 1px solid;
+    }
+
+    .stat-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    .chip-baixa {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #15803d;
+    }
+
+    .chip-pix {
+        background: #f5f3ff;
+        border-color: #ddd6fe;
+        color: #6d28d9;
+    }
+
+    .chip-lembr {
+        background: #fffbeb;
+        border-color: #fed7aa;
+        color: #c2410c;
+    }
+
+    .chip-cobr {
+        background: #f0fdf4;
+        border-color: #a7f3d0;
+        color: #047857;
+    }
+
+    .chip-wapix {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+
+    /* table */
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: #fff;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: var(--border-2);
+            border-radius: 999px;
+        }
+
+    table {
+        width: 100%;
+        min-width: 860px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+    }
+
+    th {
+        padding: 13px 15px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #f8fbff, #edf5ff);
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+        text-align: left;
+    }
+
+        th:first-child {
+            border-top-left-radius: var(--radius-md);
+        }
+
+        th:last-child {
+            border-top-right-radius: var(--radius-md);
+        }
+
+    td {
+        padding: 13px 15px;
+        border-bottom: 1px solid #edf2f7;
+        background: #fff;
+        color: var(--text-2);
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-align: middle;
+    }
+
+    tbody tr:hover td {
+        background: var(--primary-soft);
+    }
+
+    tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .badge-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 11px;
+        border-radius: 999px;
+        background: var(--primary-soft);
+        color: var(--primary);
+        border: 1px solid rgba(13,71,161,.15);
+        font-size: 10.5px;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge-evento {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 800;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+    .ev-baixa {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #15803d;
+    }
+
+    .ev-pix {
+        background: #f5f3ff;
+        border-color: #ddd6fe;
+        color: #6d28d9;
+    }
+
+    .ev-lembr {
+        background: #fffbeb;
+        border-color: #fed7aa;
+        color: #c2410c;
+    }
+
+    .ev-cobr {
+        background: #f0fdf4;
+        border-color: #a7f3d0;
+        color: #047857;
+    }
+
+    .ev-wapix {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+
+    .ev-outros {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #475569;
+    }
+
+    .date-strong {
+        display: block;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 850;
+        color: var(--text);
+    }
+
+    .date-sub {
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 700;
+    }
+
+    .detalhe-cell {
+        color: var(--muted);
+        font-size: 11.5px;
+        line-height: 1.45;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+
+    tbody tr:hover .detalhe-cell {
+        color: var(--text-2);
+    }
+
+    .loading, .empty-state {
+        min-height: 160px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1.5px dashed var(--border-2);
+        border-radius: var(--radius-md);
+        background: #fff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .loading::before {
+            content: "";
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            animation: spin .75s linear infinite;
+            margin-right: 10px;
+        }
+
+    @@keyframes fadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .lf-card {
+            padding: 16px;
+        }
+
+        .lf-title {
+            font-size: 18px;
+        }
+
+        .lf-sub {
+            margin-left: 0;
+            margin-top: 6px;
+        }
+
+        .filters {
+            flex-direction: column;
+        }
+
+        .lf-input, .btn-filtrar, .btn-limpar {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="lf-card">
+    <div class="lf-title">Log Financeiro</div>
+    <div class="lf-sub">Histórico de baixas, cobranças e links PIX gerados pelo sistema.</div>
+
+    <!-- FILTROS -->
+    <div class="filters">
+        <div class="filter-group" style="flex:1; min-width:200px;">
+            <label>Usuário / Cliente</label>
+            <input class="lf-input" style="width:100%;"
+                   placeholder="🔍 Buscar por usuário ou cliente..."
+                   @bind="FiltroTexto" @bind:event="oninput" />
+        </div>
+
+        <div class="filter-group">
+            <label>Evento</label>
+            <select class="lf-input" style="min-width:170px;" @bind="FiltroEvento">
+                <option value="">Todos</option>
+                <option value="BAIXA_TITULO">Baixa de Título</option>
+                <option value="PIX_GERADO">PIX Gerado</option>
+                <option value="WHATSAPP_LEMBRETE">Lembrete WhatsApp</option>
+                <option value="WHATSAPP_COBRANCA">Cobrança WhatsApp</option>
+                <option value="WHATSAPP_PIX">WhatsApp c/ PIX</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>De</label>
+            <input class="lf-input" type="date" @bind="DataInicio" />
+        </div>
+
+        <div class="filter-group">
+            <label>Até</label>
+            <input class="lf-input" type="date" @bind="DataFim" />
+        </div>
+
+        <button class="btn-filtrar" @onclick="Carregar" disabled="@Carregando">
+            @(Carregando ? "Buscando..." : "🔍 Filtrar")
+        </button>
+
+        <button class="btn-limpar" @onclick="LimparFiltros" disabled="@Carregando">
+            Limpar
+        </button>
+    </div>
+
+    <!-- STATS -->
+    @if (Logs.Any())
+    {
+        <div class="stats-row">
+            <div class="stat-chip chip-baixa">
+                <span class="stat-dot"></span>
+                @Logs.Count(l => l.TipoEvento == "BAIXA_TITULO") Baixas
+            </div>
+            <div class="stat-chip chip-pix">
+                <span class="stat-dot"></span>
+                @Logs.Count(l => l.TipoEvento == "PIX_GERADO") PIX Gerados
+            </div>
+            <div class="stat-chip chip-lembr">
+                <span class="stat-dot"></span>
+                @Logs.Count(l => l.TipoEvento == "WHATSAPP_LEMBRETE") Lembretes
+            </div>
+            <div class="stat-chip chip-cobr">
+                <span class="stat-dot"></span>
+                @Logs.Count(l => l.TipoEvento == "WHATSAPP_COBRANCA") Cobranças
+            </div>
+            <div class="stat-chip chip-wapix">
+                <span class="stat-dot"></span>
+                @Logs.Count(l => l.TipoEvento == "WHATSAPP_PIX") WhatsApp c/ PIX
+            </div>
+        </div>
+    }
+
+    <!-- TABELA -->
+    @if (Carregando)
+    {
+        <div class="loading">Carregando logs...</div>
+    }
+    else if (!LogsFiltrados.Any())
+    {
+        <div class="empty-state">Nenhum registro encontrado para os filtros selecionados.</div>
+    }
+    else
+    {
+        <div style="margin-bottom:10px; color:var(--muted); font-size:11.5px; font-weight:700;">
+            @LogsFiltrados.Count() registro(s) encontrado(s)
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data / Hora</th>
+                        <th>Usuário</th>
+                        <th>Empresa</th>
+                        <th>Evento</th>
+                        <th>Detalhe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in LogsFiltrados)
+                    {
+                        <tr>
+                            <td>
+                                <span class="date-strong">@log.DataHora.ToString("dd/MM/yyyy")</span>
+                                <span class="date-sub">@log.DataHora.ToString("HH:mm:ss")</span>
+                            </td>
+                            <td><span class="badge-user">👤 @log.Usuario</span></td>
+                            <td style="font-size:11.5px; color:var(--muted);">
+                                @(string.IsNullOrWhiteSpace(log.NomeEmpresa) ? "—" : log.NomeEmpresa)
+                            </td>
+                            <td>
+                                <span class="badge-evento @ObterClasseEvento(log.TipoEvento)">
+                                    @ObterLabelEvento(log.TipoEvento)
+                                </span>
+                            </td>
+                            <td>
+                                <div class="detalhe-cell" title="@log.UserAgent">
+                                    @(string.IsNullOrWhiteSpace(log.UserAgent) ? "—" : log.UserAgent)
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<LogAcessoModel> Logs = new();
+    private bool Carregando = false;
+
+    private string FiltroTexto = "";
+    private string FiltroEvento = "";
+    private DateTime? DataInicio = DateTime.Today;
+    private DateTime? DataFim = DateTime.Today;
+
+    private IEnumerable<LogAcessoModel> LogsFiltrados =>
+        string.IsNullOrWhiteSpace(FiltroTexto)
+            ? Logs
+            : Logs.Where(l =>
+                l.Usuario.Contains(FiltroTexto, StringComparison.OrdinalIgnoreCase)
+                || (l.UserAgent ?? "").Contains(FiltroTexto, StringComparison.OrdinalIgnoreCase)
+                || (l.NomeEmpresa ?? "").Contains(FiltroTexto, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync() => await Carregar();
+
+    private async Task Carregar()
+    {
+        Carregando = true;
+        StateHasChanged();
+
+        Logs = await LogFinanceiroService.ObterAsync(
+            usuario: null,
+            codEmp: null,
+            de: DataInicio,
+            ate: DataFim,
+            limite: 500,
+            tipoEvento: string.IsNullOrWhiteSpace(FiltroEvento) ? null : FiltroEvento);
+
+        Carregando = false;
+    }
+
+    private async Task LimparFiltros()
+    {
+        FiltroTexto = "";
+        FiltroEvento = "";
+        DataInicio = DateTime.Today;
+        DataFim = DateTime.Today;
+        await Carregar();
+    }
+
+    private static string ObterClasseEvento(string tipo) => tipo switch
+    {
+        "BAIXA_TITULO" => "ev-baixa",
+        "PIX_GERADO" => "ev-pix",
+        "WHATSAPP_LEMBRETE" => "ev-lembr",
+        "WHATSAPP_COBRANCA" => "ev-cobr",
+        "WHATSAPP_PIX" => "ev-wapix",
+        _ => "ev-outros"
+    };
+
+    private static string ObterLabelEvento(string tipo) => tipo switch
+    {
+        "BAIXA_TITULO" => "💰 Baixa de Título",
+        "PIX_GERADO" => "⚡ PIX Gerado",
+        "WHATSAPP_LEMBRETE" => "🔔 Lembrete WhatsApp",
+        "WHATSAPP_COBRANCA" => "📱 Cobrança WhatsApp",
+        "WHATSAPP_PIX" => "📱 WhatsApp c/ PIX",
+        _ => tipo
+    };
+}

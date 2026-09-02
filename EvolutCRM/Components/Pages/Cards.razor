@@ -1,0 +1,439 @@
+@page "/cards"
+@using EvolutCRM.Models
+@inject EvolutCRM.Services.CardService CardService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@implements IAsyncDisposable
+
+<style>
+    .cards-container {
+        max-width: 1400px;
+        margin: 20px auto;
+        padding: 20px;
+    }
+
+    .titulo {
+        font-size: 28px;
+        color: #0d47a1;
+        font-weight: 800;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 20px;
+    }
+
+    .card-item {
+        background: white;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border: 1px solid #e3f2fd;
+        cursor: pointer;
+        transition: all 0.2s;
+        position: relative;
+    }
+
+        .card-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .card-item.novo-ticket {
+            background: #fee2e2;
+            border: 2px solid #dc2626;
+            box-shadow: 0 6px 18px rgba(220,38,38,0.35);
+            animation: blink-red 0.9s infinite;
+        }
+
+    @@keyframes blink-red {
+        0% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: .45;
+        }
+
+        100% {
+            opacity: 1;
+        }
+    }
+
+    /* 🌡️ Badge de temperatura do lead */
+    .temperatura-badge {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        letter-spacing: 0.5px;
+    }
+
+    /* 🔥 QUENTE - Vermelho vibrante */
+    .temp-quente {
+        background: linear-gradient(135deg, #d32f2f, #f44336);
+        color: white;
+        border: 2px solid #c62828;
+    }
+
+    /* 🟡 MORNO - Laranja/Amarelo */
+    .temp-morno {
+        background: linear-gradient(135deg, #f57c00, #ff9800);
+        color: white;
+        border: 2px solid #e65100;
+    }
+
+    /* 🧊 FRIO - Azul claro */
+    .temp-frio {
+        background: linear-gradient(135deg, #0288d1, #03a9f4);
+        color: white;
+        border: 2px solid #0277bd;
+    }
+
+    /* ❄️ MUITO FRIO - Azul escuro/Roxo */
+    .temp-muito-frio {
+        background: linear-gradient(135deg, #303f9f, #5c6bc0);
+        color: white;
+        border: 2px solid #283593;
+    }
+
+    .card-header {
+        margin-bottom: 12px;
+        padding-right: 110px; /* espaço para o badge */
+    }
+
+    .card-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #0d47a1;
+        margin-bottom: 6px;
+    }
+
+    .card-cliente {
+        font-size: 14px;
+        color: #455a64;
+        font-weight: 600;
+    }
+
+    .card-info {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #e3f2fd;
+    }
+
+    .info-linha {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: #546e7a;
+    }
+
+    .info-label {
+        font-weight: 700;
+    }
+
+    .info-valor {
+        font-weight: 600;
+        color: #0d47a1;
+    }
+
+    .btn-novo {
+        background: linear-gradient(90deg, #1976d2, #0d47a1);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-weight: 800;
+        cursor: pointer;
+        margin-bottom: 20px;
+        transition: 0.2s;
+    }
+
+        .btn-novo:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+    .msg-vazio {
+        text-align: center;
+        color: #78909c;
+        font-size: 16px;
+        padding: 40px;
+        background: #f5f5f5;
+        border-radius: 12px;
+    }
+
+    @@media (max-width: 768px) {
+        .cards-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="cards-container">
+    <div class="titulo">CRM - Gestão de Leads</div>
+
+    <button class="btn-novo" @onclick="NovoCard">
+        + Novo Card
+    </button>
+
+    @if (Carregando)
+    {
+        <div class="msg-vazio">Carregando cards...</div>
+    }
+    else if (!ListaCards.Any())
+    {
+        <div class="msg-vazio">
+            Nenhum card encontrado. Clique em "Novo Card" para começar.
+        </div>
+    }
+    else
+    {
+        <div class="cards-grid">
+            @foreach (var card in ListaCards)
+            {
+                <div class="card-item @(
+                     card.Novo == "S"
+                         ? "novo-ticket"
+                         : (NovosCards.Contains(card.Codigo)
+                             ? "novo-ticket"
+                             : "")
+)"
+                 @click="() => AbrirCard(card.Codigo)">
+                <!-- 🌡️ Badge de temperatura -->
+            @if (!string.IsNullOrWhiteSpace(card.FaixaLead))
+                    {
+                        <span class="temperatura-badge @ObterClasseTemperatura(card.FaixaLead)">
+                            @ObterTextoTemperatura(card.FaixaLead)
+                        </span>
+                    }
+
+                    <div class="card-header">
+                        <div class="card-title">@card.Descricao</div>
+                        <div class="card-cliente">@card.NomeCliente</div>
+                    </div>
+
+                    <div class="card-info">
+                        <div class="info-linha">
+                            <span class="info-label">Status:</span>
+                            <span class="info-valor">@card.Status</span>
+                        </div>
+
+                        <div class="info-linha">
+                            <span class="info-label">Funil:</span>
+                            <span class="info-valor">@card.Funil</span>
+                        </div>
+
+                        <div class="info-linha">
+                            <span class="info-label">Responsável:</span>
+                            <span class="info-valor">@card.Usuario</span>
+                        </div>
+
+                        @if (card.DataAlteracao.HasValue)
+                        {
+                            <div class="info-linha">
+                                <span class="info-label">Última atividade:</span>
+                                <span class="info-valor">
+                                    @card.DataAlteracao.Value.ToString("dd/MM/yyyy HH:mm")
+                                </span>
+                            </div>
+                        }
+
+                        @if (card.PrevisaoFechamento.HasValue)
+                        {
+                            <div class="info-linha">
+                                <span class="info-label">Previsão:</span>
+                                <span class="info-valor">
+                                    @card.PrevisaoFechamento.Value.ToString("dd/MM/yyyy")
+                                </span>
+                            </div>
+                        }
+
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<CardModels> ListaCards = new();
+    private bool Carregando = true;
+    private readonly HashSet<int> NovosCards = new();
+    private HashSet<int> _idsConhecidos = new();
+    private PeriodicTimer? _timer;
+    private bool _paginaAtiva;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _paginaAtiva = true;
+        await CarregarCards();
+        IniciarTimerAtualizacao();
+    }
+
+    private string ObterClasseNovo(CardModels card)
+    {
+        if ((card.Novo ?? "N").Trim().ToUpper() == "S")
+            return "novo-ticket";
+
+        if (NovosCards.Contains(card.Codigo))
+            return "novo-ticket";
+
+        return "";
+    }
+
+    
+
+
+    private void IniciarTimerAtualizacao()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (_paginaAtiva && await _timer.WaitForNextTickAsync())
+                {
+                    if (!_paginaAtiva)
+                        break;
+
+                    await InvokeAsync(async () =>
+                    {
+                        try
+                        {
+                            await CarregarCards();
+                            StateHasChanged();
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[Cards] Erro ao atualizar cards: {ex.Message}");
+                        }
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        });
+    }
+
+    private async Task CarregarCards()
+    {
+        try
+        {
+            if (!ListaCards.Any())
+                Carregando = true;
+
+            var cards = await CardService.GetCardsAsync();
+            var idsAtuais = cards.Select(c => c.Codigo).ToHashSet();
+
+            if (_idsConhecidos.Count > 0)
+            {
+                foreach (var id in idsAtuais)
+                {
+                    if (!_idsConhecidos.Contains(id))
+                    {
+                        NovosCards.Add(id);
+                    }
+                }
+            }
+
+            NovosCards.RemoveWhere(id => !idsAtuais.Contains(id));
+            _idsConhecidos = idsAtuais;
+            ListaCards = cards;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Cards] Erro ao carregar cards: {ex.Message}");
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async void AbrirCard(int codigo)
+    {
+        NovosCards.Remove(codigo);
+
+        var card = ListaCards.FirstOrDefault(x => x.Codigo == codigo);
+
+        if (card != null)
+            card.Novo = "N";
+
+        StateHasChanged();
+
+        Nav.NavigateTo($"/card/{codigo}");
+    }
+
+    private void NovoCard()
+    {
+        Nav.NavigateTo("/card/novo");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _paginaAtiva = false;
+
+        try
+        {
+            _timer?.Dispose();
+        }
+        catch
+        {
+        }
+
+        _timer = null;
+
+        await ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// 🎨 Retorna a classe CSS baseada na temperatura do lead
+    /// </summary>
+    private string ObterClasseTemperatura(string faixaLead)
+    {
+        var faixa = faixaLead.Trim().ToUpper();
+
+        return faixa switch
+        {
+            "QUENTE" => "temp-quente",
+            "MORNO" => "temp-morno",
+            "FRIO" => "temp-frio",
+            "MUITO FRIO" or "MUITOFRIO" => "temp-muito-frio",
+            _ => ""
+        };
+    }
+
+    /// <summary>
+    /// 📝 Retorna o texto formatado da temperatura
+    /// </summary>
+    private string ObterTextoTemperatura(string faixaLead)
+    {
+        var faixa = faixaLead.Trim().ToUpper();
+
+        return faixa switch
+        {
+            "QUENTE" => "🔥 Quente",
+            "MORNO" => "🟡 Morno",
+            "FRIO" => "🧊 Frio",
+            "MUITO FRIO" or "MUITOFRIO" => "❄️ Muito Frio",
+            _ => faixaLead
+        };
+    }
+}

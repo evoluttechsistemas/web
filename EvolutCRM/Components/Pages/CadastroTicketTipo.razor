@@ -1,0 +1,667 @@
+﻿@page "/cadastro-ticket-tipo"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject TicketClassificacaoService ClassificacaoService
+@inject AdminService AdminService
+@inject UserState UserState
+@inject IJSRuntime JS
+
+<PageTitle>Tipos do Ticket</PageTitle>
+
+<div class="tc-wrap">
+    <div class="tc-header">
+        <div>
+            <div class="tc-title">
+                <span class="tc-title-ico"><i class="fas fa-tags"></i></span>
+                <span>Tipos do Ticket</span>
+            </div>
+            <div class="tc-subtitle">@EmpresaAtual</div>
+        </div>
+
+        <button type="button" class="tc-btn primary" @onclick="Novo" disabled="@(!PodeEditar)">
+            <i class="fas fa-plus"></i>
+            Novo tipo
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensagem))
+    {
+        <div class="@ClasseMensagem">@mensagem</div>
+    }
+
+    <div class="tc-grid">
+        <section class="tc-card">
+            <EditForm Model="tipo" OnValidSubmit="SalvarAsync">
+                <DataAnnotationsValidator />
+
+                <div class="tc-card-head">
+                    <div class="tc-card-title">
+                        @(tipo.Codigo > 0 ? $"Editando tipo #{tipo.Codigo}" : "Novo tipo")
+                    </div>
+
+                    <label class="tc-check">
+                        <InputCheckbox @bind-Value="tipo.Ativo" />
+                        <span>Ativo</span>
+                    </label>
+                </div>
+
+                <div class="tc-card-body">
+                    <ValidationSummary />
+
+                    <div class="tc-row">
+                        <div class="tc-field">
+                            <label>Descrição</label>
+                            <InputText class="tc-input" @bind-Value="tipo.Descricao" />
+                            <ValidationMessage For="@(() => tipo.Descricao)" />
+                        </div>
+                    </div>
+
+                    <div class="tc-row two">
+                        <div class="tc-field">
+                            <label>Código</label>
+                            <InputNumber class="tc-input tc-readonly" @bind-Value="tipo.Codigo" disabled />
+                        </div>
+
+                        <div class="tc-field">
+                            <label>Ordem</label>
+                            <InputNumber class="tc-input" @bind-Value="tipo.Ordem" />
+                        </div>
+                    </div>
+
+                    <div class="tc-preview">
+                        <div>
+                            <span>Última gravação</span>
+                            <strong>@UltimaGravacaoTexto</strong>
+                        </div>
+                        <div>
+                            <span>Usuário</span>
+                            <strong>@UsuarioGravacaoTexto</strong>
+                        </div>
+                    </div>
+
+                    <div class="tc-form-actions">
+                        <button type="submit" class="tc-btn primary" disabled="@(!PodeEditar || salvando)">
+                            <i class="fas fa-save"></i>
+                            @(salvando ? "Salvando..." : "Salvar")
+                        </button>
+                        <button type="button" class="tc-btn" @onclick="Novo" disabled="@salvando">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+                        @if (tipo.Codigo > 0)
+                        {
+                            <button type="button" class="@ClasseBotaoAtivo(tipo.Ativo)" @onclick="AlternarAtivoAsync" disabled="@(!PodeEditar || salvando)">
+                                <i class="@IconeAtivo(tipo.Ativo)"></i>
+                                @(tipo.Ativo ? "Inativar" : "Ativar")
+                            </button>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </section>
+
+        <section class="tc-card">
+            <div class="tc-card-head">
+                <div class="tc-card-title">Tipos cadastrados</div>
+                <label class="tc-check">
+                    <InputCheckbox @bind-Value="incluirInativos" />
+                    <span>Inativos</span>
+                </label>
+            </div>
+
+            <div class="tc-toolbar">
+                <button type="button" class="tc-btn" @onclick="CarregarAsync" disabled="@carregando">
+                    <i class="fas fa-rotate"></i>
+                    Atualizar
+                </button>
+            </div>
+
+            @if (carregando)
+            {
+                <div class="tc-empty">Carregando tipos...</div>
+            }
+            else if (tipos.Count == 0)
+            {
+                <div class="tc-empty">Nenhum tipo encontrado.</div>
+            }
+            else
+            {
+                <div class="tc-table-wrap">
+                    <table class="tc-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Descrição</th>
+                                <th>Ordem</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in tipos)
+                            {
+                                <tr class="@ClasseLinha(item.Ativo)">
+                                    <td>@item.Codigo</td>
+                                    <td><span class="tc-main-text">@item.Descricao</span></td>
+                                    <td>@item.Ordem</td>
+                                    <td><span class="@ClasseStatus(item.Ativo)">@(item.Ativo ? "Ativo" : "Inativo")</span></td>
+                                    <td class="tc-actions-cell">
+                                        <button type="button" class="tc-icon-btn" title="Editar tipo" @onclick="() => Editar(item)">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+<style>
+    .tc-wrap {
+        --tc-ink: #0f172a;
+        --tc-ink2: #334155;
+        --tc-muted: #64748b;
+        --tc-line: #e2e8f0;
+        --tc-bg: #f0f4fd;
+        --tc-card: #fff;
+        --tc-blue: #2563eb;
+        --tc-blue-d: #1e3a8a;
+        --tc-red: #dc2626;
+        height: 100%;
+        overflow-y: auto;
+        background: var(--tc-bg);
+        color: var(--tc-ink);
+        font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+        padding: 20px 22px 40px;
+    }
+
+    .tc-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .tc-title {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--tc-blue-d);
+        line-height: 1.15;
+    }
+
+    .tc-title-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: linear-gradient(135deg,var(--tc-blue),var(--tc-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(37,99,235,.32);
+    }
+
+    .tc-subtitle {
+        font-size: 12.5px;
+        color: var(--tc-muted);
+        margin-top: 6px;
+        margin-left: 51px;
+        font-weight: 600;
+    }
+
+    .tc-grid {
+        display: grid;
+        grid-template-columns: minmax(360px,460px) minmax(0,1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .tc-card {
+        background: var(--tc-card);
+        border: 1px solid var(--tc-line);
+        border-radius: 14px;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+        overflow: hidden;
+    }
+
+    .tc-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--tc-line);
+        background: #f8fbff;
+    }
+
+    .tc-card-title {
+        font-size: 14px;
+        font-weight: 850;
+        color: var(--tc-blue-d);
+    }
+
+    .tc-card-body {
+        padding: 16px;
+    }
+
+    .tc-row {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+        .tc-row.two {
+            grid-template-columns: 1fr 1fr;
+        }
+
+    .tc-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+    }
+
+        .tc-field label {
+            font-size: 11.5px;
+            font-weight: 800;
+            color: var(--tc-ink2);
+        }
+
+    .tc-input {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 7px 10px;
+        background: #fff;
+        color: var(--tc-ink);
+        font: inherit;
+        font-size: 12.5px;
+        outline: none;
+    }
+
+        .tc-input:focus {
+            border-color: var(--tc-blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+
+    .tc-readonly {
+        background: #f8fafc;
+        color: var(--tc-muted);
+        cursor: not-allowed;
+    }
+
+    .tc-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--tc-muted);
+        font-size: 12px;
+        font-weight: 700;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .tc-preview {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+        .tc-preview > div {
+            border: 1px solid var(--tc-line);
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+
+        .tc-preview span {
+            display: block;
+            color: var(--tc-muted);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-bottom: 4px;
+        }
+
+        .tc-preview strong {
+            color: var(--tc-ink2);
+            font-size: 12px;
+        }
+
+    .tc-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 38px;
+        padding: 0 15px;
+        border-radius: 10px;
+        border: 1px solid var(--tc-line);
+        background: #fff;
+        color: var(--tc-ink2);
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: .16s ease;
+        white-space: nowrap;
+    }
+
+        .tc-btn:hover {
+            border-color: var(--tc-blue);
+            color: var(--tc-blue);
+            background: #f5f9ff;
+        }
+
+        .tc-btn.primary {
+            background: linear-gradient(135deg,var(--tc-blue),var(--tc-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(37,99,235,.28);
+        }
+
+        .tc-btn.danger {
+            color: var(--tc-red);
+            border-color: #fecaca;
+        }
+
+        .tc-btn.success {
+            color: #166534;
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        .tc-btn:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+        }
+
+    .tc-alert {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        border: 1px solid var(--tc-line);
+        background: #fff;
+    }
+
+        .tc-alert.ok {
+            color: #166534;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+
+        .tc-alert.err {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+    .tc-form-actions, .tc-toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .tc-toolbar {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--tc-line);
+        background: #f8fbff;
+    }
+
+    .tc-empty {
+        margin: 16px;
+        padding: 24px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        color: var(--tc-muted);
+        text-align: center;
+        font-size: 12.5px;
+        font-weight: 700;
+        background: #f8fafc;
+    }
+
+    .tc-table-wrap {
+        overflow: auto;
+    }
+
+    .tc-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+    }
+
+        .tc-table th {
+            padding: 10px 12px;
+            text-align: left;
+            color: var(--tc-muted);
+            background: #f8fbff;
+            border-bottom: 1px solid var(--tc-line);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            white-space: nowrap;
+        }
+
+        .tc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+    .tc-main-text {
+        font-weight: 800;
+        color: var(--tc-ink);
+    }
+
+    .tc-status {
+        display: inline-flex;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+        .tc-status.on {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .tc-status.off {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+    .tc-muted-row {
+        opacity: .62;
+    }
+
+    .tc-actions-cell {
+        width: 1%;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .tc-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--tc-line);
+        background: #fff;
+        color: var(--tc-blue-d);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .validation-errors {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .validation-message {
+        color: #dc2626;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    @@media (max-width: 980px) {
+        .tc-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 680px) {
+        .tc-wrap {
+            padding: 16px 14px 32px;
+        }
+
+        .tc-row.two, .tc-preview {
+            grid-template-columns: 1fr;
+        }
+
+        .tc-btn {
+            width: 100%;
+        }
+
+        .tc-header .tc-btn {
+            width: auto;
+        }
+    }
+</style>
+
+@code {
+    private TicketTipoCadastroModel tipo = new();
+    private List<TicketTipoCadastroModel> tipos = new();
+    private bool incluirInativos;
+    private bool carregando;
+    private bool salvando;
+    private bool PodeVisualizar;
+    private bool PodeEditar;
+    private string mensagem = "";
+    private string classeMensagem = "alert-info";
+
+    private string EmpresaAtual => UserState.CurrentCompanyId > 0 ? $"Empresa: {UserState.CurrentCompany} ({UserState.CurrentCompanyId})" : "Empresa nao carregada";
+    private string UltimaGravacaoTexto => tipo.DataHoraUltimaGravacao?.ToString("dd/MM/yyyy HH:mm") ?? "-";
+    private string UsuarioGravacaoTexto => string.IsNullOrWhiteSpace(tipo.UsuarioUltimaGravacao) ? "-" : tipo.UsuarioUltimaGravacao;
+    private string ClasseMensagem => classeMensagem == "alert-success" ? "tc-alert ok" : "tc-alert err";
+    private static string ClasseLinha(bool ativo) => ativo ? "" : "tc-muted-row";
+    private static string ClasseStatus(bool ativo) => ativo ? "tc-status on" : "tc-status off";
+    private static string ClasseBotaoAtivo(bool ativo) => ativo ? "tc-btn danger" : "tc-btn success";
+    private static string IconeAtivo(bool ativo) => ativo ? "fas fa-ban" : "fas fa-check";
+
+    protected override async Task OnInitializedAsync()
+    {
+        PodeVisualizar = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "CADASTROS_TICKET_TIPOS_VISUALIZAR");
+        PodeEditar = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "CADASTROS_TICKET_TIPOS_EDITAR");
+
+        if (!PodeVisualizar)
+        {
+            MostrarErro("Voce nao tem permissao para acessar tipos do ticket.");
+            return;
+        }
+
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            carregando = true;
+            tipos = await ClassificacaoService.ListarTiposAsync(incluirInativos);
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao carregar tipos: {ex.Message}"); }
+        finally { carregando = false; }
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (!PodeEditar)
+        {
+            MostrarErro("Voce nao tem permissao para alterar tipos do ticket.");
+            return;
+        }
+
+        try
+        {
+            salvando = true;
+            await ClassificacaoService.SalvarTipoAsync(tipo);
+            MostrarSucesso("Tipo salvo com sucesso.");
+            Novo();
+            await CarregarAsync();
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao salvar tipo: {ex.Message}"); }
+        finally { salvando = false; }
+    }
+
+    private async Task AlternarAtivoAsync()
+    {
+        if (!PodeEditar || tipo.Codigo <= 0)
+            return;
+
+        var novoStatus = !tipo.Ativo;
+        var acao = novoStatus ? "ativar" : "inativar";
+        var confirmar = await JS.InvokeAsync<bool>("confirm", $"Deseja {acao} este tipo?");
+        if (!confirmar)
+            return;
+
+        try
+        {
+            salvando = true;
+            await ClassificacaoService.AlterarAtivoTipoAsync(tipo.Codigo, novoStatus);
+            MostrarSucesso(novoStatus ? "Tipo ativado com sucesso." : "Tipo inativado com sucesso.");
+            Novo();
+            await CarregarAsync();
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao alterar status do tipo: {ex.Message}"); }
+        finally { salvando = false; }
+    }
+
+    private void Editar(TicketTipoCadastroModel item)
+    {
+        tipo = new TicketTipoCadastroModel
+        {
+            Codigo = item.Codigo,
+            CodEmp = item.CodEmp,
+            Descricao = item.Descricao,
+            Ordem = item.Ordem,
+            Ativo = item.Ativo,
+            DataHoraUltimaGravacao = item.DataHoraUltimaGravacao,
+            UsuarioUltimaGravacao = item.UsuarioUltimaGravacao
+        };
+        mensagem = "";
+    }
+
+    private void Novo()
+    {
+        tipo = new TicketTipoCadastroModel { Ativo = true };
+        mensagem = "";
+    }
+
+    private void MostrarSucesso(string texto) { mensagem = texto; classeMensagem = "alert-success"; }
+    private void MostrarErro(string texto) { mensagem = texto; classeMensagem = "alert-danger"; }
+}

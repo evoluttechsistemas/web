@@ -1,0 +1,2226 @@
+﻿@page "/admin/bx-pagar"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+
+@inject AdminService AdminService
+@inject BxClienteService bxClienteService
+@inject LogFinanceiroService LogFinanceiroService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+
+    :root {
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-2: #f8fbff;
+        --surface-3: #eef6ff;
+        --surface-glass: rgba(255, 255, 255, .78);
+        --border: #d9e6f5;
+        --border-2: #bfd3ec;
+        --primary: #0d47a1;
+        --primary-2: #1565c0;
+        --primary-3: #42a5f5;
+        --primary-soft: #eaf4ff;
+        --primary-ultra: #f5f9ff;
+        --text: #172033;
+        --text-2: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --success: #16a34a;
+        --success-2: #15803d;
+        --success-soft: #ecfdf5;
+        --warning: #d97706;
+        --warning-2: #b45309;
+        --warning-soft: #fffbeb;
+        --danger: #dc2626;
+        --danger-2: #b91c1c;
+        --danger-soft: #fff1f2;
+        --money: #059669;
+        --money-2: #047857;
+        --money-soft: #ecfdf5;
+        --dark: #0f172a;
+        --shadow-xs: 0 1px 3px rgba(15, 23, 42, .04);
+        --shadow-sm: 0 3px 10px rgba(15, 23, 42, .06);
+        --shadow: 0 14px 36px rgba(13, 71, 161, .11);
+        --shadow-lg: 0 24px 70px rgba(13, 71, 161, .18);
+        --radius: 22px;
+        --radius-lg: 26px;
+        --radius-md: 18px;
+        --radius-sm: 13px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        background: var(--bg);
+    }
+
+    .admin-card {
+        position: relative;
+        width: 100%;
+        min-height: calc(100vh - 32px);
+        padding: 26px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: radial-gradient(circle at 95% 4%, rgba(5, 150, 105, .15), transparent 28%), radial-gradient(circle at 4% 0%, rgba(66, 165, 245, .13), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        box-shadow: var(--shadow);
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        overflow: hidden;
+        animation: bxFadeUp .28s ease both;
+    }
+
+        .admin-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--money), var(--primary-3), var(--primary));
+            z-index: 2;
+        }
+
+        .admin-card::after {
+            content: "";
+            position: absolute;
+            right: -125px;
+            top: -125px;
+            width: 310px;
+            height: 310px;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(13, 71, 161, .08), rgba(13, 71, 161, .02) 60%, transparent 70%);
+            pointer-events: none;
+        }
+
+    .card-title {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        margin: 0 0 5px;
+        color: var(--text);
+        font-size: 22px;
+        font-weight: 900;
+        letter-spacing: -.04em;
+        line-height: 1.15;
+    }
+
+        .card-title::before {
+            content: "💼";
+            width: 44px;
+            height: 44px;
+            border-radius: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at top right, rgba(255,255,255,.35), transparent 35%), linear-gradient(135deg, var(--money), var(--primary));
+            color: #ffffff;
+            box-shadow: 0 12px 26px rgba(5, 150, 105, .22);
+            font-size: 20px;
+            flex: 0 0 auto;
+        }
+
+    .card-subtitle {
+        position: relative;
+        z-index: 3;
+        margin: 0 0 22px 57px;
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.55;
+    }
+
+    .admin-tabs {
+        position: relative;
+        z-index: 3;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(248,251,255,.92));
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-tab {
+        position: relative;
+        min-height: 39px;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 0 17px;
+        background: transparent;
+        color: var(--muted);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 850;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: transform .16s ease, box-shadow .16s ease, background .16s ease, color .16s ease, border-color .16s ease;
+    }
+
+        .admin-tab:hover {
+            color: var(--primary);
+            background: var(--primary-soft);
+            transform: translateY(-1px);
+        }
+
+        .admin-tab.active {
+            color: #ffffff;
+            border-color: rgba(255,255,255,.25);
+            background: radial-gradient(circle at top right, rgba(255,255,255,.25), transparent 34%), linear-gradient(135deg, var(--primary), var(--primary-2));
+            box-shadow: 0 10px 24px rgba(13, 71, 161, .24);
+        }
+
+    .admin-input {
+        width: 100%;
+        height: 46px;
+        border: 1.5px solid var(--border);
+        border-radius: 15px;
+        padding: 0 15px;
+        background: #ffffff;
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        outline: none;
+        box-shadow: var(--shadow-xs);
+        transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+    }
+
+        .admin-input::placeholder {
+            color: var(--muted-2);
+            font-weight: 500;
+        }
+
+        .admin-input:hover {
+            border-color: var(--border-2);
+        }
+
+        .admin-input:focus {
+            border-color: var(--primary-3);
+            box-shadow: 0 0 0 4px rgba(66, 165, 245, .14), var(--shadow-sm);
+            transform: translateY(-1px);
+        }
+
+    select.admin-input {
+        appearance: none;
+        cursor: pointer;
+        padding-right: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 17px;
+    }
+
+    .btn-save-permissions {
+        min-height: 44px;
+        border: none;
+        border-radius: 15px;
+        padding: 0 18px;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.28), transparent 35%), linear-gradient(135deg, var(--primary), var(--primary-2));
+        color: #ffffff;
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 12.5px;
+        font-weight: 900;
+        cursor: pointer;
+        box-shadow: 0 11px 26px rgba(13, 71, 161, .23);
+        transition: transform .16s ease, box-shadow .16s ease, filter .16s ease, opacity .16s ease;
+    }
+
+        .btn-save-permissions:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 34px rgba(13, 71, 161, .30);
+            filter: brightness(1.04);
+        }
+
+        .btn-save-permissions:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn-save-permissions:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+    .admin-card > div[style*="display:flex; gap:8px"] {
+        position: relative;
+        z-index: 3;
+        align-items: center !important;
+        padding: 16px !important;
+        margin-bottom: 16px !important;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: radial-gradient(circle at top right, rgba(66,165,245,.09), transparent 30%), #ffffff;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .admin-card > div[style*="display:flex; gap:8px"] .admin-input {
+            max-width: none !important;
+            padding-left: 42px;
+            background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 14px center;
+            background-size: 17px;
+        }
+
+    .admin-card > div[style*="max-width:500px"] {
+        position: relative;
+        z-index: 4;
+        max-width: 560px !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 18px !important;
+        background: #ffffff !important;
+        padding: 10px !important;
+        margin-bottom: 16px !important;
+        box-shadow: var(--shadow);
+        animation: bxFadeUp .2s ease both;
+    }
+
+    .user-row {
+        position: relative;
+        width: 100%;
+        min-height: 58px;
+        border: 1.5px solid transparent;
+        background: rgba(255, 255, 255, .92);
+        padding: 12px 12px 12px 48px;
+        border-radius: 15px;
+        text-align: left;
+        cursor: pointer;
+        margin-bottom: 7px;
+        transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+        overflow: hidden;
+    }
+
+        .user-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .user-row::before {
+            content: "👤";
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 11px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 13px;
+        }
+
+        .user-row:hover {
+            border-color: var(--primary-3);
+            background: var(--primary-ultra);
+            transform: translateX(3px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .user-row.active {
+            background: linear-gradient(135deg, var(--primary-soft), #ffffff);
+            border-color: var(--primary-2);
+            box-shadow: 0 8px 22px rgba(13, 71, 161, .13);
+        }
+
+        .user-row strong {
+            display: block;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 900;
+            line-height: 1.25;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .user-row small {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 650;
+            line-height: 1.35;
+        }
+
+    .admin-card > div[style*="align-items:center; gap:12px"] {
+        position: relative;
+        z-index: 3;
+        padding: 16px !important;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: radial-gradient(circle at top right, rgba(5,150,105,.12), transparent 30%), linear-gradient(135deg, #ffffff 0%, var(--money-soft) 100%);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-card > div[style*="background:var(--primary-soft)"] {
+        border: 1.5px solid rgba(13, 71, 161, .18) !important;
+        border-radius: 17px !important;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.72), transparent 35%), linear-gradient(135deg, var(--primary-soft), #ffffff) !important;
+        box-shadow: var(--shadow-xs);
+    }
+
+        .admin-card > div[style*="background:var(--primary-soft)"] strong {
+            color: var(--primary) !important;
+            font-weight: 900 !important;
+        }
+
+    .commission-hero {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        gap: 14px;
+    }
+
+    .commission-main-card {
+        position: relative;
+        min-height: 124px;
+        padding: 20px;
+        border: 1.5px solid #bbf7d0;
+        border-radius: 20px;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.78), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--money-soft) 100%);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition: transform .18s ease, box-shadow .18s ease;
+    }
+
+        .commission-main-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow);
+        }
+
+        .commission-main-card::before {
+            content: "";
+            position: absolute;
+            right: -28px;
+            top: -28px;
+            width: 94px;
+            height: 94px;
+            border-radius: 999px;
+            background: rgba(22, 163, 74, .10);
+        }
+
+        .commission-main-card::after {
+            content: "R$";
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            width: 38px;
+            height: 38px;
+            border-radius: 14px;
+            background: #dcfce7;
+            color: var(--money);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 900;
+            box-shadow: 0 6px 16px rgba(15,23,42,.08);
+        }
+
+        .commission-main-card span {
+            display: block;
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 10.5px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .commission-main-card strong {
+            display: block;
+            margin-right: 42px;
+            color: var(--money);
+            font-size: 31px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -.045em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .commission-main-card small {
+            display: block;
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 11.5px;
+            font-weight: 650;
+            line-height: 1.4;
+        }
+
+    .loading {
+        position: relative;
+        z-index: 3;
+        min-height: 170px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        border: 1.5px dashed var(--border-2);
+        border-radius: 20px;
+        background: radial-gradient(circle at top, rgba(66, 165, 245, .09), transparent 35%), #ffffff;
+        color: var(--muted);
+        font-size: 13px;
+        font-weight: 850;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .loading::before {
+            content: "";
+            width: 23px;
+            height: 23px;
+            border-radius: 999px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            animation: bxSpin .75s linear infinite;
+        }
+
+    .empty-state {
+        position: relative;
+        z-index: 3;
+        padding: 42px 24px;
+        border: 1.5px dashed var(--border-2);
+        border-radius: 20px;
+        background: radial-gradient(circle at top, rgba(66, 165, 245, .09), transparent 35%), #ffffff;
+        color: var(--muted);
+        text-align: center;
+        font-size: 13px;
+        font-weight: 850;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .empty-state::before {
+            content: "📄";
+            width: 58px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+            border-radius: 20px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 25px;
+            box-shadow: var(--shadow-sm);
+        }
+
+    .admin-card > div[style*="Selecionar todos em aberto"],
+    .admin-card > div[style*="align-items:center; gap:10px"] {
+        position: relative;
+        z-index: 3;
+    }
+
+    label:has(input[type="checkbox"]) {
+        user-select: none;
+    }
+
+    .commission-checkbox,
+    input[type="checkbox"] {
+        width: 18px !important;
+        height: 18px !important;
+        accent-color: var(--money) !important;
+        cursor: pointer;
+        filter: drop-shadow(0 2px 4px rgba(15,23,42,.08));
+    }
+
+    .table-wrap {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 21px;
+        background: #ffffff;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .table-wrap::-webkit-scrollbar,
+        .admin-list::-webkit-scrollbar {
+            height: 9px;
+            width: 9px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track,
+        .admin-list::-webkit-scrollbar-track {
+            background: #eef4fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb,
+        .admin-list::-webkit-scrollbar-thumb {
+            background: #bfd3ec;
+            border-radius: 999px;
+        }
+
+            .table-wrap::-webkit-scrollbar-thumb:hover,
+            .admin-list::-webkit-scrollbar-thumb:hover {
+                background: #9dbbe0;
+            }
+
+    table {
+        width: 100%;
+        min-width: 1180px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+    }
+
+    th {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #f8fbff 0%, #edf5ff 100%);
+        color: var(--muted);
+        text-align: left;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+    }
+
+        th:first-child {
+            border-top-left-radius: 21px;
+            text-align: center;
+        }
+
+        th:last-child {
+            border-top-right-radius: 21px;
+        }
+
+    td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #edf2f7;
+        background: #ffffff;
+        color: var(--text-2);
+        font-size: 12.5px;
+        font-weight: 650;
+        vertical-align: middle;
+        transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+    }
+
+    tbody tr:hover td {
+        background: var(--primary-soft);
+    }
+
+        tbody tr:hover td:first-child {
+            box-shadow: inset 4px 0 0 var(--primary-3);
+        }
+
+    tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    td[data-label="Sel."] {
+        text-align: center;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        font-weight: 900;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+
+        .badge.status-info {
+            background: var(--primary-soft);
+            color: var(--primary);
+            border-color: rgba(13, 71, 161, .13);
+        }
+
+            .badge.status-info::before {
+                content: "#";
+                margin-right: 3px;
+                opacity: .7;
+            }
+
+        .badge.status-ok {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+
+            .badge.status-ok::before {
+                content: "✓";
+                margin-right: 6px;
+                font-family: 'Sora', Arial, sans-serif;
+            }
+
+        .badge.status-danger {
+            background: #ffe4e6;
+            color: var(--danger-2);
+            border-color: #fecdd3;
+        }
+
+            .badge.status-danger::before {
+                content: "●";
+                margin-right: 6px;
+                font-size: 8px;
+                animation: bxPulseDanger 1.35s ease-in-out infinite;
+            }
+
+        .badge.status-empty {
+            background: #f1f5f9;
+            color: var(--muted);
+            border-color: #cbd5e1;
+        }
+
+    .date-strong {
+        display: block;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        font-weight: 850;
+        line-height: 1.25;
+    }
+
+    .date-sub {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+
+    .obs-cell {
+        max-width: 330px;
+        color: var(--muted);
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    tbody tr:hover .obs-cell {
+        color: var(--text-2);
+    }
+
+    .admin-list {
+        max-height: calc(100vh - 210px);
+        overflow-y: auto;
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: radial-gradient(circle at top left, rgba(220,38,38,.08), transparent 34%), #ffffff;
+        box-shadow: var(--shadow-sm);
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-2) transparent;
+    }
+
+    .admin-card > div[style*="grid-template-columns:280px"] {
+        position: relative;
+        z-index: 3;
+        grid-template-columns: 310px minmax(0, 1fr) !important;
+    }
+
+    a[href*="wa.me"] {
+        transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+    }
+
+        a[href*="wa.me"]:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.04);
+            box-shadow: 0 14px 30px rgba(5,150,105,.28) !important;
+        }
+
+    pre {
+        border-radius: 16px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        padding: 14px;
+        box-shadow: var(--shadow-xs);
+    }
+
+    div[style*="position:fixed"] {
+        backdrop-filter: blur(8px);
+        background: radial-gradient(circle at center, rgba(13, 71, 161, .16), rgba(0,0,0,.58)) !important;
+        animation: bxModalBackdrop .18s ease both;
+    }
+
+    div[style*="max-width:520px"] {
+        position: relative;
+        border: 1px solid rgba(255,255,255,.45);
+        border-radius: 26px !important;
+        background: radial-gradient(circle at top right, rgba(5,150,105,.12), transparent 32%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+        box-shadow: 0 30px 90px rgba(0,0,0,.28) !important;
+        animation: bxModalIn .22s ease both;
+    }
+
+        div[style*="max-width:520px"]::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--money), var(--primary-3), var(--primary));
+            border-radius: 26px 26px 0 0;
+        }
+
+        div[style*="max-width:520px"] h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 19px !important;
+            font-weight: 900 !important;
+            letter-spacing: -.03em;
+        }
+
+        div[style*="max-width:520px"] p {
+            line-height: 1.45;
+        }
+
+        div[style*="max-width:520px"] label {
+            color: var(--muted) !important;
+            font-size: 10.5px !important;
+            font-weight: 900 !important;
+            text-transform: uppercase;
+            letter-spacing: .08em !important;
+        }
+
+    div[style*="grid-template-columns:1fr 1fr 1fr"] button {
+        min-height: 39px;
+        border-radius: 14px !important;
+        font-family: 'Sora', Arial, sans-serif !important;
+        font-size: 11.5px !important;
+        font-weight: 850 !important;
+        transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+        div[style*="grid-template-columns:1fr 1fr 1fr"] button:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+    div[style*="Total a receber"] {
+        background: radial-gradient(circle at top right, rgba(5,150,105,.08), transparent 35%), #ffffff !important;
+    }
+
+    .modal-baixa-backdrop {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        z-index: 999999 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 16px !important;
+        background: rgba(0, 0, 0, .55) !important;
+        backdrop-filter: blur(8px);
+        overflow: hidden !important;
+        touch-action: none;
+    }
+
+    .modal-baixa-content {
+        position: relative;
+        width: min(520px, calc(100vw - 32px)) !important;
+        max-height: calc(100dvh - 32px) !important;
+        margin: 0 !important;
+        padding: 28px;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+    }
+
+    body:has(.modal-baixa-backdrop) {
+        overflow: hidden;
+    }
+
+    @@media (max-width: 1180px) {
+        .commission-hero {
+            grid-template-columns: 1fr !important;
+        }
+
+        .admin-card > div[style*="grid-template-columns:280px"] {
+            grid-template-columns: 280px minmax(0, 1fr) !important;
+        }
+    }
+
+    @@media (max-width: 920px) {
+        .admin-card {
+            padding: 18px;
+            border-radius: 20px;
+        }
+
+        .card-title {
+            font-size: 19px;
+        }
+
+            .card-title::before {
+                width: 39px;
+                height: 39px;
+                border-radius: 15px;
+            }
+
+        .card-subtitle {
+            margin-left: 51px;
+        }
+
+        .admin-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            width: 100%;
+            border-radius: 18px;
+        }
+
+        .admin-tab {
+            width: 100%;
+        }
+
+        .admin-card > div[style*="display:flex; gap:8px"] {
+            flex-direction: column;
+            align-items: stretch !important;
+        }
+
+            .admin-card > div[style*="display:flex; gap:8px"] .btn-save-permissions {
+                width: 100%;
+            }
+
+        .admin-card > div[style*="align-items:center; gap:12px"] {
+            align-items: stretch !important;
+            flex-direction: column;
+        }
+
+        .admin-card > div[style*="grid-template-columns:280px"] {
+            grid-template-columns: 1fr !important;
+        }
+
+        .admin-list {
+            max-height: 310px;
+        }
+
+        table {
+            min-width: 1080px;
+        }
+    }
+
+    @@media (max-width: 650px) {
+        .admin-card {
+            min-height: auto;
+            padding: 14px;
+            border-radius: 18px;
+        }
+
+        .card-title {
+            align-items: flex-start;
+            font-size: 17px;
+        }
+
+            .card-title::before {
+                display: none;
+            }
+
+        .card-subtitle {
+            margin: 8px 0 18px;
+            font-size: 12px;
+        }
+
+        .admin-tabs {
+            grid-template-columns: 1fr;
+            border-radius: 16px;
+        }
+
+        .admin-input {
+            height: 44px;
+            font-size: 12px;
+        }
+
+        .btn-save-permissions {
+            width: 100%;
+        }
+
+        .commission-main-card {
+            min-height: 112px;
+            padding: 17px;
+        }
+
+            .commission-main-card strong {
+                font-size: 27px;
+            }
+
+        .table-wrap {
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            overflow: visible;
+        }
+
+        table {
+            min-width: unset;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+
+        thead {
+            display: none;
+        }
+
+        tbody,
+        tr,
+        td {
+            display: block;
+            width: 100%;
+        }
+
+            tbody tr {
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                background: #ffffff;
+                box-shadow: var(--shadow-sm);
+                overflow: hidden;
+                transition: box-shadow .16s ease, transform .16s ease;
+            }
+
+                tbody tr:hover {
+                    transform: translateY(-2px);
+                    box-shadow: var(--shadow);
+                }
+
+                    tbody tr:hover td:first-child {
+                        box-shadow: none;
+                    }
+
+        td {
+            display: grid;
+            grid-template-columns: 135px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+            padding: 11px 13px;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 12px;
+        }
+
+            td:last-child {
+                border-bottom: none;
+            }
+
+            td::before {
+                content: attr(data-label);
+                color: var(--muted);
+                font-size: 9.5px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+            }
+
+            td[data-label="Sel."] {
+                text-align: left;
+            }
+
+        .obs-cell {
+            max-width: unset;
+        }
+
+        div[style*="max-width:520px"] {
+            width: calc(100% - 22px) !important;
+            max-height: calc(100vh - 26px) !important;
+            padding: 20px !important;
+            border-radius: 22px !important;
+        }
+
+        div[style*="grid-template-columns:1fr 1fr 1fr"] {
+            grid-template-columns: 1fr 1fr !important;
+        }
+
+        div[style*="grid-template-columns:1fr 1fr; gap:10px"] {
+            grid-template-columns: 1fr !important;
+        }
+
+        .modal-baixa-backdrop {
+            padding: 10px !important;
+            align-items: center !important;
+        }
+
+        .modal-baixa-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: calc(100dvh - 20px) !important;
+            margin: 0 !important;
+            padding: 20px !important;
+            overflow-y: auto !important;
+            border-radius: 20px !important;
+        }
+    }
+
+    @@media (max-width: 430px) {
+        td {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        div[style*="grid-template-columns:1fr 1fr 1fr"] {
+            grid-template-columns: 1fr !important;
+        }
+
+        .commission-main-card::after {
+            display: none;
+        }
+
+        .commission-main-card strong {
+            margin-right: 0;
+        }
+    }
+
+    @@keyframes bxFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @@keyframes bxModalBackdrop {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    @@keyframes bxModalIn {
+        from {
+            opacity: 0;
+            transform: translateY(14px) scale(.985);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+    @@keyframes bxSpin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    @@keyframes bxPulseDanger {
+        0%, 100% {
+            opacity: .45;
+            transform: scale(.9);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(1.18);
+        }
+    }
+</style>
+
+
+<div class="admin-card">
+   
+
+    @* SUB-ABAS *@
+    <div class="admin-tabs" style="margin-bottom:20px;">
+        <button class="@(SubAbaAdminClientes == "baixa-receber" ? "admin-tab active" : "admin-tab")"
+                @onclick="AbrirSubAbaBaixaReceber">
+            💰 Baixa de Receber
+        </button>
+        <button class="@(SubAbaAdminClientes == "cobranca" ? "admin-tab active" : "admin-tab")"
+                @onclick="AbrirSubAbaCobranca">
+            📞 Cobrança
+        </button>
+    </div>
+
+    @* ── SUB-ABA: BAIXA DE RECEBER ── *@
+    @if (SubAbaAdminClientes == "baixa-receber")
+    {
+        @* Cole aqui todo o conteúdo interno que já existe na aba,
+               começando do <div style="display:flex; gap:8px; margin-bottom:12px;"> da busca
+               até o final do modal, sem o <div class="admin-card"> externo *@
+
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+            <input class="admin-input"
+                   style="max-width:400px;"
+                   placeholder="Buscar cliente por código, nome ou apelido..."
+                   @bind="FiltroBuscaCliente"
+                   @bind:event="oninput"
+                   @onkeydown="OnBuscaKeyDown" />
+            <button class="btn-save-permissions"
+                    @onclick="BuscarClientesBaixa"
+                    disabled="@BuscandoCliente">
+                @(BuscandoCliente ? "Buscando..." : "🔍 Buscar")
+            </button>
+        </div>
+
+        @if (ResultadoBuscaClientes.Any())
+        {
+            <div style="border:1.5px solid var(--border); border-radius:var(--radius-sm);
+                background:var(--surface-2); padding:8px; margin-bottom:16px; max-width:500px;">
+                @foreach (var cli in ResultadoBuscaClientes)
+                {
+                    <button class="user-row" @onclick="() => SelecionarClienteBaixa(cli)">
+                        <strong>@(!string.IsNullOrWhiteSpace(cli.Apelido) ? cli.Apelido : cli.NomeCliente)</strong>
+                        <small>Código: @cli.Codigo — @cli.NomeCliente</small>
+                    </button>
+                }
+            </div>
+        }
+
+        @if (ClienteSelecionadoBaixa != null)
+        {
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+                <div style="background:var(--primary-soft); border:1.5px solid var(--primary-3);
+                    border-radius:var(--radius-sm); padding:10px 16px;">
+                    <span style="font-size:10px; color:var(--muted); text-transform:uppercase;
+                    font-weight:700; letter-spacing:.05em;">Cliente selecionado</span>
+                    <strong style="display:block; color:var(--primary); font-size:14px;">
+                        @(!string.IsNullOrWhiteSpace(ClienteSelecionadoBaixa.Apelido)
+                            ? ClienteSelecionadoBaixa.Apelido
+                            : ClienteSelecionadoBaixa.NomeCliente)
+                    </strong>
+                    <small style="color:var(--muted);">
+                        Cód. @ClienteSelecionadoBaixa.Codigo — @ClienteSelecionadoBaixa.NomeCliente
+                    </small>
+                </div>
+
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <label style="font-size:11px; font-weight:700; color:var(--muted);">Situação:</label>
+                    @foreach (var (val, label) in new[] {
+                            ("abertos","Abertos"), ("pagos","Pagos"), ("todos","Todos") })
+                    {
+                        <button class="@(SituacaoFiltro == val ? "admin-tab active" : "admin-tab")"
+                                style="padding:6px 14px;"
+                                @onclick="async () => { SituacaoFiltro = val; await CarregarContasReceber(); }">
+                            @label
+                        </button>
+                    }
+                </div>
+
+                <button class="btn-save-permissions" style="margin-left:auto;"
+                        @onclick="CarregarContasReceber"
+                        disabled="@CarregandoContas">
+                    🔄 Atualizar
+                </button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(MensagemBaixa) && !MostrarFormBaixa)
+            {
+                <div style="margin-bottom:14px; padding:10px 14px; border-radius:var(--radius-sm);
+                    background:var(--success-soft); border:1.5px solid #a7f3d0;
+                    color:var(--success); font-size:12px; font-weight:600;">
+                    @MensagemBaixa
+                </div>
+            }
+
+            @if (ContasReceber.Any(c => c.Selecionado))
+            {
+                <div class="commission-hero" style="grid-template-columns:repeat(2,1fr); margin-bottom:16px;">
+                    <div class="commission-main-card">
+                        <span>Total selecionado (s/ juros)</span>
+                        <strong>@TotalSelecionado.ToString("C")</strong>
+                        <small>@ContasReceber.Count(c => c.Selecionado) título(s) marcado(s)</small>
+                    </div>
+                    <div class="commission-main-card">
+                        <span>Total selecionado (c/ juros)</span>
+                        <strong>@TotalSelecionadoComJuros.ToString("C")</strong>
+                        <small>Juros 2% ao mês proporcional por dia · 2 dias de carência</small>
+                    </div>
+                </div>
+            }
+
+            @if (CarregandoContas)
+            {
+                <div class="loading">Carregando títulos...</div>
+            }
+            else if (!ContasReceber.Any())
+            {
+                <div class="empty-state">Nenhum título encontrado para este cliente.</div>
+            }
+            else
+            {
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                    <label style="display:flex; align-items:center; gap:6px;
+                        font-size:12px; font-weight:600; color:var(--muted); cursor:pointer;">
+                        <input type="checkbox"
+                               style="width:15px; height:15px; accent-color:var(--primary-2);"
+                               @onchange="e => SelecionarTodosAbertos(Convert.ToBoolean(e.Value))" />
+                        Selecionar todos em aberto
+                    </label>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width:36px;"></th>
+                                <th>Título</th>
+                                <th>Tipo</th>
+                                <th>Vencimento</th>
+                                <th>Valor</th>
+                                <th>C/ Juros</th>
+                                <th>Parcela</th>
+                                <th>Observação</th>
+                                <th>Pagamento</th>
+                                <th>Situação</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ct in ContasReceber)
+                            {
+                                var vencido = ct.DataPagamento == null
+                                    && ct.DataVencimento != null
+                                    && ct.DataVencimento.Value.Date < DateTime.Today;
+
+                                <tr style="@(vencido ? "background:#fff5f5;" : "")">
+                                    <td data-label="Sel.">
+                                        <input type="checkbox" class="commission-checkbox" @bind="ct.Selecionado" />
+                                    </td>
+                                    <td data-label="Título"><span class="badge status-info">@ct.Codigo</span></td>
+                                    <td data-label="Tipo">@ct.NomeTipoConta</td>
+                                    <td data-label="Vencimento">
+                                        <span class="date-strong" style="@(vencido ? "color:var(--danger);" : "")">
+                                            @FormatarData(ct.DataVencimento)
+                                        </span>
+                                        @if (ct.DiasAtraso > 0)
+                                        {
+                                            <span class="date-sub" style="color:var(--danger);">
+                                                @ct.DiasAtraso dia(s) em atraso
+                                            </span>
+                                        }
+                                    </td>
+                                    <td data-label="Valor"><span class="date-strong">@ct.Valor?.ToString("C")</span></td>
+                                    <td data-label="C/ Juros">
+                                        <span class="date-strong"
+                                              style="color:@(ct.DiasAtraso > 0 ? "var(--danger)" : "var(--text)");">
+                                            @ct.ValorComJuros.ToString("C")
+                                        </span>
+                                    </td>
+                                    <td data-label="Parcela">
+                                        @if (!string.IsNullOrWhiteSpace(ct.Parcela))
+                                        {
+                                            <span class="badge">@ct.Parcela/@ct.TotalParcela</span>
+                                        }
+                                    </td>
+                                    <td data-label="Observação"><div class="obs-cell">@ct.Observacao</div></td>
+                                    <td data-label="Pagamento">
+                                        @if (ct.DataPagamento != null)
+                                        {
+                                            <span class="date-strong">@FormatarData(ct.DataPagamento)</span>
+                                            <span class="date-sub">@ct.ValorPago?.ToString("C") — @ct.TipoPagamento</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:var(--muted); font-size:11px;">—</span>
+                                        }
+                                    </td>
+                                    <td data-label="Situação">
+                                        <span class="badge @(ct.DataPagamento != null ? "status-ok" : (vencido ? "status-danger" : "status-empty"))">
+                                            @(ct.DataPagamento != null ? "Pago" : (vencido ? "Vencido" : "Aberto"))
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @if (TitulosSelecionados.Any())
+            {
+                <div style="margin-top:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                    <button class="btn-save-permissions"
+                            style="background:linear-gradient(135deg,#059669,#047857);"
+                            @onclick="AbrirFormBaixa">
+                        💰 Realizar baixa (@TitulosSelecionados.Count título(s))
+                    </button>
+                </div>
+            }
+        }
+
+        
+    }
+
+    @* ── SUB-ABA: COBRANÇA ── *@
+    else if (SubAbaAdminClientes == "cobranca")
+    {
+        <input class="admin-input"
+               style="max-width:400px; margin-bottom:16px;"
+               placeholder="Buscar por código, nome ou apelido..."
+               @bind="FiltroCobranca"
+               @bind:event="oninput" />
+
+        @if (CarregandoCobranca)
+        {
+            <div class="loading">Carregando clientes...</div>
+        }
+        else if (!ClientesCobrancaFiltrados.Any())
+        {
+            <div class="empty-state">Nenhum cliente com títulos vencidos encontrado.</div>
+        }
+        else
+        {
+            <div style="display:grid; grid-template-columns:280px 1fr; gap:16px; margin-top:8px;">
+
+                @* LISTA DE CLIENTES *@
+                <div class="admin-list">
+                    @foreach (var cli in ClientesCobrancaFiltrados)
+                    {
+                        <button class="user-row @(ClienteCobrancaSelecionado?.CodCliente == cli.CodCliente ? "active" : "")"
+                                @onclick="() => SelecionarClienteCobranca(cli)">
+                            <strong>@(!string.IsNullOrWhiteSpace(cli.Apelido) ? cli.Apelido : cli.NomeCliente)</strong>
+                            <small>@cli.NomeCliente — Total: @cli.ValorTotal.ToString("C")</small>
+                        </button>
+                    }
+                </div>
+
+                @* DETALHE DO CLIENTE SELECIONADO *@
+                <div>
+                    @if (ClienteCobrancaSelecionado == null)
+                    {
+                        <div class="empty-state">Selecione um cliente para ver os títulos.</div>
+                    }
+                    else
+                    {
+                        <div style="background:var(--primary-soft); border:1.5px solid var(--primary-3);
+                            border-radius:var(--radius-sm); padding:12px 16px; margin-bottom:16px;
+                            display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <span style="font-size:10px; color:var(--muted); text-transform:uppercase;
+                                font-weight:700; letter-spacing:.05em;">Cliente</span>
+                                <strong style="display:block; color:var(--primary); font-size:14px;">
+                                    @(!string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado.Apelido)
+                                        ? ClienteCobrancaSelecionado.Apelido
+                                        : ClienteCobrancaSelecionado.NomeCliente)
+                                </strong>
+                                <small style="color:var(--muted);">
+                                    Celular: @ClienteCobrancaSelecionado.Celular |
+                                    Total em aberto: @TitulosCobranca.Sum(t => t.ValorComJuros).ToString("C")
+                                </small>
+                            </div>
+
+                            @if (!string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado.Celular))
+                            {
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button style="display:inline-flex; align-items:center; gap:6px; padding:10px 16px;
+                                        border-radius:var(--radius-sm); background:linear-gradient(135deg,#d97706,#b45309);
+                                        color:white; font-size:12px; font-weight:700; text-decoration:none; border:none; cursor:pointer;
+                                        box-shadow:0 4px 12px rgba(217,119,6,.25);"
+                                            @onclick="AbrirLembreteWhatsApp">
+                                        🔔 Enviar lembrete via WhatsApp
+                                    </button>
+                                    <button style="display:inline-flex; align-items:center; gap:6px; padding:10px 16px;
+                                        border-radius:var(--radius-sm); background:linear-gradient(135deg,#059669,#047857);
+                                        color:white; font-size:12px; font-weight:700; text-decoration:none; border:none; cursor:pointer;
+                                        box-shadow:0 4px 12px rgba(5,150,105,.25);"
+                                            @onclick="AbrirCobrancaWhatsApp">
+                                        📱 Enviar cobrança via WhatsApp
+                                    </button>
+
+                                    <button class="btn-save-permissions"
+                                            style="background:linear-gradient(135deg,#7c3aed,#5b21b6);
+                                        box-shadow:0 4px 12px rgba(124,58,237,.28);"
+                                            @onclick="GerarLinkPix"
+                                            disabled="@GerandoLinkPix">
+                                        @(GerandoLinkPix ? "Gerando..." : "⚡ Gerar Link PIX")
+                                    </button>
+
+                                    @if (!string.IsNullOrWhiteSpace(ErroLinkPix))
+                                    {
+                                        <div style="width:100%; margin-top:8px; padding:8px 12px; border-radius:12px;
+                                            background:var(--danger-soft); border:1px solid #fca5a5;
+                                            color:var(--danger); font-size:11.5px; font-weight:600;">
+                                            @ErroLinkPix
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span style="font-size:11px; color:var(--danger); font-weight:600;">
+                                    ⚠️ Sem celular cadastrado
+                                </span>
+                            }
+                        </div>
+
+                        @* PRÉVIA DA MENSAGEM *@
+                        <div style="background:var(--surface-2); border:1.5px solid var(--border);
+                            border-radius:var(--radius-sm); padding:14px; margin-bottom:16px;">
+                            <span style="display:block; font-size:10px; color:var(--muted); font-weight:700;
+                                text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;">
+                                Prévia da mensagem
+                            </span>
+                            <pre style="margin:0; font-family:'Sora',sans-serif; font-size:12px;
+                            color:var(--text-2); white-space:pre-wrap; line-height:1.6;">@GerarMensagemCobranca()</pre>
+                        </div>
+
+                        @* TABELA DE TÍTULOS *@
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Título</th>
+                                        <th>Tipo</th>
+                                        <th>Vencimento</th>
+                                        <th>Valor</th>
+                                        <th>C/ Juros</th>   <!-- ← nova -->
+                                        <th>Dias em atraso</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var t in TitulosCobranca)
+                                    {
+                                        <tr>
+                                            <td data-label="Título">
+                                                <span class="badge status-danger">@t.Codigo</span>
+                                            </td>
+                                            <td data-label="Tipo">
+                                                <span class="badge @(t.EhBoleto ? "status-info" : "status-ok")">
+                                                    @t.TipoIcone
+                                                </span>
+                                            </td>
+                                            <td data-label="Vencimento">
+                                                <span class="date-strong" style="color:var(--danger);">
+                                                    @t.DataVencimento.ToString("dd/MM/yyyy")
+                                                </span>
+                                            </td>
+                                            <td data-label="Valor">
+                                                <span class="date-strong">@t.Valor.ToString("C")</span>
+                                            </td>
+                                            <td data-label="C/ Juros">
+                                                <!-- ← nova -->
+                                                <span class="date-strong" style="color:@(t.DiasAtraso > 2 ? "var(--danger)" : "var(--text)");">
+                                                    @t.ValorComJuros.ToString("C")
+                                                </span>
+                                            </td>
+                                            <td data-label="Dias em atraso">
+                                                <span class="badge status-danger">@t.DiasAtraso dia(s)</span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (MostrarModalPix)
+        {
+            <div style="position:fixed; inset:0; background:rgba(0,0,0,.45);
+                z-index:1000; display:flex; align-items:center; justify-content:center;">
+                <div style="background:var(--surface); border-radius:var(--radius-lg);
+                    padding:28px; width:100%; max-width:520px; box-shadow:var(--shadow-lg);
+                    max-height:90vh; overflow-y:auto;">
+
+                    <h3 style="margin:0 0 6px; font-size:17px; font-weight:900; color:var(--text);">
+                        ⚡ Link PIX Gerado
+                    </h3>
+                    <p style="margin:0 0 18px; font-size:12px; color:var(--muted);">
+                        Válido por 24 horas · Cliente:
+                        <strong>@ClienteCobrancaSelecionado?.NomeCliente</strong> ·
+                        Valor: <strong>@ClienteCobrancaSelecionado?.ValorTotalComJuros.ToString("C")</strong>
+                    </p>
+
+                    <div style="background:var(--surface-2); border:1.5px solid var(--border);
+                        border-radius:14px; padding:12px 14px; margin-bottom:16px;
+                        word-break:break-all; font-size:12px; color:var(--text-2);
+                        font-family:'JetBrains Mono',monospace; line-height:1.6;">
+                        @LinkPixGerado
+                    </div>
+
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;">
+                        <button class="btn-save-permissions"
+                                style="background:linear-gradient(135deg,#7c3aed,#5b21b6);"
+                                @onclick="CopiarLinkPix">
+                            📋 Copiar Link
+                        </button>
+
+                        <a href="@LinkPixGerado" target="_blank"
+                           style="display:inline-flex; align-items:center; gap:6px; padding:0 18px;
+                            min-height:44px; border-radius:15px;
+                            background:linear-gradient(135deg,#0d47a1,#1565c0);
+                            color:white; font-size:12.5px; font-weight:900; text-decoration:none;
+                            box-shadow:0 11px 26px rgba(13,71,161,.23);">
+                            🔗 Abrir Link
+                        </a>
+
+                        @if (!string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado?.Celular))
+                        {
+                            <button style="display:inline-flex; align-items:center; gap:6px; padding:0 18px;
+                                min-height:44px; border-radius:15px;
+                                background:linear-gradient(135deg,#059669,#047857);
+                                color:white; font-size:12.5px; font-weight:900; border:none; cursor:pointer;
+                                box-shadow:0 11px 26px rgba(5,150,105,.23);"
+                                    @onclick="AbrirWhatsAppComPix">
+                                📱 Enviar no WhatsApp
+                            </button>
+                        }
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end;">
+                        <button class="admin-tab" style="padding:10px 20px;"
+                                @onclick="() => MostrarModalPix = false">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+
+    }
+</div>
+
+@if (MostrarFormBaixa)
+{
+    <div class="modal-baixa-backdrop">
+        <div class="modal-baixa-content">
+
+            <h3 style="margin:0 0 4px; font-size:16px; font-weight:800; color:var(--text);">
+                💰 Confirmar Baixa
+            </h3>
+            <p style="margin:0 0 20px; font-size:12px; color:var(--muted);">
+                @TitulosSelecionados.Count título(s) —
+                Cliente: <strong>@ClienteSelecionadoBaixa?.NomeCliente</strong>
+            </p>
+
+            <div style="background:var(--surface-2); border:1.5px solid var(--border);
+                border-radius:var(--radius-sm); padding:12px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span style="font-size:11px; color:var(--muted); font-weight:600;">Valor dos títulos</span>
+                    <span style="font-size:13px; font-weight:700; font-family:'JetBrains Mono',monospace;">@ValorTotalBaixa.ToString("C")</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span style="font-size:11px; color:var(--muted); font-weight:600;">Acréscimo</span>
+                    <span style="font-size:13px; font-weight:700; color:var(--danger); font-family:'JetBrains Mono',monospace;">@AcrescimoValor.ToString("C")</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; border-top:1.5px solid var(--border); padding-top:8px; margin-top:4px;">
+                    <span style="font-size:12px; color:var(--text); font-weight:700;">Total a receber</span>
+                    <span style="font-size:15px; font-weight:800; color:var(--success); font-family:'JetBrains Mono',monospace;">@((ValorTotalBaixa + AcrescimoValor).ToString("C"))</span>
+                </div>
+            </div>
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                    margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                    Forma de Pagamento
+                </label>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                    @foreach (var forma in new[] { "Dinheiro", "Cheque à Vista", "Cheque a Prazo", "Cartão", "PIX", "Ticket" })
+                    {
+                        <button style="border:1.5px solid @(FormaPagamento == forma ? "var(--primary-2)" : "var(--border)");
+                            background:@(FormaPagamento == forma ? "var(--primary-soft)" : "var(--surface-2)");
+                            color:@(FormaPagamento == forma ? "var(--primary)" : "var(--muted)");
+                            padding:8px 6px; border-radius:var(--radius-sm);
+                            font-size:11px; font-weight:700; cursor:pointer;
+                            font-family:'Sora',sans-serif; transition:.15s;"
+                                @onclick="() => FormaPagamento = forma">
+                            @forma
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @if (FormaPagamento.StartsWith("Cheque"))
+            {
+                <div style="margin-bottom:14px;">
+                    <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                        margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                        Número do Cheque
+                    </label>
+                    <input class="admin-input" placeholder="Nº do cheque..." @bind="NumeroCheque" />
+                </div>
+            }
+
+            <div style="margin-bottom:14px;">
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                    margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                    Acréscimo / Juros (R$)
+                </label>
+                <input class="admin-input" type="number" min="0" step="0.01" placeholder="0,00"
+                       value="@AcrescimoValor.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                       @onchange="e => AcrescimoValor = decimal.TryParse(
+                                                                               e.Value?.ToString(),
+                                                                               System.Globalization.NumberStyles.Any,
+                                                                               System.Globalization.CultureInfo.InvariantCulture,
+                                                                               out var v) ? v : 0m" />
+</div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;">
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                        margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                        Data do Pagamento
+                    </label>
+                    <input class="admin-input" type="date"
+                           value="@DataPagamentoBaixa.ToString("yyyy-MM-dd")"
+                           @onchange="e => DataPagamentoBaixa = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : DateTime.Today" />
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                        margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                        Data de Compensação
+                    </label>
+                    <input class="admin-input" type="date"
+                           value="@DataCompensacaoBaixa.ToString("yyyy-MM-dd")"
+                           @onchange="e => DataCompensacaoBaixa = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : DateTime.Today" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:11px; font-weight:700; color:var(--muted);
+                    margin-bottom:6px; text-transform:uppercase; letter-spacing:.05em;">
+                    Conta Bancária (opcional)
+                </label>
+                <select class="admin-input"
+                        @onchange="e => CodContaSelecionada = string.IsNullOrWhiteSpace(e.Value?.ToString()) ? null : Convert.ToInt32(e.Value)">
+                    <option value="">— Sem conta bancária —</option>
+                    @foreach (var cb in ContasBancarias)
+                    {
+                        <option value="@cb.Codigo">@cb.ExibicaoCombo</option>
+                    }
+                </select>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(MensagemBaixa))
+            {
+                <div style="background:var(--danger-soft); border:1.5px solid #fca5a5;
+                    border-radius:var(--radius-sm); padding:10px 14px;
+                    color:var(--danger); font-size:12px; font-weight:600; margin-bottom:14px;">
+                    @MensagemBaixa
+                </div>
+            }
+
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="admin-tab" style="padding:10px 18px;"
+                        @onclick="FecharFormBaixa" disabled="@ExecutandoBaixa">
+                    Cancelar
+                </button>
+                <button class="btn-save-permissions"
+                        style="background:linear-gradient(135deg,#059669,#047857);"
+                        @onclick="ConfirmarBaixa" disabled="@ExecutandoBaixa">
+                    @(ExecutandoBaixa ? "Processando..." : "✅ Confirmar Baixa")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    // ── PIX MERCADO PAGO ──
+    private bool GerandoLinkPix = false;
+    private string LinkPixGerado = "";
+    private string ErroLinkPix = "";
+    private bool MostrarModalPix = false;
+
+
+    private bool Carregando = true;
+    private bool PodeAcessarAdmin = false;
+    private string MensagemPermissao = "";
+
+    private string FiltroVersoes = "";
+    private string FiltroStatusVersao = "todos";
+    private string VersaoAtualEsperada = "";
+
+
+    private IEnumerable<CobrancaClienteDto> ClientesCobrancaFiltrados =>
+        string.IsNullOrWhiteSpace(FiltroCobranca)
+            ? ClientesCobranca
+            : ClientesCobranca.Where(c =>
+                c.CodCliente.ToString().Contains(FiltroCobranca)
+                || (c.NomeCliente ?? "").Contains(FiltroCobranca, StringComparison.OrdinalIgnoreCase)
+                || (c.Apelido ?? "").Contains(FiltroCobranca, StringComparison.OrdinalIgnoreCase));
+
+    // ── FORMULÁRIO DE BAIXA ──
+    private bool MostrarFormBaixa = false;
+    private List<ContaBancariaDto> ContasBancarias = new();
+    private string FormaPagamento = "Dinheiro";
+    private decimal AcrescimoValor = 0;
+    private DateTime DataPagamentoBaixa = DateTime.Today;
+    private DateTime DataCompensacaoBaixa = DateTime.Today;
+    private int? CodContaSelecionada = null;
+    private string NumeroCheque = "";
+    private bool ExecutandoBaixa = false;
+    private string MensagemBaixa = "";
+
+    private List<int> TitulosSelecionados =>
+        ContasReceber.Where(c => c.Selecionado && c.DataPagamento == null)
+                     .Select(c => c.Codigo)
+                     .ToList();
+
+    private decimal ValorTotalBaixa =>
+        ContasReceber.Where(c => c.Selecionado && c.DataPagamento == null)
+                     .Sum(c => c.Valor ?? 0);
+    // ── BAIXA RECEBER ──
+    private string FiltroBuscaCliente = "";
+    private List<BaixaReceberClienteDto> ResultadoBuscaClientes = new();
+    private BaixaReceberClienteDto? ClienteSelecionadoBaixa = null;
+    private List<ContaReceberDto> ContasReceber = new();
+    private string SituacaoFiltro = "abertos"; // abertos | pagos | todos
+    private bool BuscandoCliente = false;
+    private bool CarregandoContas = false;
+
+    private decimal TotalSelecionado => ContasReceber
+        .Where(c => c.Selecionado)
+        .Sum(c => c.Valor ?? 0);
+
+    private decimal TotalSelecionadoComJuros => ContasReceber
+        .Where(c => c.Selecionado)
+        .Sum(c => c.ValorComJuros);
+
+    // ── SUB-ABA ADMINISTRAR CLIENTES ──
+    private string SubAbaAdminClientes = "baixa-receber"; // "baixa-receber" | "cobranca"
+
+    // ── COBRANÇA ──
+    private List<CobrancaClienteDto> ClientesCobranca = new();
+    private CobrancaClienteDto? ClienteCobrancaSelecionado = null;
+    private List<CobrancaTituloDto> TitulosCobranca = new();
+    private bool CarregandoCobranca = false;
+    private string FiltroCobranca = "";
+    private string MensagemCobranca = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Carregando = true;
+        MensagemPermissao = "";
+
+        try
+        {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            {
+                PodeAcessarAdmin = false;
+                MensagemPermissao = "Usuário ainda não foi carregado. Atualize a página.";
+                return;
+            }
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ACESSAR"
+            );
+
+            if (!PodeAcessarAdmin)
+            {
+                MensagemPermissao = "Você não tem permissão para acessar esta tela.";
+                return;
+            }
+
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao carregar controle de versões: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task BuscarClientesBaixa()
+    {
+        if (string.IsNullOrWhiteSpace(FiltroBuscaCliente)) return;
+        BuscandoCliente = true;
+        ResultadoBuscaClientes = await bxClienteService.BuscarClientesParaBaixaAsync(FiltroBuscaCliente);
+        BuscandoCliente = false;
+    }
+
+    private async Task SelecionarClienteBaixa(BaixaReceberClienteDto cliente)
+    {
+        ClienteSelecionadoBaixa = cliente;
+        ResultadoBuscaClientes = new();
+        await CarregarContasReceber();
+    }
+
+    private async Task CarregarContasReceber()
+    {
+        if (ClienteSelecionadoBaixa == null) return;
+        CarregandoContas = true;
+        ContasReceber = await bxClienteService.ListarContasReceberClienteAsync(
+    ClienteSelecionadoBaixa.Codigo, SituacaoFiltro);
+        CarregandoContas = false;
+    }
+
+    private void SelecionarTodosAbertos(bool valor)
+    {
+        foreach (var c in ContasReceber.Where(x => x.DataPagamento == null))
+            c.Selecionado = valor;
+    }
+
+    private async Task AbrirFormBaixa()
+    {
+        if (!TitulosSelecionados.Any())
+        {
+            MensagemBaixa = "Selecione ao menos um título em aberto.";
+            return;
+        }
+
+        MensagemBaixa = "";
+        FormaPagamento = "Dinheiro";
+        DataPagamentoBaixa = DateTime.Today;
+        DataCompensacaoBaixa = DateTime.Today;
+        CodContaSelecionada = null;
+        NumeroCheque = "";
+
+        // ← Pré-preenche o acréscimo com os juros já calculados
+        // (diferença entre ValorComJuros e Valor dos títulos selecionados)
+        AcrescimoValor = ContasReceber
+            .Where(c => c.Selecionado && c.DataPagamento == null)
+            .Sum(c => c.ValorComJuros - (c.Valor ?? 0));
+
+        // Arredonda para 2 casas
+        AcrescimoValor = Math.Round(AcrescimoValor, 2);
+
+        if (!ContasBancarias.Any())
+            ContasBancarias = await bxClienteService.ListarContasBancariasAsync();
+
+        MostrarFormBaixa = true;
+    }
+
+    private void FecharFormBaixa()
+    {
+        MostrarFormBaixa = false;
+        MensagemBaixa = "";
+    }
+
+    private async Task ConfirmarBaixa()
+    {
+        if (!TitulosSelecionados.Any()) return;
+
+        ExecutandoBaixa = true;
+        MensagemBaixa = "";
+
+        var input = new BaixaReceberInputDto
+        {
+            CodigosContaReceber = TitulosSelecionados,
+            NomeCliente = ClienteSelecionadoBaixa?.NomeCliente ?? "",
+            DataPagamento = DataPagamentoBaixa,
+            DataCompensacao = DataCompensacaoBaixa,
+            ValorTotal = ValorTotalBaixa,
+            Acrescimo = AcrescimoValor,
+            FormaPagamento = FormaPagamento,
+            CodContaBancaria = CodContaSelecionada,
+            NumeroCheque = NumeroCheque
+        };
+
+        var usuarioLogado = UserState.CurrentUser?.Trim().ToUpper() ?? "ADMIN";
+        var resultado = await bxClienteService.ExecutarBaixaReceberAsync(input, usuarioLogado);
+
+        ExecutandoBaixa = false;
+
+        if (resultado == "ok")
+        {
+            MostrarFormBaixa = false;
+            MensagemBaixa = "✅ Baixa realizada com sucesso!";
+            await CarregarContasReceber();
+
+            var detalhe = $"{FormaPagamento} · {TitulosSelecionados.Count} título(s) · " +
+                          $"Valor: {ValorTotalBaixa:C} · Juros: {AcrescimoValor:C} · " +
+                          $"Cliente: {input.NomeCliente}";
+
+            await LogFinanceiroService.RegistrarAsync(
+    usuario: UserState.CurrentUser?.Trim() ?? "",
+    codEmp: UserState.CurrentCompanyId,
+    nomeEmpresa: UserState.CurrentCompany,
+    tipoEvento: LogFinanceiroService.BAIXA_TITULO,
+    detalhe: detalhe,
+    ip: null);
+        }
+        else
+        {
+            MensagemBaixa = $"❌ Erro: {resultado}";
+        }
+    }
+
+    private async Task CarregarClientesCobranca()
+    {
+        CarregandoCobranca = true;
+        ClientesCobranca = await bxClienteService.ListarClientesCobrancaAsync();
+        ClienteCobrancaSelecionado = null;
+        TitulosCobranca = new();
+        CarregandoCobranca = false;
+    }
+
+    private async Task SelecionarClienteCobranca(CobrancaClienteDto cliente)
+    {
+        ClienteCobrancaSelecionado = cliente;
+        TitulosCobranca = await bxClienteService.ListarTitulosCobrancaClienteAsync(cliente.CodCliente);
+
+        // ← recalcula com juros já aplicados pelo DTO
+        ClienteCobrancaSelecionado.ValorTotalComJuros = TitulosCobranca.Sum(t => t.ValorComJuros);
+    }
+
+    private string GerarMensagemCobranca()
+    {
+        if (ClienteCobrancaSelecionado == null) return "";
+
+        var nome = !string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado.Apelido)
+            ? ClienteCobrancaSelecionado.Apelido
+            : ClienteCobrancaSelecionado.NomeCliente;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Olá, {nome} tudo bem?");
+        sb.AppendLine("Ainda não identificamos o pagamento dos títulos a seguir:");
+        sb.AppendLine();
+
+        foreach (var t in TitulosCobranca)
+            sb.AppendLine($"Valor: {t.ValorComJuros:C} | Vencimento: {t.DataVencimento:dd/MM/yyyy} | {t.DiasAtraso} dia(s) em atraso");
+
+        sb.AppendLine();
+        sb.AppendLine($"Total: {TitulosCobranca.Sum(t => t.ValorComJuros):C}");
+        sb.AppendLine();
+        sb.AppendLine("Qualquer dúvida, estou à disposição!");
+
+        return sb.ToString();
+    }
+
+    private string GerarLinkWhatsappCobranca()
+    {
+        if (ClienteCobrancaSelecionado == null) return "#";
+        var celular = new string(ClienteCobrancaSelecionado.Celular.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(celular)) return "#";
+        if (!celular.StartsWith("55")) celular = "55" + celular;
+        var mensagem = Uri.EscapeDataString(GerarMensagemCobranca());
+        return $"https://wa.me/{celular}?text={mensagem}";
+    }
+
+    private async Task AbrirSubAbaCobranca()
+    {
+        SubAbaAdminClientes = "cobranca";
+        await CarregarClientesCobranca();
+    }
+
+    private void AbrirSubAbaBaixaReceber()
+    {
+        SubAbaAdminClientes = "baixa-receber";
+    }
+
+    private string GerarLinkWhatsappLembrete()
+    {
+        if (ClienteCobrancaSelecionado == null) return "#";
+        var celular = new string(ClienteCobrancaSelecionado.Celular.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(celular)) return "#";
+        if (!celular.StartsWith("55")) celular = "55" + celular;
+
+        var nome = !string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado.Apelido)
+            ? ClienteCobrancaSelecionado.Apelido
+            : ClienteCobrancaSelecionado.NomeCliente;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"Olá, {nome} tudo bem?");
+        sb.AppendLine("Passando apenas para lembrar dos títulos a seguir:");
+        sb.AppendLine();
+
+        foreach (var t in TitulosCobranca)
+            sb.AppendLine($"Valor: {t.ValorComJuros:C} | Vencimento: {t.DataVencimento:dd/MM/yyyy}");
+
+        sb.AppendLine();
+        sb.AppendLine($"Total: {TitulosCobranca.Sum(t => t.ValorComJuros):C}");
+        sb.AppendLine();
+        sb.AppendLine("Caso já tenha sido pago, favor desconsiderar!");
+        sb.AppendLine("Qualquer dúvida, estou à disposição!");
+
+        return $"https://wa.me/{celular}?text={Uri.EscapeDataString(sb.ToString())}";
+    }
+
+    private async Task OnBuscaKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await BuscarClientesBaixa();
+    }
+
+    private string FormatarData(object? data)
+    {
+        if (data == null)
+            return "-";
+
+        if (data is DateTime dt)
+            return dt.ToString("dd/MM/yyyy");
+
+        if (data is TimeOnly time)
+            return time.ToString("HH:mm");
+
+        return data.ToString() ?? "-";
+    }
+
+    private async Task GerarLinkPix()
+    {
+        if (ClienteCobrancaSelecionado == null) return;
+
+        GerandoLinkPix = true;
+        LinkPixGerado = "";
+        ErroLinkPix = "";
+        MostrarModalPix = false;
+
+        try
+        {
+            var config = await bxClienteService.ObterConfigMercadoPagoAsync();
+
+            if (config == null || string.IsNullOrWhiteSpace(config.TokenMercadoPago))
+            {
+                ErroLinkPix = "Configuração do Mercado Pago não encontrada. Verifique o cadastro.";
+                return;
+            }
+
+            var nome = !string.IsNullOrWhiteSpace(ClienteCobrancaSelecionado.Apelido)
+                ? ClienteCobrancaSelecionado.Apelido
+                : ClienteCobrancaSelecionado.NomeCliente;
+
+            var listaTitulos = string.Join(", ", TitulosCobranca.Select(t => t.Codigo.ToString()));
+            var descricao = $"Mensalidade cliente: {nome} Títulos: {listaTitulos}";
+
+            var resultado = await bxClienteService.GerarLinkPagamentoMercadoPagoAsync(
+    valor: ClienteCobrancaSelecionado.ValorTotalComJuros,
+                descricao: descricao,
+                emailPagador: config.EmailMercadoPago,
+                cpfPagador: config.CPFMercadoPago,
+                nomePagador: nome,
+                token: config.TokenMercadoPago
+            );
+
+            if (resultado.StartsWith("ERRO:"))
+            {
+                ErroLinkPix = resultado.Replace("ERRO:", "Erro ao gerar PIX: ");
+                return;
+            }
+
+            LinkPixGerado = resultado;
+            MostrarModalPix = true;
+
+            var titulos = string.Join(", ", TitulosCobranca.Select(t => t.Codigo.ToString()));
+            var detalhe = $"Títulos: {titulos} · Valor: {ClienteCobrancaSelecionado!.ValorTotalComJuros:C} · " +
+                          $"Cliente: {ClienteCobrancaSelecionado.NomeCliente}";
+
+            await LogFinanceiroService.RegistrarAsync(
+    usuario: UserState.CurrentUser?.Trim() ?? "",
+    codEmp: UserState.CurrentCompanyId,
+    nomeEmpresa: UserState.CurrentCompany,
+    tipoEvento: LogFinanceiroService.PIX_GERADO,
+    detalhe: detalhe,
+    ip: null);
+        }
+        finally
+        {
+            GerandoLinkPix = false;
+        }
+    }
+
+    private string GerarLinkWhatsappComPix()
+    {
+        if (ClienteCobrancaSelecionado == null || string.IsNullOrWhiteSpace(LinkPixGerado)) return "#";
+
+        var celular = new string(ClienteCobrancaSelecionado.Celular.Where(char.IsDigit).ToArray());
+        if (!celular.StartsWith("55")) celular = "55" + celular;
+
+        var mensagem = GerarMensagemCobranca() + $"\n\n🔗 Link para pagamento PIX:\n{LinkPixGerado}";
+        return $"https://wa.me/{celular}?text={Uri.EscapeDataString(mensagem)}";
+    }
+
+    private async Task CopiarLinkPix()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", LinkPixGerado);
+    }
+
+    private async Task AbrirLembreteWhatsApp()
+    {
+        var url = GerarLinkWhatsappLembrete();
+        if (url == "#") return;
+
+        var titulos = string.Join(", ", TitulosCobranca.Select(t => t.Codigo.ToString()));
+        var detalhe = $"Lembrete · Títulos: {titulos} · " +
+                      $"Total: {TitulosCobranca.Sum(t => t.ValorComJuros):C} · " +
+                      $"Cliente: {ClienteCobrancaSelecionado?.NomeCliente}";
+
+        await LogFinanceiroService.RegistrarAsync(
+    usuario: UserState.CurrentUser?.Trim() ?? "",
+    codEmp: UserState.CurrentCompanyId,
+    nomeEmpresa: UserState.CurrentCompany,
+    tipoEvento: LogFinanceiroService.WHATSAPP_LEMBRETE,
+    detalhe: detalhe,
+    ip: null);
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task AbrirCobrancaWhatsApp()
+    {
+        var url = GerarLinkWhatsappCobranca();
+        if (url == "#") return;
+
+        var titulos = string.Join(", ", TitulosCobranca.Select(t => t.Codigo.ToString()));
+        var detalhe = $"Cobrança · Títulos: {titulos} · " +
+                      $"Total: {TitulosCobranca.Sum(t => t.ValorComJuros):C} · " +
+                      $"Cliente: {ClienteCobrancaSelecionado?.NomeCliente}";
+
+        await LogFinanceiroService.RegistrarAsync(
+    usuario: UserState.CurrentUser?.Trim() ?? "",
+    codEmp: UserState.CurrentCompanyId,
+    nomeEmpresa: UserState.CurrentCompany,
+    tipoEvento: LogFinanceiroService.WHATSAPP_COBRANCA,
+    detalhe: detalhe,
+    ip: null);
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task AbrirWhatsAppComPix()
+    {
+        var url = GerarLinkWhatsappComPix();
+        if (url == "#") return;
+
+        var detalhe = $"WhatsApp c/ PIX · " +
+                      $"Valor: {ClienteCobrancaSelecionado?.ValorTotalComJuros:C} · " +
+                      $"Cliente: {ClienteCobrancaSelecionado?.NomeCliente}";
+
+        await LogFinanceiroService.RegistrarAsync(
+    usuario: UserState.CurrentUser?.Trim() ?? "",
+    codEmp: UserState.CurrentCompanyId,
+    nomeEmpresa: UserState.CurrentCompany,
+    tipoEvento: LogFinanceiroService.WHATSAPP_PIX,
+    detalhe: detalhe,
+    ip: null);
+
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+}

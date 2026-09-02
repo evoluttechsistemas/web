@@ -1,0 +1,727 @@
+﻿@page "/comercial-fluxo"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@inject ComercialFluxoService Service
+@inject UserState UserState
+
+<style>
+    .multi-funil {
+        min-height: 140px;
+    }
+
+    .fluxo-shell {
+        max-width: 1350px;
+        margin: 14px auto;
+        padding: 14px;
+        background: #f8fbff;
+    }
+
+    .fluxo-header {
+        background: linear-gradient(135deg,#0d47a1,#07306f);
+        color: white;
+        border-radius: 18px;
+        padding: 16px;
+        margin-bottom: 14px;
+        box-shadow: 0 10px 26px rgba(13,71,161,.25);
+    }
+
+        .fluxo-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 950;
+        }
+
+        .fluxo-header span {
+            font-size: .82rem;
+            opacity: .9;
+            font-weight: 700;
+        }
+
+    .fluxo-grid {
+        display: grid;
+        grid-template-columns: 420px minmax(0,1fr);
+        gap: 14px;
+    }
+
+    .fluxo-card {
+        background: white;
+        border: 1px solid #dbeafe;
+        border-radius: 16px;
+        box-shadow: 0 8px 22px rgba(15,23,42,.07);
+        overflow: hidden;
+    }
+
+    .fluxo-card-title {
+        padding: 12px 14px;
+        border-bottom: 1px solid #dbeafe;
+        font-size: .86rem;
+        font-weight: 950;
+        color: #0d47a1;
+        background: linear-gradient(180deg,#fff,#f8fbff);
+    }
+
+    .fluxo-card-body {
+        padding: 14px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 4px;
+        color: #0d47a1;
+        font-size: .75rem;
+        font-weight: 900;
+    }
+
+    input, textarea, select {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: .78rem;
+        outline: none;
+    }
+
+    textarea {
+        min-height: 135px;
+        resize: vertical;
+    }
+
+    .linha-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .grupo {
+        margin-bottom: 10px;
+    }
+
+    .btn-primary {
+        width: 100%;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: linear-gradient(135deg,#1976d2,#0d47a1);
+        color: white;
+        font-weight: 950;
+        cursor: pointer;
+    }
+
+    .btn-light {
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        padding: 7px 10px;
+        background: #f8fbff;
+        color: #0d47a1;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .btn-danger {
+        border: 1px solid #fecaca;
+        border-radius: 10px;
+        padding: 7px 10px;
+        background: #fee2e2;
+        color: #991b1b;
+        font-weight: 900;
+        cursor: pointer;
+    }
+
+    .fluxo-item {
+        border: 1px solid #dbeafe;
+        border-radius: 14px;
+        padding: 12px;
+        margin-bottom: 10px;
+        background: #fff;
+        display: grid;
+        grid-template-columns: 70px minmax(0,1fr) auto;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .dia-badge {
+        background: #dbeafe;
+        color: #0d47a1;
+        border-radius: 12px;
+        padding: 8px;
+        text-align: center;
+        font-weight: 950;
+    }
+
+        .dia-badge small {
+            display: block;
+            font-size: .58rem;
+            text-transform: uppercase;
+        }
+
+    .fluxo-desc {
+        font-weight: 950;
+        color: #0f172a;
+        font-size: .85rem;
+    }
+
+    .fluxo-texto {
+        color: #64748b;
+        font-size: .72rem;
+        margin-top: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .fluxo-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .preview-box {
+        border: 1px dashed #93c5fd;
+        border-radius: 12px;
+        padding: 10px;
+        background: #f8fbff;
+        font-size: .74rem;
+        color: #334155;
+    }
+
+        .preview-box img {
+            margin-top: 8px;
+            max-width: 100%;
+            max-height: 180px;
+            border-radius: 10px;
+            border: 1px solid #bfdbfe;
+        }
+
+    .msg {
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 10px;
+        font-size: .78rem;
+        font-weight: 900;
+        text-align: center;
+    }
+
+        .msg.ok {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .msg.erro {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+    @@media(max-width: 980px) {
+        .fluxo-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="fluxo-shell">
+
+    <div class="fluxo-header">
+        <h2>Fluxo Automático Comercial</h2>
+        <span>Configure mensagens automáticas por dias de vida do lead na base.</span>
+    </div>
+
+    <div class="fluxo-grid">
+
+        <section class="fluxo-card">
+            <div class="fluxo-card-title">
+                @(Model.Codigo == 0 ? "Nova mensagem do fluxo" : $"Editando fluxo #{Model.Codigo}")
+            </div>
+
+            <div class="fluxo-card-body">
+
+                <div class="linha-2">
+
+                    <div class="grupo">
+                        <label>Hora início disparo</label>
+                        <input type="time"
+                               @bind-value="HoraInicio"
+                               @bind-value:format="HH:mm" />
+                    </div>
+
+                    <div class="grupo">
+                        <label>Intervalo entre envios (min)</label>
+                        <input type="number" min="1" @bind="Model.IntervaloMinutos" />
+                    </div>
+
+                </div>
+
+                <div class="linha-2">
+
+                    <div class="grupo">
+                        <label>Funil</label>
+
+                        <select multiple
+                                class="multi-funil"
+                                @onchange="FunilSelecionado">
+
+                            <option value="TODOS"
+                                    selected="@FunilSelecionadoAtual.Contains("TODOS")">
+                                Todos
+                            </option>
+
+                            <option value="RA"
+                                    selected="@FunilSelecionadoAtual.Contains("RA")">
+                                Novo Lead
+                            </option>
+
+                            <option value="EP"
+                                    selected="@FunilSelecionadoAtual.Contains("EP")">
+                                Contato Feito
+                            </option>
+
+                            <option value="FU"
+                                    selected="@FunilSelecionadoAtual.Contains("FU")">
+                                Qualificado
+                            </option>
+
+                            <option value="NO"
+                                    selected="@FunilSelecionadoAtual.Contains("NO")">
+                                Nutrição
+                            </option>
+
+                            <option value="IM"
+                                    selected="@FunilSelecionadoAtual.Contains("IM")">
+                                Implantação
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                    <div class="grupo">
+
+                        <label>Somente horário comercial</label>
+
+                        <select @bind="Model.HorarioComercial">
+                            <option value="S">Sim</option>
+                            <option value="N">Não</option>
+                        </select>
+
+                    </div>
+
+                </div>
+
+                <div class="linha-2">
+                    <div class="grupo">
+                        <label>Dias para disparo</label>
+                        <input type="number" min="0" @bind="Model.DiasParaDisparo" />
+                    </div>
+
+
+                    <div class="grupo">
+                        <label>Ordem</label>
+                        <input type="number" min="0" @bind="Model.Ordem" />
+                    </div>
+                </div>
+
+                <div class="grupo">
+                    <label>Descrição</label>
+                    <input @bind="Model.Descricao" placeholder="Ex.: Primeiro contato após 1 dia" />
+                </div>
+
+                <div class="grupo">
+                    <label>Texto WhatsApp</label>
+                    <textarea @bind="Model.TextoWhatsApp"
+                              placeholder="Digite a mensagem que será enviada ao lead..."></textarea>
+                </div>
+
+                <div class="grupo">
+                    <label>Link</label>
+                    <input @bind="Model.Link" placeholder="https://..." />
+                </div>
+
+                <div class="grupo">
+                    <label>Tipo de mídia</label>
+                    <select @bind="Model.TipoMidia">
+                        <option value="">Somente texto</option>
+                        <option value="IMAGEM">Imagem</option>
+                        <option value="VIDEO">Vídeo</option>
+                        <option value="DOCUMENTO">Documento</option>
+                    </select>
+                </div>
+
+                <div class="grupo">
+                    <label>Anexo</label>
+                    <InputFile OnChange="SelecionarArquivo"
+                               accept=".jpg,.jpeg,.png,.webp,.gif,.mp4,.mov,.pdf,.doc,.docx" />
+                </div>
+
+                <div class="grupo">
+
+                    <label>Tags disponíveis</label>
+
+                    <div class="preview-box">
+
+                        {NomeCliente}
+                        {Telefone}
+                        {Empresa}
+                        {Cidade}
+                        {DiasBase}
+                        {Consultor}
+                        {Funil}
+
+                    </div>
+
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.NomeArquivo))
+                {
+                    <div class="preview-box">
+                        <strong>@Model.NomeArquivo</strong><br />
+                        <span>@Model.MimeType</span>
+
+                        @if (!string.IsNullOrWhiteSpace(PreviewImagem))
+                        {
+                            <img src="@PreviewImagem" />
+                        }
+                    </div>
+                }
+
+                <div class="grupo" style="margin-top:10px;">
+                    <label>Status</label>
+                    <select @bind="Model.Ativo">
+                        <option value="S">Ativo</option>
+                        <option value="N">Inativo</option>
+                    </select>
+                </div>
+
+                <button class="btn-primary" @onclick="Salvar">
+                    Salvar fluxo
+                </button>
+
+                <button class="btn-light" style="width:100%; margin-top:8px;" @onclick="Novo">
+                    Novo
+                </button>
+
+                @if (!string.IsNullOrWhiteSpace(Mensagem))
+                {
+                    <div class="msg @(Sucesso ? "ok" : "erro")">
+                        @Mensagem
+                    </div>
+                }
+
+            </div>
+        </section>
+
+        <section class="fluxo-card">
+            <div class="fluxo-card-title">
+                Mensagens configuradas
+            </div>
+
+            <div class="fluxo-card-body">
+                @if (!Fluxos.Any())
+                {
+                    <div style="color:#64748b; font-weight:800;">
+                        Nenhuma mensagem configurada.
+                    </div>
+                }
+                else
+                {
+                    @foreach (var item in Fluxos)
+                    {
+                        <div class="fluxo-item">
+                            <div class="dia-badge">
+                                @item.DiasParaDisparo
+                                <small>dias</small>
+                            </div>
+
+                            <div>
+                                <div class="fluxo-desc">
+                                    @item.Descricao
+                                </div>
+
+                                <div class="fluxo-texto">
+                                    @item.TextoWhatsApp
+                                </div>
+
+                                @if (!string.IsNullOrWhiteSpace(item.Link))
+                                {
+                                    <div class="fluxo-texto">
+                                        🔗 @item.Link
+                                    </div>
+                                }
+
+                                @if (!string.IsNullOrWhiteSpace(item.NomeArquivo))
+                                {
+                                    <div class="fluxo-texto">
+                                        📎 @item.NomeArquivo
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="fluxo-actions">
+                                <button class="btn-light" @onclick="() => Editar(item)">
+                                    Editar
+                                </button>
+
+                                <button class="btn-danger" @onclick="() => Excluir(item)">
+                                    Excluir
+                                </button>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </section>
+
+    </div>
+</div>
+
+@code {
+    private List<ComercialFluxoMensagemModel> Fluxos = new();
+    private ComercialFluxoMensagemModel Model = new();
+    private string Mensagem = "";
+    private bool Sucesso;
+    private string PreviewImagem = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Carregar();
+        Novo();
+    }
+
+    private async Task Carregar()
+    {
+        if (!UserState.IsReady)
+            return;
+
+        Fluxos = await Service.ListarAsync(UserState.CurrentCompanyId);
+    }
+
+    private List<string> FunilSelecionadoAtual = new();
+
+    private void FunilSelecionado(ChangeEventArgs e)
+    {
+        List<string> selecionados;
+
+        if (e.Value is string[] valoresArray)
+        {
+            selecionados = valoresArray
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .ToList();
+        }
+        else if (e.Value is string valorUnico)
+        {
+            selecionados = valorUnico
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .ToList();
+        }
+        else
+        {
+            selecionados = new List<string>();
+        }
+
+        // Se não selecionou nada, volta para TODOS
+        if (!selecionados.Any())
+        {
+            FunilSelecionadoAtual = new List<string> { "TODOS" };
+        }
+        // Se selecionou TODOS junto com outros, TODOS tem prioridade
+        else if (selecionados.Contains("TODOS"))
+        {
+            FunilSelecionadoAtual = new List<string> { "TODOS" };
+        }
+        else
+        {
+            FunilSelecionadoAtual = selecionados;
+        }
+
+        Model.Funil = string.Join(";", FunilSelecionadoAtual);
+        Model.EnviarTodosFunis = FunilSelecionadoAtual.Contains("TODOS") ? "S" : "N";
+    }
+
+    private DateTime HoraInicio
+    {
+        get
+        {
+            return DateTime.Today.Add(
+                Model.HoraInicio ?? new TimeSpan(8, 0, 0)
+            );
+        }
+        set
+        {
+            Model.HoraInicio = value.TimeOfDay;
+        }
+    }
+
+    private string HoraInicioTexto
+    {
+        get
+        {
+            if (Model.HoraInicio.HasValue)
+                return Model.HoraInicio.Value.ToString(@"hh\:mm");
+
+            return "08:00";
+        }
+        set
+        {
+            if (TimeSpan.TryParse(value, out var hora))
+                Model.HoraInicio = hora;
+            else
+                Model.HoraInicio = new TimeSpan(8, 0, 0);
+        }
+    }
+
+    private void Novo()
+    {
+        FunilSelecionadoAtual = new List<string> { "TODOS" };
+
+        Model = new ComercialFluxoMensagemModel
+        {
+            CodEmp = UserState.CurrentCompanyId,
+            Ativo = "S",
+            DiasParaDisparo = 0,
+            Ordem = 1,
+            HoraInicio = new TimeSpan(8, 0, 0),
+            IntervaloMinutos = 1,
+            Funil = "TODOS",
+            HorarioComercial = "S",
+            EnviarTodosFunis = "S",
+        };
+
+        PreviewImagem = "";
+        Mensagem = "";
+    }
+
+    private void Editar(ComercialFluxoMensagemModel item)
+    {
+        FunilSelecionadoAtual =
+            string.IsNullOrWhiteSpace(item.Funil)
+            ? new List<string> { "TODOS" }
+            : item.Funil.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(f => f.Trim())
+                        .Where(f => !string.IsNullOrEmpty(f))
+                        .ToList();
+
+        if (!FunilSelecionadoAtual.Any())
+            FunilSelecionadoAtual = new List<string> { "TODOS" };
+
+        Model = new ComercialFluxoMensagemModel
+        {
+            Codigo = item.Codigo,
+            CodEmp = item.CodEmp,
+            DiasParaDisparo = item.DiasParaDisparo,
+            Descricao = item.Descricao,
+            TextoWhatsApp = item.TextoWhatsApp,
+            Link = item.Link,
+            TipoMidia = item.TipoMidia,
+            NomeArquivo = item.NomeArquivo,
+            MimeType = item.MimeType,
+            Ativo = item.Ativo,
+            Ordem = item.Ordem,
+            HoraInicio = item.HoraInicio,
+            IntervaloMinutos = item.IntervaloMinutos,
+            Funil = item.Funil,
+            HorarioComercial = item.HorarioComercial,
+            EnviarTodosFunis = item.EnviarTodosFunis,
+            CamposPersonalizados = item.CamposPersonalizados
+        };
+
+        PreviewImagem = "";
+        Mensagem = "";
+    }
+
+    private async Task SelecionarArquivo(InputFileChangeEventArgs e)
+    {
+        var arquivo = e.File;
+
+        if (arquivo == null)
+            return;
+
+        const long maxSize = 20 * 1024 * 1024;
+
+        await using var stream = arquivo.OpenReadStream(maxSize);
+        using var ms = new MemoryStream();
+
+        await stream.CopyToAsync(ms);
+
+        Model.Arquivo = ms.ToArray();
+        Model.NomeArquivo = arquivo.Name;
+        Model.MimeType = arquivo.ContentType;
+
+        if (arquivo.ContentType.StartsWith("image/"))
+        {
+            PreviewImagem = $"data:{arquivo.ContentType};base64,{Convert.ToBase64String(Model.Arquivo)}";
+            Model.TipoMidia = "IMAGEM";
+        }
+        else if (arquivo.ContentType.StartsWith("video/"))
+        {
+            Model.TipoMidia = "VIDEO";
+            PreviewImagem = "";
+        }
+        else
+        {
+            Model.TipoMidia = "DOCUMENTO";
+            PreviewImagem = "";
+        }
+    }
+
+    private async Task Salvar()
+    {
+        try
+        {
+            Mensagem = "";
+            Sucesso = false;
+
+            if (Model.DiasParaDisparo < 0)
+                throw new Exception("Informe os dias para disparo.");
+
+            if (string.IsNullOrWhiteSpace(Model.Descricao))
+                throw new Exception("Informe a descrição.");
+
+            if (string.IsNullOrWhiteSpace(Model.TextoWhatsApp) &&
+                string.IsNullOrWhiteSpace(Model.Link) &&
+                Model.Arquivo == null &&
+                string.IsNullOrWhiteSpace(Model.NomeArquivo))
+            {
+                throw new Exception("Informe texto, link ou anexo para envio.");
+            }
+
+            Model.CodEmp = UserState.CurrentCompanyId;
+
+            await Service.SalvarAsync(Model);
+
+            Mensagem = "Fluxo salvo com sucesso.";
+            Sucesso = true;
+
+            await Carregar();
+            Novo();
+        }
+        catch (Exception ex)
+        {
+            Mensagem = ex.Message;
+            Sucesso = false;
+        }
+    }
+
+    private async Task Excluir(
+    ComercialFluxoMensagemModel item)
+    {
+        try
+        {
+            await Service.ExcluirAsync(
+                item.Codigo,
+                UserState.CurrentCompanyId);
+
+            Fluxos.RemoveAll(
+                x => x.Codigo == item.Codigo);
+
+            StateHasChanged();
+
+            Mensagem = "Fluxo removido.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = ex.Message;
+            Sucesso = false;
+        }
+    }
+}

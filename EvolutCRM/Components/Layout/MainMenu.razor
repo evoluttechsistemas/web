@@ -1,0 +1,2153 @@
+﻿@inherits ComponentBase
+@inject NavigationManager Nav
+@implements IDisposable
+@inject EvolutCRM.Services.UserState UserState
+@using EvolutCRM.Models
+@inject TicketNotificationState TicketNotify
+@inject AdminService AdminService
+@using EvolutCRM.Services
+@using System.Diagnostics
+@inject LoginService LoginService
+@inject ChatInternoNotificationState ChatNotify
+@inject EvolutCRM.Services.TicketService TicketService
+@inject EvolutCRM.Services.CardService CardService
+@inject EvolutCRM.Services.ChatInternoService ChatInternoService
+@inject EvolutCRM.Services.LogAcessoService LogAcessoService
+@inject EvolutCRM.Services.CadastroUsuarioService CadastroUsuarioService
+@inject IJSRuntime JS
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+        /* azul sistema */
+        --s900: #172554;
+        --s800: #1e3a8a;
+        --s700: #1e40af;
+        --s600: #1d4ed8;
+        --s500: #2563eb;
+        --s400: #3b82f6;
+        --s300: #93c5fd;
+        --s200: #bfdbfe;
+        --s100: #dbeafe;
+        --s50: #eff6ff;
+        /* sidebar */
+        --sb-bg: linear-gradient(180deg,#1e3a8a 0%,#172554 100%);
+        --sb-w: 200px;
+        --sb-w-sm: 58px;
+        --sb-w-mob: 268px;
+        --sb-hover: rgba(255,255,255,.1);
+        --sb-active: rgba(255,255,255,.18);
+        --sb-border: rgba(255,255,255,.12);
+        --sb-text: #e0ecff;
+        --sb-muted: #93c5fd;
+        /* notif panel */
+        --np-w: 212px;
+        /* misc */
+        --rad: 6px;
+        --rad2: 10px;
+        --rad3: 14px;
+        --sh: 0 1px 3px rgba(15,23,42,.07),0 3px 10px rgba(15,23,42,.05);
+        --sh2: 0 4px 16px rgba(37,99,235,.2),0 1px 4px rgba(37,99,235,.1);
+        --tr: .14s ease;
+        --ink: #0f172a;
+        --ink3: #334155;
+        --muted: #64748b;
+        --soft: #94a3b8;
+        --line: #e2e8f0;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    html, body {
+        width: 100%;
+        min-height: 100%;
+        overflow-x: hidden;
+    }
+
+    button {
+        font-family: inherit;
+        -webkit-tap-highlight-color: transparent;
+        cursor: pointer;
+    }
+
+    .app-shell {
+        width: 100%;
+        min-height: 100vh;
+        background: #f0f4fd;
+        font-family: 'IBM Plex Sans',sans-serif;
+    }
+
+    /* â”€â”€â”€ LAYOUT GRID â”€â”€â”€ */
+    .layout {
+        display: grid;
+        grid-template-columns: var(--sb-w) minmax(0,1fr) var(--np-w);
+        width: 100%;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+        .layout.no-notif {
+            grid-template-columns: var(--sb-w) minmax(0,1fr);
+        }
+
+            .layout.no-notif .notif-panel {
+                display: none;
+            }
+
+    .content {
+        min-width: 0;
+        height: 100vh;
+        overflow: hidden;
+        background: #f0f4fd;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                                   SIDEBAR
+                                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+    .sidebar {
+        height: 100vh;
+        background: var(--sb-bg);
+        border-right: 1px solid var(--sb-border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        transition: width var(--tr);
+        position: relative;
+        z-index: 10;
+    }
+
+    /* â”€â”€ SIDEBAR HEADER â”€â”€ */
+    .sb-head {
+        flex-shrink: 0;
+        padding: 14px 10px 12px;
+        border-bottom: 1px solid var(--sb-border);
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+
+
+    .sb-head-row {
+        position: relative;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 9px;
+        min-width: 0;
+        padding: 9px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(255,255,255,.16), rgba(59,130,246,.22));
+        border: 1.5px solid rgba(186,230,253,.85);
+        box-shadow: 0 12px 28px rgba(14,165,233,.34), 0 5px 14px rgba(15,23,42,.24);
+        overflow: hidden;
+    }
+
+        .sb-head-row::before {
+            content: '';
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 2px;
+            background: linear-gradient(90deg, rgba(255,255,255,.95), rgba(125,211,252,.85), rgba(255,255,255,.35));
+        }
+
+        .sb-head-row > * {
+            position: relative;
+            z-index: 1;
+        }
+
+    .sb-logo {
+        order: 1;
+        width: 44px;
+        height: 38px;
+        flex-shrink: 0;
+        border-radius: 12px;
+        background: rgba(255,255,255,.94);
+        border: 1.5px solid rgba(255,255,255,.95);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        padding: 4px;
+        box-shadow: 0 6px 16px rgba(15,23,42,.20);
+    }
+
+    .sb-logo-img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+
+    .sb-brand {
+        order: 2;
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        line-height: 1.2;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+        .sb-brand strong {
+            font-size: 12.5px;
+            font-weight: 900;
+            color: #fff;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(15,23,42,.34);
+        }
+
+        .sb-brand span {
+            font-size: 10px;
+            color: #e0f2fe;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .sb-top-status {
+        order: 3;
+        width: 100%;
+        margin-left: 0;
+        flex-shrink: 0;
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.58);
+        background: rgba(255,255,255,.24);
+        color: #ffffff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 900;
+        line-height: 1;
+    }
+
+        .sb-top-status:hover {
+            background: rgba(255,255,255,.32);
+        }
+
+        .sb-top-status.on {
+            color: #ffffff;
+            border-color: rgba(187,247,208,.9);
+            background: linear-gradient(135deg, #16a34a, #15803d);
+            box-shadow: 0 0 14px rgba(34,197,94,.52);
+        }
+
+        .sb-top-status.off {
+            color: #cbd5e1;
+            border-color: rgba(148,163,184,.24);
+            background: rgba(148,163,184,.12);
+        }
+
+    .sb-status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: #94a3b8;
+    }
+
+    .sb-top-status.on .sb-status-dot {
+        background: #22c55e;
+        box-shadow: 0 0 7px rgba(34,197,94,.85);
+    }
+
+    /* â”€â”€ SCROLL AREA â”€â”€ */
+    .sb-scroll {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 8px 8px 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,.2) transparent;
+    }
+
+        .sb-scroll::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .sb-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,.2);
+            border-radius: 999px;
+        }
+
+    /* â”€â”€ SECTION â”€â”€ */
+    .sb-section {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 8px 0 0;
+    }
+
+    .sb-section-lbl {
+        font-size: 8.5px;
+        font-weight: 700;
+        letter-spacing: .09em;
+        text-transform: uppercase;
+        color: var(--sb-muted);
+        padding: 0 6px 4px;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .sb-sep {
+        height: 1px;
+        background: var(--sb-border);
+        margin: 4px 0;
+    }
+
+    /* â”€â”€ NAV ITEM â”€â”€ */
+    .nav-item {
+        position: relative;
+        width: 100%;
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: var(--rad2);
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--sb-text);
+        background: transparent;
+        border: 1px solid transparent;
+        transition: var(--tr);
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+        .nav-item:hover {
+            background: var(--sb-hover);
+            border-color: var(--sb-border);
+        }
+
+        .nav-item.active {
+            background: var(--sb-active);
+            border-color: rgba(255,255,255,.22);
+            box-shadow: 0 2px 10px rgba(0,0,0,.18);
+        }
+
+            .nav-item.active .ni-icon {
+                background: rgba(255,255,255,.2);
+                color: #fff;
+            }
+
+    /* â”€â”€ ICON â”€â”€ */
+    .ni-icon {
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        border-radius: var(--rad);
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        transition: var(--tr);
+    }
+
+    .nav-item:hover .ni-icon {
+        background: rgba(255,255,255,.18);
+    }
+
+    /* â”€â”€ LABEL â”€â”€ */
+    .ni-lbl {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* â”€â”€ BADGE â”€â”€ */
+    /* DEPOIS */
+    .ni-badge {
+        position: absolute;
+        right: 7px;
+        top: 50%;
+        transform: translateY(-50%);
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 9px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(239,68,68,.5);
+        border: 1.5px solid rgba(255,255,255,.6);
+        line-height: 1;
+        /* isola o badge do repaint das animações vizinhas */
+        will-change: contents;
+        isolation: isolate;
+        contain: layout style;
+    }
+
+    /* â”€â”€ STATUS ITEMS â”€â”€ */
+    .nav-item.status-on {
+        background: rgba(34,197,94,.14);
+        border-color: rgba(34,197,94,.28);
+        color: #bbf7d0;
+    }
+
+        .nav-item.status-on:hover {
+            background: rgba(34,197,94,.22);
+        }
+
+        .nav-item.status-on .ni-icon {
+            background: rgba(34,197,94,.2);
+            border-color: rgba(34,197,94,.4);
+            color: #4ade80;
+        }
+
+    .nav-item.status-off {
+        background: rgba(148,163,184,.1);
+        border-color: rgba(148,163,184,.2);
+        color: #cbd5e1;
+    }
+
+        .nav-item.status-off .ni-icon {
+            color: #94a3b8;
+        }
+
+    .nav-item.admin-item {
+        background: rgba(255,255,255,.1);
+        border-color: rgba(255,255,255,.18);
+    }
+
+    .nav-item.danger-item:hover {
+        background: rgba(239,68,68,.18);
+        border-color: rgba(239,68,68,.3);
+    }
+
+    /* â”€â”€ USERS TOGGLE ARROW â”€â”€ */
+    .ni-arrow {
+        font-size: 8.5px;
+        color: var(--sb-muted);
+        flex-shrink: 0;
+        transition: var(--tr);
+    }
+
+    /* â”€â”€ USERS LIST â”€â”€ */
+    .users-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 2px 0;
+        padding: 2px 0;
+        animation: ulIn .16s ease;
+    }
+
+    @@keyframes ulIn {
+        from {
+            opacity: 0;
+            transform: translateY(-3px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .flyout-host {
+        position: relative;
+    }
+
+    .flyout-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        background: transparent;
+    }
+
+    .flyout-menu {
+        position: fixed;
+        left: var(--sb-w);
+        top: 0;
+        bottom: 0;
+        z-index: 40;
+        width: calc(100vw - var(--sb-w));
+        max-height: none;
+        overflow-y: auto;
+        padding: 18px 20px;
+        border-radius: 0;
+        background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+        border-left: 1px solid #dbeafe;
+        box-shadow: 8px 0 34px rgba(15,23,42,.18);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(225px, 285px));
+        align-content: start;
+        gap: 9px;
+        animation: flyoutIn .12s ease;
+    }
+
+        .flyout-menu::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .flyout-menu::-webkit-scrollbar-thumb {
+            background: #bfdbfe;
+            border-radius: 999px;
+        }
+
+    .flyout-geral,
+    .flyout-gestao,
+    .flyout-usuarios {
+        top: 0;
+    }
+
+    .flyout-title {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 4px 12px;
+        font-size: 12.5px;
+        font-weight: 900;
+        color: #1e3a8a;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        border-bottom: 1px solid #dbeafe;
+        margin-bottom: 6px;
+    }
+
+        .flyout-title::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: #2563eb;
+            box-shadow: 0 0 0 4px #dbeafe;
+            flex: 0 0 auto;
+        }
+
+    .flyout-section-title {
+        grid-column: 1 / -1;
+        margin: 12px 0 3px;
+        padding: 12px 2px 7px;
+        border-top: 1px solid #dbeafe;
+        color: #475569;
+        font-size: 9.5px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .flyout-item {
+        position: relative;
+        min-height: 48px;
+        padding: 9px 11px;
+        gap: 10px;
+        color: #0f172a;
+        background: #ffffff;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 16px rgba(30,64,175,.06);
+        white-space: normal;
+        overflow: visible;
+    }
+
+        .flyout-item .ni-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 10px;
+            color: #1d4ed8;
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-color: #bfdbfe;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+        }
+
+        .flyout-item .ni-lbl {
+            color: #172554;
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1.2;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+        }
+
+        .flyout-item:hover {
+            background: #f8fbff;
+            border-color: #93c5fd;
+            box-shadow: 0 2px 6px rgba(15,23,42,.06), 0 10px 24px rgba(37,99,235,.12);
+            transform: translateY(-1px);
+        }
+
+            .flyout-item:hover .ni-icon {
+                background: linear-gradient(135deg, #2563eb, #1e40af);
+                border-color: #2563eb;
+                color: #fff;
+            }
+
+        .flyout-item.active {
+            background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+            border-color: #2563eb;
+            box-shadow: 0 2px 8px rgba(30,64,175,.22), 0 10px 26px rgba(30,64,175,.18);
+        }
+
+            .flyout-item.active::after {
+                content: "";
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                width: 7px;
+                height: 7px;
+                border-radius: 999px;
+                background: #bfdbfe;
+                transform: translateY(-50%);
+                box-shadow: 0 0 0 3px rgba(191,219,254,.22);
+            }
+
+            .flyout-item.active .ni-icon {
+                background: rgba(255,255,255,.18);
+                border-color: rgba(255,255,255,.34);
+                color: #fff;
+            }
+
+            .flyout-item.active .ni-lbl {
+                color: #fff;
+            }
+
+        .flyout-item .ni-badge {
+            right: 8px;
+        }
+
+    .flyout-empty {
+        padding: 10px;
+        border-radius: 6px;
+        background: #eff6ff;
+        border: 1px dashed #bfdbfe;
+        color: #64748b;
+        font-size: 10.5px;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .flyout-user-row {
+        background: #f8fbff;
+        border-color: #dbeafe;
+    }
+
+        .flyout-user-row .u-name {
+            color: #0f172a;
+        }
+
+        .flyout-user-row .u-status {
+            color: #64748b;
+        }
+
+    @@keyframes flyoutIn {
+        from {
+            opacity: 0;
+            transform: translateX(-4px);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    @@media (max-width: 900px) {
+        .flyout-menu {
+            left: 0;
+            right: 0;
+            top: 72px;
+            bottom: 0;
+            width: auto;
+            max-height: none;
+            grid-template-columns: 1fr;
+            padding: 12px;
+        }
+    }
+
+    .user-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 8px;
+        border-radius: var(--rad);
+        background: rgba(255,255,255,.06);
+        border: 1px solid rgba(255,255,255,.08);
+    }
+
+    .u-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: var(--soft);
+    }
+
+        .u-dot.on {
+            background: #22c55e;
+            box-shadow: 0 0 5px rgba(34,197,94,.7);
+        }
+
+    .u-name {
+        font-size: 10px;
+        font-weight: 600;
+        color: #e0ecff;
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .u-status {
+        font-size: 8.5px;
+        color: var(--sb-muted);
+        flex-shrink: 0;
+    }
+
+    /* â”€â”€ FOOTER â”€â”€ */
+    .sb-foot {
+        flex-shrink: 0;
+        padding: 8px;
+        border-top: 1px solid var(--sb-border);
+        background: rgba(0,0,0,.12);
+    }
+
+    /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                                   NOTIFICATIONS PANEL
+                                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+    .notif-panel {
+        height: 100vh;
+        background: #fff;
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: -3px 0 12px rgba(15,23,42,.05);
+    }
+
+    .notif-head {
+        flex-shrink: 0;
+        padding: 12px 10px 10px;
+        border-bottom: 1.5px solid var(--s100);
+        background: linear-gradient(135deg,var(--s700),var(--s900));
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .notif-head-title {
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 10px;
+        font-weight: 700;
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .notif-count {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.22);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,.3);
+        font-size: 9px;
+        font-weight: 800;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .notif-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+    }
+
+        .notif-scroll::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .notif-scroll::-webkit-scrollbar-thumb {
+            background: var(--s200);
+            border-radius: 999px;
+        }
+
+    .notif-empty {
+        font-size: 10.5px;
+        color: var(--muted);
+        font-weight: 600;
+        padding: 10px;
+        border-radius: var(--rad);
+        background: var(--s50);
+        border: 1px dashed var(--s200);
+        text-align: center;
+        margin-top: 4px;
+    }
+
+    .notif-card {
+        padding: 8px 9px;
+        border-radius: var(--rad2);
+        margin-bottom: 6px;
+        cursor: pointer;
+        transition: var(--tr);
+        background: linear-gradient(135deg,var(--s50),#f8fbff);
+        border: 1px solid var(--s100);
+    }
+
+        .notif-card:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--sh);
+        }
+
+        /* tipos */
+        /* DEPOIS */
+        .notif-card.danger {
+            background: linear-gradient(135deg,#dc2626,#7f1d1d);
+            border-color: #7f1d1d;
+            color: #fff;
+            animation: ndPulse 1.1s infinite;
+            box-shadow: 0 0 16px rgba(220,38,38,.5);
+            /* promove para camada própria — não contamina irmãos */
+            will-change: transform, box-shadow;
+            isolation: isolate;
+        }
+
+            .notif-card.danger .nc-title,
+            .notif-card.danger .nc-text,
+            .notif-card.danger .nc-time {
+                color: #fff;
+            }
+
+    @@keyframes ndPulse {
+        0%, 100% {
+            transform: scale(1);
+            box-shadow: 0 0 8px rgba(220,38,38,.35);
+        }
+
+        50% {
+            transform: scale(1.018);
+            box-shadow: 0 0 20px rgba(220,38,38,.75);
+        }
+    }
+
+    .notif-card.warning {
+        background: linear-gradient(135deg,#f59e0b,#b45309);
+        border-color: #92400e;
+        box-shadow: 0 0 12px rgba(245,158,11,.4);
+    }
+
+        .notif-card.warning .nc-title,
+        .notif-card.warning .nc-text,
+        .notif-card.warning .nc-time {
+            color: #fff;
+        }
+
+    .notif-card.info {
+        background: var(--s50);
+        border-color: var(--s200);
+    }
+
+    .nc-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--ink);
+        line-height: 1.3;
+    }
+
+    .nc-text {
+        font-size: 9.5px;
+        color: var(--ink3);
+        margin-top: 3px;
+        line-height: 1.35;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .nc-time {
+        font-size: 8.5px;
+        color: var(--soft);
+        margin-top: 4px;
+        font-weight: 600;
+    }
+
+    /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+                                   HAMBURGER
+                                â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+    .ham-btn {
+        display: none;
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 1002;
+        width: 42px;
+        height: 42px;
+        border-radius: var(--rad2);
+        background: linear-gradient(135deg,var(--s600),var(--s900));
+        border: 1px solid rgba(255,255,255,.2);
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 6px 18px rgba(37,99,235,.35);
+        transition: var(--tr);
+    }
+
+        .ham-btn:active {
+            transform: scale(.95);
+        }
+
+    .ham-ico {
+        width: 18px;
+        height: 1.5px;
+        background: #fff;
+        position: relative;
+        border-radius: 999px;
+        transition: var(--tr);
+    }
+
+        .ham-ico::before, .ham-ico::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 1.5px;
+            background: #fff;
+            left: 0;
+            border-radius: 999px;
+            transition: var(--tr);
+        }
+
+        .ham-ico::before {
+            top: -6px;
+        }
+
+        .ham-ico::after {
+            top: 6px;
+        }
+
+    .ham-btn.open .ham-ico {
+        background: transparent;
+    }
+
+        .ham-btn.open .ham-ico::before {
+            top: 0;
+            transform: rotate(45deg);
+        }
+
+        .ham-btn.open .ham-ico::after {
+            top: 0;
+            transform: rotate(-45deg);
+        }
+
+    .mob-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,.55);
+        backdrop-filter: blur(2px);
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .22s ease;
+    }
+
+        .mob-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+    /* â”€â”€â”€ RESPONSIVE â”€â”€â”€ */
+    @@media(max-width:1200px) {
+        .layout {
+            grid-template-columns: var(--sb-w) minmax(0,1fr);
+        }
+
+        .notif-panel {
+            display: none;
+        }
+    }
+
+    @@media(max-width:900px) {
+        :root {
+            --sb-w: 54px;
+        }
+
+        .sb-company-mark, .sb-brand, .sb-section-lbl, .ni-lbl, .ni-arrow, .u-name, .u-status, .sb-top-status {
+            display: none;
+        }
+
+        .nav-item, .user-row {
+            justify-content: center;
+            padding: 7px;
+        }
+
+        .sb-head {
+            justify-content: center;
+            padding: 10px 6px;
+        }
+
+
+        .sb-head-row {
+            justify-content: center;
+        }
+
+        .sb-logo {
+            margin: 0;
+        }
+
+        .ni-badge {
+            right: 2px;
+            top: 5px;
+            transform: none;
+        }
+    }
+
+    @@media(max-width:768px) {
+        .ham-btn {
+            display: flex;
+        }
+
+        .mob-overlay {
+            display: block;
+        }
+
+        .layout {
+            display: block;
+            height: auto;
+            min-height: 100vh;
+            overflow: visible;
+        }
+
+        .content {
+            width: 100%;
+            height: auto;
+            min-height: 100vh;
+            overflow: visible;
+            display: flex; /* ← adiciona */
+            flex-direction: column; /* ← adiciona */
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: calc(var(--sb-w-mob) * -1);
+            width: var(--sb-w-mob);
+            max-width: 88vw;
+            height: 100dvh;
+            z-index: 1001;
+            padding-top: 58px;
+            transition: left .26s ease;
+            box-shadow: 6px 0 24px rgba(0,0,0,.28);
+        }
+
+            .sidebar.mob-open {
+                left: 0;
+            }
+                /* restaura labels no mobile aberto */
+                .sidebar.mob-open .sb-company-mark,
+                .sidebar.mob-open .sb-brand,
+                .sidebar.mob-open .sb-section-lbl,
+                .sidebar.mob-open .ni-lbl,
+                .sidebar.mob-open .ni-arrow,
+                .sidebar.mob-open .u-name,
+                .sidebar.mob-open .u-status,
+                .sidebar.mob-open .sb-top-status {
+                    display: inline-flex;
+                }
+
+                .sidebar.mob-open .sb-brand {
+                    display: flex;
+                }
+
+                .sidebar.mob-open .sb-top-status {
+                    display: inline-flex;
+                    width: 100%;
+                }
+
+                .sidebar.mob-open .sb-head {
+                    justify-content: flex-start;
+                    padding: 10px 12px;
+                }
+
+
+                .sidebar.mob-open .sb-company-mark {
+                    display: flex;
+                }
+
+                .sidebar.mob-open .sb-head-row {
+                    justify-content: flex-start;
+                }
+
+                .sidebar.mob-open .nav-item,
+                .sidebar.mob-open .user-row {
+                    justify-content: flex-start;
+                    padding: 8px 10px;
+                }
+
+                .sidebar.mob-open .ni-badge {
+                    position: absolute;
+                    right: 8px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                }
+    }
+
+    @@media(max-width:480px) {
+        :root {
+            --sb-w-mob: 256px;
+        }
+
+        .sidebar {
+            padding-top: 52px;
+        }
+    }
+
+    .notif-clear-btn {
+        height: 18px;
+        padding: 0 7px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.14);
+        border: 1px solid rgba(255,255,255,.28);
+        color: #fff;
+        font-size: 8.5px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        transition: var(--tr);
+    }
+
+        .notif-clear-btn:hover {
+            background: rgba(255,255,255,.26);
+        }
+
+
+    .nc-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    .nc-count-badge {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.3);
+        border: 1px solid rgba(255,255,255,.4);
+        font-size: 9px;
+        font-weight: 800;
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .nc-items {
+        margin-top: 5px;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .nc-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        padding: 3px 5px;
+        border-radius: 4px;
+        background: rgba(255,255,255,.12);
+        cursor: pointer;
+        transition: background .12s;
+    }
+
+        .nc-item:hover {
+            background: rgba(255,255,255,.22);
+        }
+
+    .nc-item-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(255,255,255,.7);
+        flex-shrink: 0;
+        margin-top: 4px;
+    }
+
+    .nc-item-txt {
+        font-size: 9px;
+        color: rgba(255,255,255,.9);
+        line-height: 1.4;
+    }
+
+    .nc-item-mais {
+        font-size: 8.5px;
+        color: rgba(255,255,255,.6);
+        padding: 2px 5px;
+        font-style: italic;
+    }
+</style>
+
+<!-- hamburger -->
+<button class="ham-btn @(isMobileMenuOpen ? "open" : "")" @onclick="ToggleMobileMenu">
+    <span class="ham-ico"></span>
+</button>
+<div class="mob-overlay @(isMobileMenuOpen ? "active" : "")" @onclick="CloseMobileMenu"></div>
+
+<div class="app-shell">
+    <div class="layout @(Notificacoes?.Any() != true ? "no-notif" : "")">
+
+        <!-- â•â•â•â•â•â•â•â•â•â• SIDEBAR â•â•â•â•â•â•â•â•â•â• -->
+        <nav class="@GetSidebarClass()">
+
+            <!-- header -->
+            <div class="sb-head">
+
+                <div class="sb-head-row">
+                    <div class="sb-logo">
+                        <img class="sb-logo-img"
+                             src="data:image/png;base64,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"
+                             alt="HELP" />
+                    </div>
+                    <div class="sb-brand">
+                        <strong>@(string.IsNullOrWhiteSpace(EmpresaNome) ? "HELP" : EmpresaNome)</strong>
+                        <span>@(string.IsNullOrWhiteSpace(UserState.CurrentUser) ? "Sistema" : UserState.CurrentUser)</span>
+                    </div>
+
+                    <button class="sb-top-status @(UserState.IsOnline ? "on" : "off")"
+                            title="Alterar status"
+                            @onclick="AlternarStatusOnlineAsync">
+                        <span class="sb-status-dot"></span>
+                        <span>@(UserState.IsOnline ? "Online" : "Offline")</span>
+                    </button>
+                </div>
+            </div>
+            <!-- scroll area -->
+            <div class="sb-scroll">
+
+                <!-- GERAL -->
+                <div class="sb-section flyout-host">
+                    <button class="nav-item nav-section-toggle @(mostrarGeral ? "active" : "")"
+                            @onclick="ToggleMenuGeral">
+                        <span class="ni-icon"><i class="ti ti-menu-2" aria-hidden="true"></i></span>
+                        <span class="ni-lbl">Geral</span>
+                        @if (ChatNotify.Novas > 0)
+                        {
+                            <span class="ni-badge">@ChatNotify.Novas</span>
+                        }
+                        <span class="ni-arrow">▸</span>
+                    </button>
+
+                    @if (mostrarGeral)
+                    {
+                        <div class="flyout-backdrop" @onclick="FecharTodosFlyouts"></div>
+
+                        <div class="flyout-menu flyout-geral">
+                            <div class="flyout-title">Geral</div>
+
+                            <button class="@(GetNavItemClass("/chat-interno")) flyout-item"
+                                    @onclick="@(() => NavigateAndCloseMobile("/chat-interno"))">
+                                <span class="ni-icon">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                                </span>
+                                <span class="ni-lbl">Chat Interno</span>
+                                @if (ChatNotify.Novas > 0)
+                                {
+                                    <span class="ni-badge">@ChatNotify.Novas</span>
+                                }
+                            </button>
+
+                            @if (PodeVisualizarAgendas)
+                            {
+                                <button class="@(GetNavItemClass("/agendas")) flyout-item"
+                                        @onclick="@(() => NavigateAndCloseMobile("/agendas"))">
+                                    <span class="ni-icon">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                                    </span>
+                                    <span class="ni-lbl">Agendas</span>
+                                </button>
+                            }
+
+                            <button class="@(GetNavItemClass("/documentacoes")) flyout-item"
+                                    @onclick="@(() => NavigateAndCloseMobile("/documentacoes"))">
+                                <span class="ni-icon">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z" /></svg>
+                                </span>
+                                <span class="ni-lbl">Documentação</span>
+                            </button>
+                        </div>
+                    }
+                </div>
+
+                <!-- TICKETS -->
+                @if (PodeVisualizarTickets)
+                {
+                    <div class="sb-sep"></div>
+                    <button class="@(GetNavItemClass("/tickets"))"
+                            @onclick="@(() => NavigateAndCloseMobile("/tickets"))">
+                        <span class="ni-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9l-4-4z" /><polyline points="15 3 15 9 21 9" /></svg>
+                        </span>
+                        <span class="ni-lbl">Tickets</span>
+                        @if (TicketNotify.Novos > 0)
+                        {
+                            <span class="ni-badge">@TicketNotify.Novos</span>
+                        }
+                    </button>
+                }
+
+                <!-- COMERCIAL -->
+                @if (PodeAcessarComercial)
+                {
+                    <div class="sb-sep"></div>
+                    <button class="@(GetNavItemClass("/menu"))"
+                            @onclick="@(() => NavigateAndCloseMobile("/menu"))">
+                        <span class="ni-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+                        </span>
+                        <span class="ni-lbl">Comercial</span>
+                        @if (QtdComercialNovos > 0)
+                        {
+                            <span class="ni-badge">@QtdComercialNovos</span>
+                        }
+                    </button>
+                }
+
+                <!-- CADASTROS -->
+                @if (PodeAcessarCadastros && (PodeAcessarCadastroClientes || PodeAcessarParametrosDinamicos || PodeAcessarTicketSetores || PodeAcessarTicketSituacoes || PodeAcessarTicketTipos))
+                {
+                    <div class="sb-sep"></div>
+                    <div class="sb-section flyout-host">
+                        <button class="nav-item @(mostrarCadastros ? "active" : "")"
+                                @onclick="ToggleMenuCadastros">
+                            <span class="ni-icon">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
+                            </span>
+                            <span class="ni-lbl">Cadastros</span>
+                            <span class="ni-arrow">▸</span>
+                        </button>
+
+                        @if (mostrarCadastros)
+                        {
+                            <div class="flyout-backdrop" @onclick="FecharTodosFlyouts"></div>
+
+                            <div class="flyout-menu flyout-gestao">
+                                <div class="flyout-title">Cadastros</div>
+
+                                @if (PodeAcessarCadastroClientes)
+                                {
+                                    <button class="@(GetNavItemClass("/cadastro-cliente")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-cliente"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Clientes</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarParametrosDinamicos)
+                                {
+                                    <button class="@(GetNavItemClass("/parametro-dinamico")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/parametro-dinamico"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Parâmetros</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarTicketSetores)
+                                {
+                                    <button class="@(GetNavItemClass("/cadastro-ticket-setor")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-ticket-setor"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z" /><path d="m2 17 10 5 10-5" /><path d="m2 12 10 5 10-5" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Setores do Ticket</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarTicketSituacoes)
+                                {
+                                    <button class="@(GetNavItemClass("/cadastro-ticket-situacao")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-ticket-situacao"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Situações do Ticket</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarTicketTipos)
+                                {
+                                    <button class="@(GetNavItemClass("/cadastro-ticket-tipo")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-ticket-tipo"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Tipos do Ticket</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- GESTÃO -->
+                @if (PodeAcessarDashboard || PodeAcessarBancoTalentos || PodeAcessarConexoesWhatsApp || PodeAcessarAdmin || PodeVisualizarChangelog)
+                {
+                    <div class="sb-sep"></div>
+                    <div class="sb-section flyout-host">
+                        <button class="nav-item @(mostrarGestao ? "active" : "")"
+                                @onclick="ToggleMenuGestao">
+                            <span class="ni-icon">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+                            </span>
+                            <span class="ni-lbl">Gestão</span>
+                            <span class="ni-arrow">▸</span>
+                        </button>
+
+                        @if (mostrarGestao)
+                        {
+                            <div class="flyout-backdrop" @onclick="FecharTodosFlyouts"></div>
+
+                            <div class="flyout-menu flyout-gestao">
+                                <div class="flyout-title">Gestão</div>
+
+                                @if (PodeAcessarDashboard)
+                                {
+                                    <button class="@(GetNavItemClass("/dashboard")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/dashboard"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Dashboard</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarBancoTalentos)
+                                {
+                                    <button class="@(GetNavItemClass("/banco-talentos")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/banco-talentos"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Banco de Talentos</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarConexoesWhatsApp)
+                                {
+                                    <button class="@(GetNavItemClass("/whatsapp-conexoes")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/whatsapp-conexoes"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Conexão WhatsApp</span>
+                                    </button>
+                                }
+
+                                @if (PodeVisualizarChangelog)
+                                {
+                                    <div class="flyout-section-title">Logs e Notificações</div>
+
+                                    <button class="@(GetNavItemClass("/admin/logs")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/logs"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Alterações</span>
+                                    </button>
+
+                                    @if (PodeAcessoRemoto)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/log-remoto")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/log-remoto"))">
+                                            <span class="ni-icon">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></svg>
+                                            </span>
+                                            <span class="ni-lbl">Log Remoto</span>
+                                        </button>
+                                    }
+
+                                    <button class="@(GetNavItemClass("/admin/log-acesso")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/log-acesso"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Log de Acesso</span>
+                                    </button>
+
+                                    <button class="@(GetNavItemClass("/admin/log-financeiro")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/log-financeiro"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Log Financeiro</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarAdmin)
+                                {
+                                    <div class="flyout-section-title">Administração</div>
+
+                                    <button class="@(GetNavItemClass("/admin/monitor-backups")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/monitor-backups"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 5v14c0 1.66-4 3-9 3s-9-1.34-9-3V5" /><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Monitor de Backups</span>
+                                    </button>
+
+                                    @if (PodeAdministrarClientes)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/bx-pagar")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/bx-pagar"))">
+                                            <span class="ni-icon">💰</span>
+                                            <span class="ni-lbl">Baixa Receber</span>
+                                        </button>
+                                    }
+
+                                    <button class="@(GetNavItemClass("/admin/vs-clientes")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/vs-clientes"))">
+                                        <span class="ni-icon">💻</span>
+                                        <span class="ni-lbl">Versões Cliente</span>
+                                    </button>
+
+                                    @if (PodeVisualizarComissoes)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/comissoes")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/comissoes"))">
+                                            <span class="ni-icon">🧾</span>
+                                            <span class="ni-lbl">Comissões</span>
+                                        </button>
+                                    }
+
+                                    @if (PodeAcessoRemoto)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/acesso-remoto")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/acesso-remoto"))">
+                                            <span class="ni-icon">🖥️</span>
+                                            <span class="ni-lbl">Acesso Remoto</span>
+                                        </button>
+                                    }
+
+                                    <button class="@(GetNavItemClass("/admin/monitor")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/admin/monitor"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Monitor HELP</span>
+                                    </button>
+
+                                    @if (PodeGerenciarPermissoes)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/permissoes")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/permissoes"))">
+                                            <span class="ni-icon">🔐</span>
+                                            <span class="ni-lbl">Permissões</span>
+                                        </button>
+                                    }
+
+                                    @if (PodeVisualizarTarefas)
+                                    {
+                                        <button class="@(GetNavItemClass("/admin/tarefas")) flyout-item"
+                                                @onclick="@(() => NavigateAndCloseMobile("/admin/tarefas"))">
+                                            <span class="ni-icon">📋</span>
+                                            <span class="ni-lbl">Tarefas</span>
+                                        </button>
+                                    }
+
+                                    <button class="@(GetNavItemClass("/cadastro-usuario")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-usuario"))">
+                                        <span class="ni-icon">👤</span>
+                                        <span class="ni-lbl">Cadastro de Usuário</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- USUÁRIOS -->
+                <div class="sb-sep"></div>
+                <div class="sb-section flyout-host">
+                    <button class="nav-item @(mostrarUsuariosOnline ? "active" : "")" @onclick="ToggleUsuariosOnlineAsync">
+                        <span class="ni-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                        </span>
+                        <span class="ni-lbl">Usuários</span>
+                        <span class="ni-arrow">▸</span>
+                    </button>
+
+                    @if (mostrarUsuariosOnline)
+                    {
+                        <div class="flyout-backdrop" @onclick="FecharTodosFlyouts"></div>
+
+                        <div class="flyout-menu flyout-usuarios">
+                            <div class="flyout-title">Usuários</div>
+
+                            @if (UsuariosOnline == null || !UsuariosOnline.Any())
+                            {
+                                <div class="flyout-empty">Nenhum usuário encontrado.</div>
+                            }
+                            else
+                            {
+                                @foreach (var u in UsuariosOnline)
+                                {
+                                    <div class="user-row flyout-user-row">
+                                        <span class="u-dot @(u.Online ? "on" : "")"></span>
+                                        <span class="u-name">@u.Usuario</span>
+                                        <span class="u-status">@(u.Online ? "On" : "Off")</span>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+
+            </div>
+            <!-- footer -->
+            <div class="sb-foot">
+                <div style="display:flex;flex-direction:column;gap:2px;">
+
+                    <button class="nav-item danger-item" @onclick="Logout">
+                        <span class="ni-icon">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>
+                        </span>
+                        <span class="ni-lbl">Sair</span>
+                    </button>
+
+                </div>
+            </div>
+
+            <button class="nav-item"
+                    style="opacity:.55;font-size:10px;"
+                    @onclick="SairTodosDispositivosAsync"
+                    title="Encerra o acesso em todos os dispositivos conectados">
+                <span class="ni-icon" style="font-size:10px;">🔒</span>
+                <span class="ni-lbl">Sair de todos os dispositivos</span>
+            </button>
+
+        </nav>
+
+        <!-- â•â•â•â•â•â•â•â•â•â• CONTENT â•â•â•â•â•â•â•â•â•â• -->
+        <main class="content">
+            @BodyContent
+        </main>
+
+        <!-- â•â•â•â•â•â•â•â•â•â• NOTIFICAÃ‡Ã•ES â•â•â•â•â•â•â•â•â•â• -->
+        <aside class="notif-panel">
+            <div class="notif-head">
+                <div class="notif-head-title">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                    Notificações
+                </div>
+                <div style="display:flex; align-items:center; gap:6px;">
+                    @if (Notificacoes?.Any() == true)
+                    {
+                        <span class="notif-count">@Notificacoes.Count</span>
+                        <button type="button" class="notif-clear-btn" title="Limpar todas" @onclick="LimparNotificacoes">
+                            Limpar
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="notif-scroll">
+                @if (Notificacoes == null || !Notificacoes.Any())
+                {
+                    <div class="notif-empty">Nenhuma notificaÃ§Ã£o no momento.</div>
+                }
+                else
+                {
+                    @foreach (var n in Notificacoes.OrderByDescending(x => x.DataHora).Take(15))
+                    {
+                        <div class="notif-card @n.Tipo" @onclick="() => AbrirNotificacao(n)">
+
+                            <div class="nc-header">
+                                <div class="nc-title">@n.Titulo</div>
+                                @if (n.Itens.Count > 1)
+                                {
+                                    <span class="nc-count-badge">@n.Itens.Count</span>
+                                }
+                            </div>
+
+                            @if (n.Itens.Count <= 1)
+                            {
+                                <div class="nc-text">@n.Mensagem</div>
+                            }
+                            else
+                            {
+                                <div class="nc-items">
+                                    @foreach (var item in n.Itens.Take(4))
+                                    {
+                                        <div class="nc-item" @onclick:stopPropagation="true"
+                                             @onclick="() => AbrirItem(item)">
+                                            <span class="nc-item-dot"></span>
+                                            <span class="nc-item-txt">@item.Descricao</span>
+                                        </div>
+                                    }
+                                    @if (n.Itens.Count > 4)
+                                    {
+                                        <div class="nc-item-mais">+@(n.Itens.Count - 4) mais...</div>
+                                    }
+                                </div>
+                            }
+
+                            <div class="nc-time">@n.DataHora.ToString("HH:mm")</div>
+                        </div>
+                    }
+                }
+            </div>
+        </aside>
+
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<NotificacaoItemModel> OnRemoverItem { get; set; }
+    private bool _permissoesCarregadas = false;
+    private bool mostrarLogs = false;
+    private bool PodeVisualizarChangelog;
+    private bool mostrarAdmin = false;
+    private bool mostrarGeral = false;
+    private bool mostrarCadastros = false;
+    private bool mostrarGestao = false;
+    private PeriodicTimer? _timerAtividade;
+    private CancellationTokenSource? _timerAtividadeCts;
+    private PeriodicTimer? _timerUsuarios;
+    private CancellationTokenSource? _timerUsuariosCts;
+    private bool mostrarUsuariosOnline = false;
+    private List<UsuarioOnlineModel> UsuariosOnline = new();
+    private bool isCollapsed = false;
+    private bool isMobileMenuOpen = false;
+    private string? currentUri;
+    private int QtdComercialNovos = 0;
+
+    private bool PodeAcessarDashboard;
+    private bool PodeAcessarComercial;
+    private bool PodeVisualizarAgendas;
+    private bool PodeVisualizarTickets;
+    private bool PodeAcessarAdmin;
+    private bool PodeAcessarConexoesWhatsApp;
+    private bool PodeAcessarBancoTalentos;
+    private bool PodeAcessarCadastros;
+    private bool PodeAcessarCadastroClientes;
+    private bool PodeAcessarParametrosDinamicos;
+    private bool PodeAcessarTicketSetores;
+    private bool PodeAcessarTicketSituacoes;
+    private bool PodeAcessarTicketTipos;
+
+    private bool PodeAdministrarClientes;
+    private bool PodeGerenciarPermissoes;
+    private bool PodeVisualizarTarefas;
+    private bool PodeVisualizarComissoes;
+    private bool PodeAcessoRemoto;
+    private PeriodicTimer? _timerBadgeChat;
+    private CancellationTokenSource? _timerBadgeChatCts;
+    private PeriodicTimer? _timerBadgeTicket;
+    private CancellationTokenSource? _timerBadgeTicketCts;
+
+    [Parameter] public RenderFragment? BodyContent { get; set; }
+    [Parameter] public List<NotificacaoPainelModel> Notificacoes { get; set; } = new();
+    [Parameter] public EventCallback<NotificacaoPainelModel> OnAbrirNotificacao { get; set; }
+    [Parameter] public EventCallback OnLimparNotificacoes { get; set; }
+
+    private string? EmpresaNome;
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            EmpresaNome = await JS.InvokeAsync<string>("localStorage.getItem", "crm_company_name");
+            StateHasChanged();
+        }
+    }
+
+    private async Task AbrirNotificacao(NotificacaoPainelModel n)
+    {
+        if (OnAbrirNotificacao.HasDelegate)
+            await OnAbrirNotificacao.InvokeAsync(n);
+        if (!string.IsNullOrWhiteSpace(n.Url))
+            Nav.NavigateTo(n.Url);
+    }
+
+    private async Task AbrirItem(NotificacaoItemModel item)
+    {
+        if (OnRemoverItem.HasDelegate)
+            await OnRemoverItem.InvokeAsync(item);
+
+        if (!string.IsNullOrWhiteSpace(item.Url))
+            Nav.NavigateTo(item.Url);
+    }
+
+    private async Task CarregarBadgeComercialAsync()
+    {
+        if (!UserState.IsReady || UserState.CurrentCompanyId <= 0) return;
+
+        for (int tentativa = 1; tentativa <= 3; tentativa++)
+        {
+            try
+            {
+                QtdComercialNovos = await CardService.GetQuantidadeCardsNovosAsync(UserState.CurrentCompanyId);
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+            catch (Microsoft.Data.SqlClient.SqlException ex) when (ex.Number == 1205)
+            {
+                if (tentativa == 3) return; // silencia na 3ª tentativa — badge não é crítico
+                await Task.Delay(200 * tentativa);
+            }
+            catch
+            {
+                return; // outros erros: ignora silenciosamente
+            }
+        }
+    }
+
+    private string ObterIniciaisUsuario()
+    {
+        var usuario = UserState.CurrentUser?.Trim();
+
+        if (string.IsNullOrWhiteSpace(usuario))
+            return "HP";
+
+        var partes = usuario
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (partes.Length >= 2)
+            return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+
+        return usuario.Length >= 2
+            ? usuario.Substring(0, 2).ToUpperInvariant()
+            : usuario.ToUpperInvariant();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUri = Nav.Uri;
+        Nav.LocationChanged += OnLocationChanged;
+        TicketNotify.OnChange += AtualizarMenu;
+        ChatNotify.OnChange += AtualizarMenu;
+
+        await CarregarPermissoesMenuAsync();
+
+        if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+        {
+            UserState.SetOnline(true);
+            await LoginService.AtualizarStatusOnlineAsync(UserState.CurrentUser.Trim(), true);
+            await LoginService.RegistrarAtividadeOnlineAsync(UserState.CurrentUser.Trim());
+        }
+
+        // Timer: usuários online
+        _timerUsuariosCts = new CancellationTokenSource();
+        _timerUsuarios = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerUsuarios.WaitForNextTickAsync(_timerUsuariosCts.Token))
+                    if (mostrarUsuariosOnline)
+                        await CarregarUsuariosOnlineAsync();
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        // Timer: heartbeat de atividade
+        _timerAtividadeCts = new CancellationTokenSource();
+        _timerAtividade = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerAtividade.WaitForNextTickAsync(_timerAtividadeCts.Token))
+                    if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                        await LoginService.RegistrarAtividadeOnlineAsync(UserState.CurrentUser.Trim());
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        // Timer: badge chat — por usuário, isolado, só dispara render se mudou
+        _timerBadgeChatCts = new CancellationTokenSource();
+        _timerBadgeChat = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerBadgeChat.WaitForNextTickAsync(_timerBadgeChatCts.Token))
+                {
+                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                        continue;
+
+                    var qtd = await ChatInternoService.ObterQuantidadeMensagensNaoLidasAsync(
+                                  UserState.CurrentUser.Trim().ToUpper(), CodEmp);
+                    ChatNotify.SetNovas(qtd); // guard interno: só dispara OnChange se mudou
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
+        // Timer: badge tickets — por usuário, isolado, só dispara render se mudou
+        _timerBadgeTicketCts = new CancellationTokenSource();
+        _timerBadgeTicket = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerBadgeTicket.WaitForNextTickAsync(_timerBadgeTicketCts.Token))
+                {
+                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                        continue;
+
+                    var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(
+                                  UserState.CurrentUser.Trim().ToUpper());
+                    TicketNotify.SetNovos(qtd); // guard interno: só dispara OnChange se mudou
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        currentUri = e.Location;
+
+        // Permissões não mudam durante a sessão — carrega uma vez só.
+        // Evita 1 query (13 antes) a cada troca de rota / clique de menu.
+        if (!_permissoesCarregadas)
+        {
+            await CarregarPermissoesMenuAsync();
+            _permissoesCarregadas = true;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LimparNotificacoes()
+    {
+        if (OnLimparNotificacoes.HasDelegate)
+            await OnLimparNotificacoes.InvokeAsync();
+    }
+
+    private async Task CarregarBadgeTicketsAsync()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser)) return;
+        var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser.Trim().ToUpper());
+        TicketNotify.SetNovos(qtd);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleMobileMenu() => isMobileMenuOpen = !isMobileMenuOpen;
+    private void CloseMobileMenu() => isMobileMenuOpen = false;
+
+    private void NavigateAndCloseMobile(string url)
+    {
+        FecharTodosFlyouts();
+        isMobileMenuOpen = false;
+        Nav.NavigateTo(url);
+    }
+
+    private void ToggleMenuGeral()
+    {
+        var abrir = !mostrarGeral;
+        FecharTodosFlyouts();
+        mostrarGeral = abrir;
+    }
+
+    private void ToggleMenuGestao()
+    {
+        var abrir = !mostrarGestao;
+        FecharTodosFlyouts();
+        mostrarGestao = abrir;
+    }
+
+    private void ToggleMenuCadastros()
+    {
+        var abrir = !mostrarCadastros;
+        FecharTodosFlyouts();
+        mostrarCadastros = abrir;
+    }
+
+    private void FecharTodosFlyouts()
+    {
+        mostrarGeral = false;
+        mostrarCadastros = false;
+        mostrarGestao = false;
+        mostrarAdmin = false;
+        mostrarLogs = false;
+        mostrarUsuariosOnline = false;
+    }
+
+    private string GetNavItemClass(string href)
+    {
+        var isActive = currentUri?.Contains(href, StringComparison.OrdinalIgnoreCase) == true;
+        return isActive ? "nav-item active" : "nav-item";
+    }
+
+    private string GetSidebarClass()
+    {
+        var classes = new List<string> { "sidebar" };
+        if (isCollapsed) classes.Add("collapsed");
+        if (isMobileMenuOpen) classes.Add("mob-open");
+        return string.Join(" ", classes);
+    }
+
+    private async Task Logout()
+    {
+        if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+        {
+            await LoginService.AtualizarStatusOnlineAsync(UserState.CurrentUser.Trim(), false);
+            await LogAcessoService.RegistrarAsync(
+                UserState.CurrentUser.Trim(),
+                UserState.CurrentCompanyId,
+                UserState.CurrentCompany,
+                "LOGOUT");
+        }
+        UserState.Clear();
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+
+    private void AtualizarMenu() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        TicketNotify.OnChange -= AtualizarMenu;
+        ChatNotify.OnChange -= AtualizarMenu;
+        _timerUsuariosCts?.Cancel(); _timerUsuarios?.Dispose(); _timerUsuariosCts?.Dispose();
+        _timerAtividadeCts?.Cancel(); _timerAtividade?.Dispose(); _timerAtividadeCts?.Dispose();
+        _timerBadgeChatCts?.Cancel(); _timerBadgeChat?.Dispose(); _timerBadgeChatCts?.Dispose();
+        _timerBadgeTicketCts?.Cancel(); _timerBadgeTicket?.Dispose(); _timerBadgeTicketCts?.Dispose();
+    }
+
+    private async Task CarregarPermissoesMenuAsync()
+    {
+        PodeVisualizarChangelog = false;
+        PodeAcessarDashboard = false;
+        PodeAcessarComercial = false;
+        PodeVisualizarAgendas = false;
+        PodeVisualizarTickets = false;
+        PodeAcessarAdmin = false;
+        PodeAcessarConexoesWhatsApp = false;
+        PodeAcessarBancoTalentos = false;
+        PodeAcessarCadastros = false;
+        PodeAcessarCadastroClientes = false;
+        PodeAcessarParametrosDinamicos = false;
+        PodeAcessarTicketSetores = false;
+        PodeAcessarTicketSituacoes = false;
+        PodeAcessarTicketTipos = false;
+
+        PodeAdministrarClientes = false;
+        PodeGerenciarPermissoes = false;
+        PodeVisualizarTarefas = false;
+        PodeVisualizarComissoes = false;
+        PodeAcessoRemoto = false;
+
+        int tentativas = 0;
+        while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
+
+        var u = UserState.CurrentUser?.Trim().ToUpper() ?? "";
+        if (string.IsNullOrWhiteSpace(u)) { await InvokeAsync(StateHasChanged); return; }
+
+        // UMA query só, em vez de 13 chamadas separadas ao banco
+        var perms = await AdminService.GetPermissoesUsuarioAsync(u);
+
+        PodeAcessarDashboard = perms.Contains("DASHBOARD_VISUALIZAR");
+        PodeAcessarComercial = perms.Contains("COMERCIAL_ACESSAR");
+        PodeVisualizarAgendas = perms.Contains("AGENDAS_VISUALIZAR");
+        PodeVisualizarTickets = perms.Contains("TICKETS_VISUALIZAR");
+        PodeAcessarAdmin = perms.Contains("ADMIN_ACESSAR");
+        PodeAcessarConexoesWhatsApp = perms.Contains("WHATSAPP_CONEXOES");
+        PodeAcessarBancoTalentos = perms.Contains("BANCO_TALENTOS_ACESSAR");
+        PodeVisualizarChangelog = perms.Contains("ADMIN_CHANGELOG_VISUALIZAR");
+        PodeAcessarCadastros = perms.Contains("CADASTROS_ACESSAR");
+        PodeAcessarCadastroClientes = perms.Contains("CADASTROS_CLIENTES_VISUALIZAR");
+        PodeAcessarParametrosDinamicos = perms.Contains("CADASTROS_PARAMETROS_VISUALIZAR");
+        PodeAcessarTicketSetores = perms.Contains("CADASTROS_TICKET_SETORES_VISUALIZAR");
+        PodeAcessarTicketSituacoes = perms.Contains("CADASTROS_TICKET_SITUACOES_VISUALIZAR");
+        PodeAcessarTicketTipos = perms.Contains("CADASTROS_TICKET_TIPOS_VISUALIZAR");
+        PodeAdministrarClientes = perms.Contains("ADMIN_ADMINISTRAR_CLIENTES");
+        PodeGerenciarPermissoes = perms.Contains("ADMIN_PERMISSOES");
+        PodeVisualizarTarefas = perms.Contains("ADMIN_TAREFAS_VISUALIZAR");
+        PodeVisualizarComissoes = perms.Contains("ADMIN_COMISSOES_VISUALIZAR");
+        PodeAcessoRemoto = perms.Contains("ADMIN_ACESSO_REMOTO");
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task AlternarStatusOnlineAsync()
+    {
+        var novo = !UserState.IsOnline;
+        UserState.SetOnline(novo);
+        if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            await LoginService.AtualizarStatusOnlineAsync(UserState.CurrentUser.Trim(), novo);
+        if (mostrarUsuariosOnline) await CarregarUsuariosOnlineAsync();
+    }
+
+    private async Task CarregarUsuariosOnlineAsync()
+    {
+        UsuariosOnline = await LoginService.ObterUsuariosStatusAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleUsuariosOnlineAsync()
+    {
+        var abrir = !mostrarUsuariosOnline;
+        FecharTodosFlyouts();
+        mostrarUsuariosOnline = abrir;
+
+        if (mostrarUsuariosOnline)
+            await CarregarUsuariosOnlineAsync();
+    }
+
+    private async Task SairTodosDispositivosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(UserState.CurrentUser)) return;
+
+        var confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            "Deseja realmente sair de todos os dispositivos?\n\nVocê precisará verificar o código 2FA no próximo login em qualquer dispositivo.");
+
+        if (!confirmado) return;
+
+        // Invalida token no banco
+        await CadastroUsuarioService.GravarSessaoLembrarAsync(
+            UserState.CurrentUser.Trim(), CodEmp, minutos: 0);
+
+        // Remove do localStorage do dispositivo atual
+        await JS.InvokeVoidAsync("localStorage.removeItem", "crm_2fa_token");
+
+        // Faz logout normal
+        await Logout();
+    }
+}
+
+
+

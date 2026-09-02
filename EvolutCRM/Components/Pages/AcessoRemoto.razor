@@ -1,0 +1,1278 @@
+﻿@page "/admin/acesso-remoto"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject AdminService AdminService
+@inject TicketService TicketService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject EvolutCRM.Services.KHelpDeskApiService KHelpDeskApi
+@inject IHttpContextAccessor HttpContextAccessor
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+    .remote-hub {
+        --bg: #eef3f8;
+        --surface: #ffffff;
+        --surface-2: #f8fafc;
+        --ink: #101828;
+        --muted: #667085;
+        --soft: #98a2b3;
+        --line: #d8e1ec;
+        --line-2: #edf2f7;
+        --blue: #2563eb;
+        --blue-2: #1d4ed8;
+        --cyan: #0891b2;
+        --green: #16a34a;
+        --green-2: #dcfce7;
+        --red: #dc2626;
+        --red-2: #fee2e2;
+        --amber: #d97706;
+        --shadow: 0 22px 70px rgba(15, 23, 42, .10);
+        min-height: calc(100vh - 28px);
+        padding: 18px;
+        border-radius: 22px;
+        background: radial-gradient(circle at 12% 4%, rgba(8, 145, 178, .16), transparent 34%), radial-gradient(circle at 82% 0%, rgba(37, 99, 235, .14), transparent 32%), linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+        color: var(--ink);
+        font-family: Inter, Arial, sans-serif;
+        font-size: 13px;
+    }
+
+    .rh-shell {
+        max-width: 1440px;
+        margin: 0 auto;
+    }
+
+    .rh-hero {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 18px;
+        align-items: center;
+        padding: 22px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,.18);
+        border-radius: 20px;
+        background: linear-gradient(135deg, rgba(15,23,42,.98), rgba(21,94,117,.94) 52%, rgba(22,101,52,.92));
+        box-shadow: var(--shadow);
+        color: #fff;
+    }
+
+        .rh-hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.06) 1px, transparent 1px);
+            background-size: 34px 34px;
+            mask-image: linear-gradient(90deg, rgba(0,0,0,.65), transparent);
+            pointer-events: none;
+        }
+
+    .rh-title,
+    .rh-hero-actions {
+        position: relative;
+        z-index: 1;
+    }
+
+    .rh-title {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        min-width: 0;
+    }
+
+    .rh-mark {
+        width: 48px;
+        height: 48px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 16px;
+        background: rgba(255,255,255,.12);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+        font-size: 22px;
+        font-weight: 900;
+    }
+
+    .rh-title h1 {
+        margin: 0;
+        font-size: 24px;
+        line-height: 1.15;
+        font-weight: 900;
+        letter-spacing: 0;
+    }
+
+    .rh-title p {
+        max-width: 760px;
+        margin: 6px 0 0;
+        color: rgba(255,255,255,.74);
+        font-size: 12px;
+        line-height: 1.5;
+        font-weight: 600;
+    }
+
+    .rh-hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .rh-live,
+    .rh-ghost {
+        height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .rh-live {
+        padding: 0 13px;
+        border: 1px solid rgba(34,197,94,.35);
+        background: rgba(22,163,74,.14);
+        color: #dcfce7;
+    }
+
+        .rh-live::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 6px rgba(34,197,94,.14);
+        }
+
+    .rh-ghost {
+        width: 38px;
+        border: 1px solid rgba(255,255,255,.2);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        font-size: 16px;
+    }
+
+    .rh-alert {
+        margin-top: 12px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+        .rh-alert.success {
+            border: 1px solid #bbf7d0;
+            background: #f0fdf4;
+            color: #166534;
+        }
+
+        .rh-alert.error {
+            border: 1px solid #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+    .rh-metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+    }
+
+    .rh-metric {
+        position: relative;
+        min-height: 98px;
+        padding: 15px;
+        overflow: hidden;
+        border: 1px solid rgba(216,225,236,.9);
+        border-radius: 18px;
+        background: rgba(255,255,255,.88);
+        box-shadow: 0 12px 34px rgba(15,23,42,.06);
+    }
+
+        .rh-metric::after {
+            content: "";
+            position: absolute;
+            right: -28px;
+            bottom: -34px;
+            width: 98px;
+            height: 98px;
+            border-radius: 34px;
+            background: rgba(37,99,235,.08);
+            transform: rotate(18deg);
+        }
+
+        .rh-metric.online::after {
+            background: rgba(22,163,74,.10);
+        }
+
+        .rh-metric.offline::after {
+            background: rgba(100,116,139,.10);
+        }
+
+        .rh-metric span {
+            display: block;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .rh-metric strong {
+            display: block;
+            margin-top: 10px;
+            color: var(--ink);
+            font-size: 28px;
+            line-height: 1;
+            font-weight: 900;
+        }
+
+        .rh-metric small {
+            display: block;
+            margin-top: 8px;
+            color: var(--soft);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+    .rh-layout {
+        display: grid;
+        grid-template-columns: minmax(290px, 360px) minmax(0, 1fr);
+        gap: 14px;
+        margin-top: 14px;
+        align-items: start;
+    }
+
+    .rh-panel {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: rgba(255,255,255,.92);
+        box-shadow: 0 12px 34px rgba(15,23,42,.06);
+    }
+
+    .rh-panel-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 15px 16px;
+        border-bottom: 1px solid var(--line-2);
+        background: linear-gradient(180deg, #fff, #f8fafc);
+    }
+
+        .rh-panel-head h2 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 13px;
+            line-height: 1.2;
+            font-weight: 900;
+        }
+
+        .rh-panel-head span {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+    .rh-search,
+    .rh-form {
+        padding: 16px;
+    }
+
+    .rh-label {
+        display: block;
+        margin-bottom: 7px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .rh-search-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 42px;
+        gap: 8px;
+    }
+
+    .rh-input {
+        width: 100%;
+        height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: #fff;
+        color: var(--ink);
+        outline: 0;
+        padding: 0 12px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 700;
+        transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+
+        .rh-input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 4px rgba(37,99,235,.12);
+            background: #fbfdff;
+        }
+
+    .rh-btn,
+    .rh-icon,
+    .rh-client,
+    .rh-chip,
+    .rh-mini,
+    .rh-connect,
+    .rh-connect-disabled {
+        border: 0;
+        font: inherit;
+    }
+
+    .rh-btn,
+    .rh-icon,
+    .rh-mini,
+    .rh-connect {
+        cursor: pointer;
+    }
+
+    .rh-icon {
+        width: 42px;
+        height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 13px;
+        background: var(--blue);
+        color: #fff;
+        font-size: 17px;
+        font-weight: 900;
+        box-shadow: 0 10px 22px rgba(37,99,235,.22);
+        transition: transform .15s ease, background .15s ease;
+    }
+
+        .rh-icon:hover {
+            background: var(--blue-2);
+            transform: translateY(-1px);
+        }
+
+    .rh-loading {
+        margin-top: 11px;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .rh-results {
+        display: grid;
+        gap: 8px;
+        max-height: 310px;
+        margin-top: 12px;
+        padding-right: 4px;
+        overflow: auto;
+    }
+
+    .rh-client {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        width: 100%;
+        min-height: 56px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: #fff;
+        color: var(--ink);
+        text-align: left;
+        cursor: pointer;
+        transition: border-color .15s ease, background .15s ease, transform .15s ease, box-shadow .15s ease;
+    }
+
+        .rh-client:hover {
+            border-color: rgba(37,99,235,.6);
+            background: #f5f9ff;
+            box-shadow: 0 10px 24px rgba(37,99,235,.08);
+            transform: translateX(2px);
+        }
+
+        .rh-client strong {
+            color: var(--blue);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .rh-client span {
+            overflow: hidden;
+            color: var(--ink);
+            font-size: 12px;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    .rh-selected {
+        margin: 0 16px 16px;
+        padding: 14px;
+        border: 1px solid rgba(22,163,74,.24);
+        border-radius: 16px;
+        background: linear-gradient(135deg, #f0fdf4, #ecfeff);
+    }
+
+        .rh-selected span {
+            display: block;
+            color: #15803d;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .rh-selected strong {
+            display: block;
+            overflow: hidden;
+            margin-top: 5px;
+            color: #14532d;
+            font-size: 13px;
+            font-weight: 900;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    .rh-form {
+        display: grid;
+        gap: 11px;
+        border-top: 1px solid var(--line-2);
+        background: #fbfdff;
+    }
+
+    .rh-form-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+
+    .rh-btn {
+        height: 40px;
+        border-radius: 13px;
+        font-size: 12px;
+        font-weight: 900;
+        transition: transform .15s ease, background .15s ease, color .15s ease;
+    }
+
+        .rh-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            box-shadow: 0 10px 22px rgba(37,99,235,.18);
+        }
+
+            .rh-btn.primary:hover {
+                background: var(--blue-2);
+                transform: translateY(-1px);
+            }
+
+        .rh-btn.neutral {
+            background: #e8eef5;
+            color: #344054;
+        }
+
+            .rh-btn.neutral:hover {
+                background: #dbe5ef;
+            }
+
+    .rh-add {
+        min-width: 42px;
+        padding: 0 12px;
+    }
+
+    .rh-table-head,
+    .rh-device {
+        display: grid;
+        grid-template-columns: minmax(0, 1.35fr) minmax(90px, 150px) 92px max-content;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .rh-table-head {
+        padding: 11px 16px;
+        border-bottom: 1px solid var(--line-2);
+        background: #f8fafc;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+
+    .rh-device {
+        min-height: 68px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--line-2);
+        background: #fff;
+        transition: background .15s ease;
+    }
+
+        .rh-device:last-child {
+            border-bottom: 0;
+        }
+
+        .rh-device:hover {
+            background: #f8fbff;
+        }
+
+    .rh-device-main {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        min-width: 0;
+    }
+
+    .rh-node {
+        width: 40px;
+        height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #f8fafc;
+        color: var(--soft);
+        font-size: 14px;
+        font-weight: 900;
+    }
+
+        .rh-node.online {
+            border-color: #86efac;
+            background: var(--green-2);
+            color: var(--green);
+        }
+
+    .rh-device-name {
+        min-width: 0;
+    }
+
+        .rh-device-name strong {
+            display: block;
+            overflow: hidden;
+            color: var(--ink);
+            font-size: 13px;
+            font-weight: 900;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .rh-device-name span {
+            display: block;
+            overflow: hidden;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    .rh-code {
+        min-width: 0;
+        overflow: hidden;
+        color: #344054;
+        font-family: "JetBrains Mono", monospace;
+        font-size: 12px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .rh-chip {
+        width: fit-content;
+        min-width: 74px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+    }
+
+        .rh-chip.online {
+            background: var(--green-2);
+            color: #166534;
+        }
+
+        .rh-chip.offline {
+            background: #eef2f6;
+            color: var(--muted);
+        }
+
+    .rh-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        min-width: 118px;
+    }
+
+    .rh-mini,
+    .rh-connect,
+    .rh-connect-disabled {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 11px;
+        font-size: 14px;
+        font-weight: 900;
+    }
+
+    .rh-mini {
+        border: 1px solid var(--line);
+        background: #fff;
+        color: #475467;
+        transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+
+        .rh-mini:hover {
+            border-color: rgba(37,99,235,.55);
+            background: #eff6ff;
+            transform: translateY(-1px);
+        }
+
+        .rh-mini.danger:hover {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #991b1b;
+        }
+
+    .rh-connect {
+        background: var(--green);
+        color: #fff;
+        box-shadow: 0 10px 20px rgba(22,163,74,.22);
+        transition: background .15s ease, transform .15s ease;
+    }
+
+        .rh-connect:hover {
+            background: #15803d;
+            transform: translateY(-1px);
+        }
+
+    .rh-connect-disabled {
+        background: #e8eef5;
+        color: #98a2b3;
+        cursor: not-allowed;
+    }
+
+    .rh-empty {
+        padding: 46px 18px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    @@media (max-width: 1100px) {
+        .rh-layout,
+        .rh-metrics {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .rh-layout {
+            align-items: stretch;
+        }
+
+        .rh-panel.devices {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @@media (max-width: 760px) {
+        .remote-hub {
+            padding: 12px;
+            border-radius: 16px;
+        }
+
+        .rh-hero,
+        .rh-metrics,
+        .rh-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .rh-hero-actions {
+            justify-content: space-between;
+        }
+
+        .rh-table-head {
+            display: none;
+        }
+
+        .rh-device {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            align-items: stretch;
+        }
+
+        .rh-actions {
+            min-width: 0;
+            justify-content: flex-start;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .rh-title {
+            align-items: flex-start;
+        }
+
+        .rh-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+        }
+
+        .rh-title h1 {
+            font-size: 20px;
+        }
+
+        .rh-search-row,
+        .rh-form-actions {
+            grid-template-columns: 1fr;
+        }
+
+        .rh-icon,
+        .rh-btn {
+            width: 100%;
+        }
+    }
+</style>
+
+<div class="remote-hub">
+    <div class="rh-shell">
+        
+        @if (Carregando)
+        {
+            <div class="rh-alert success">Carregando permissões da central...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(MensagemPermissao))
+        {
+            <div class="rh-alert error">@MensagemPermissao</div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(Mensagem))
+            {
+                <div class="rh-alert @(Sucesso ? "success" : "error")">@Mensagem</div>
+            }           
+
+            <div class="rh-layout">
+                <aside class="rh-panel">
+                    <div class="rh-panel-head">
+                        <div>
+                            <h2>Cliente</h2>
+                            <span>Busca e seleção</span>
+                        </div>
+                    </div>
+
+                    <div class="rh-search">
+                        <label class="rh-label">Localizar cliente</label>
+                        <div class="rh-search-row">
+                            <input class="rh-input"
+                                   @bind="BuscaClienteAcessoRemoto"
+                                   @bind:event="oninput"
+                                   @bind:after="BuscarClientesAcessoRemoto"
+                                   placeholder="Nome, apelido ou código" />
+
+                            <button type="button" class="rh-icon" title="Buscar" @onclick="BuscarClientesAcessoRemoto">
+                                ⌕
+                            </button>
+                        </div>
+
+                        @if (CarregandoClientesAcessoRemoto)
+                        {
+                            <div class="rh-loading">Buscando clientes...</div>
+                        }
+
+                        @if (ClientesAcessoRemoto.Any())
+                        {
+                            <div class="rh-results">
+                                @foreach (var cliente in ClientesAcessoRemoto)
+                                {
+                                    <button type="button"
+                                            class="rh-client"
+                                            @onclick="() => SelecionarClienteAcessoRemoto(cliente)">
+                                        <strong>@cliente.Codigo</strong>
+                                        <span>@cliente.Nome</span>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    @if (ClienteAcessoRemotoSelecionado != null)
+                    {
+                        <div class="rh-selected">
+                            <span>Selecionado</span>
+                            <strong>@ClienteAcessoRemotoSelecionado.Codigo - @ClienteAcessoRemotoSelecionado.Nome</strong>
+                        </div>
+                    }
+
+                    @if (EditandoAcessoRemoto)
+                    {
+                        <div class="rh-form">
+                            <div>
+                                <label class="rh-label">Computador</label>
+                                <input class="rh-input"
+                                       @bind="AcessoRemotoEditando.NomeComputador"
+                                       placeholder="Ex: SERVIDOR, CAIXA 01" />
+                            </div>
+
+                            <div>
+                                <label class="rh-label">Código de acesso</label>
+                                <input class="rh-input"
+                                       @bind="AcessoRemotoEditando.CodigoAcesso"
+                                       placeholder="Ex: 201641851" />
+                            </div>
+
+                            <div class="rh-form-actions">
+                                <button type="button" class="rh-btn neutral" @onclick="CancelarEdicaoAcessoRemoto">
+                                    Cancelar
+                                </button>
+
+                                <button type="button" class="rh-btn primary" @onclick="SalvarAcessoRemoto">
+                                    Salvar
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </aside>
+
+                <section class="rh-panel devices">
+                    <div class="rh-panel-head">
+                        <div>
+                            <h2>Computadores</h2>
+                            <span>Inventário de acesso remoto do cliente</span>
+                        </div>
+
+                        <button type="button"
+                                class="rh-btn primary rh-add"
+                                title="Novo computador"
+                                @onclick="NovoAcessoRemoto">
+                            +
+                        </button>
+                    </div>
+
+                    <div>
+                        <div class="rh-table-head">
+                            <div>Estação</div>
+                            <div>Código</div>
+                            <div>Status</div>
+                            <div>Ações</div>
+                        </div>
+
+                        @if (ClienteAcessoRemotoSelecionado == null)
+                        {
+                            <div class="rh-empty">Busque e selecione um cliente para visualizar os computadores.</div>
+                        }
+                        else if (CarregandoAcessosRemotos)
+                        {
+                            <div class="rh-empty">Carregando computadores...</div>
+                        }
+                        else if (!AcessosRemotos.Any())
+                        {
+                            <div class="rh-empty">Nenhum computador cadastrado para este cliente.</div>
+                        }
+                        else
+                        {
+                            @foreach (var acesso in AcessosRemotos)
+                            {
+                                <div class="rh-device">
+                                    <div class="rh-device-main">
+                                        <span class="rh-node @(acesso.Online ? "online" : "offline")">
+                                            @(acesso.Online ? "▶" : "•")
+                                        </span>
+
+                                        <div class="rh-device-name">
+                                            <strong>@acesso.NomeComputador</strong>
+                                            <span>@(ClienteAcessoRemotoSelecionado?.Nome ?? acesso.NomeCliente)</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="rh-code">@acesso.CodigoAcesso</div>
+
+                                    <div>
+                                        <span class="rh-chip @(acesso.Online ? "online" : "offline")">
+                                            @(acesso.Online ? "Online" : "Offline")
+                                        </span>
+                                    </div>
+
+                                    <div class="rh-actions">
+                                        <button type="button"
+                                                class="rh-mini"
+                                                title="Editar"
+                                                @onclick="() => EditarAcessoRemoto(acesso)">
+                                            ✎
+                                        </button>
+
+                                        <button type="button"
+                                                class="rh-mini danger"
+                                                title="Excluir"
+                                                @onclick="() => ExcluirAcessoRemoto(acesso)">
+                                            ×
+                                        </button>
+
+                                        @if (acesso.Online)
+                                        {
+                                            <button type="button"
+                                                    class="rh-connect"
+                                                    title="Acessar"
+                                                    @onclick="() => AcessarRemoto(acesso)">
+                                                ▶
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button"
+                                                    class="rh-connect-disabled"
+                                                    title="Computador offline"
+                                                    disabled>
+                                                -
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+                </section>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string AbaAtual = "usuarios";
+    private bool Carregando = true;
+    private bool PodeAcessarAdmin = false;
+    private bool PodeAdministrarClientes = false;
+    private string MensagemPermissao = "";
+
+    private string Mensagem = "";
+    private bool Sucesso = false;
+
+    private string BuscaClienteAcessoRemoto = "";
+    private List<ClienteModel> ClientesAcessoRemoto = new();
+    private ClienteModel? ClienteAcessoRemotoSelecionado;
+
+    private bool CarregandoClientesAcessoRemoto = false;
+    private bool CarregandoAcessosRemotos = false;
+    private bool EditandoAcessoRemoto = false;
+
+    private List<AcessoRemotoModel> AcessosRemotos = new();
+    private AcessoRemotoModel AcessoRemotoEditando = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Carregando = true;
+        MensagemPermissao = "";
+        Mensagem = "";
+
+        try
+        {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            {
+                MensagemPermissao = "Usuário ainda não foi carregado. Atualize a página.";
+                PodeAcessarAdmin = false;
+                PodeAdministrarClientes = false;
+                return;
+            }
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ACESSAR"
+            );
+
+            PodeAdministrarClientes = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ADMINISTRAR_CLIENTES"
+            );
+
+            if (!PodeAcessarAdmin || !PodeAdministrarClientes)
+            {
+                MensagemPermissao = "Você não tem permissão para acessar a tela de acesso remoto.";
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao carregar tela de acesso remoto: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task AbrirAbaAcessoRemoto()
+    {
+        AbaAtual = "acesso-remoto";
+
+        if (ClienteAcessoRemotoSelecionado != null)
+            await CarregarAcessosRemotosClienteSelecionado();
+    }
+
+    private async Task BuscarClientesAcessoRemoto()
+    {
+        ClientesAcessoRemoto.Clear();
+        ClienteAcessoRemotoSelecionado = null;
+        AcessosRemotos.Clear();
+
+        if (string.IsNullOrWhiteSpace(BuscaClienteAcessoRemoto))
+            return;
+
+        try
+        {
+            CarregandoClientesAcessoRemoto = true;
+
+            ClientesAcessoRemoto = await TicketService.BuscarClientesAsync(
+                BuscaClienteAcessoRemoto
+            );
+        }
+        finally
+        {
+            CarregandoClientesAcessoRemoto = false;
+        }
+    }
+
+    private async Task SelecionarClienteAcessoRemoto(ClienteModel cliente)
+    {
+        ClienteAcessoRemotoSelecionado = cliente;
+        BuscaClienteAcessoRemoto = $"{cliente.Codigo} - {cliente.Nome}";
+        ClientesAcessoRemoto.Clear();
+        EditandoAcessoRemoto = false;
+
+        await CarregarAcessosRemotosClienteSelecionado();
+    }
+
+    private async Task CarregarAcessosRemotosClienteSelecionado()
+    {
+        AcessosRemotos.Clear();
+
+        if (ClienteAcessoRemotoSelecionado == null)
+            return;
+
+        try
+        {
+            CarregandoAcessosRemotos = true;
+
+            AcessosRemotos = await TicketService.ListarAcessosRemotosClienteAsync(
+                ClienteAcessoRemotoSelecionado.Codigo
+            );
+
+            await AtualizarStatusOnlineAcessosAsync(AcessosRemotos);
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro ao carregar computadores: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            CarregandoAcessosRemotos = false;
+        }
+    }
+
+    private void NovoAcessoRemoto()
+    {
+        if (ClienteAcessoRemotoSelecionado == null)
+        {
+            Mensagem = "Busque e selecione um cliente antes de adicionar um computador.";
+            Sucesso = false;
+            return;
+        }
+
+        AcessoRemotoEditando = new AcessoRemotoModel
+        {
+            CodCliente = ClienteAcessoRemotoSelecionado.Codigo,
+            NomeCliente = ClienteAcessoRemotoSelecionado.Nome
+        };
+
+        EditandoAcessoRemoto = true;
+    }
+
+    private void EditarAcessoRemoto(AcessoRemotoModel acesso)
+    {
+        AcessoRemotoEditando = new AcessoRemotoModel
+        {
+            Codigo = acesso.Codigo,
+            CodCliente = acesso.CodCliente,
+            NomeCliente = acesso.NomeCliente,
+            NomeComputador = acesso.NomeComputador,
+            CodigoAcesso = acesso.CodigoAcesso
+        };
+
+        EditandoAcessoRemoto = true;
+    }
+
+    private void CancelarEdicaoAcessoRemoto()
+    {
+        EditandoAcessoRemoto = false;
+        AcessoRemotoEditando = new();
+    }
+
+    private async Task SalvarAcessoRemoto()
+    {
+        if (ClienteAcessoRemotoSelecionado == null)
+        {
+            Mensagem = "Selecione um cliente antes de salvar.";
+            Sucesso = false;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(AcessoRemotoEditando.NomeComputador))
+        {
+            Mensagem = "Informe o nome do computador.";
+            Sucesso = false;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(AcessoRemotoEditando.CodigoAcesso))
+        {
+            Mensagem = "Informe o código de acesso.";
+            Sucesso = false;
+            return;
+        }
+
+        AcessoRemotoEditando.CodCliente = ClienteAcessoRemotoSelecionado.Codigo;
+
+        await TicketService.SalvarAcessoRemotoAsync(AcessoRemotoEditando);
+
+        EditandoAcessoRemoto = false;
+        AcessoRemotoEditando = new();
+
+        await CarregarAcessosRemotosClienteSelecionado();
+
+        Mensagem = "Acesso remoto salvo com sucesso.";
+        Sucesso = true;
+    }
+
+    private async Task ExcluirAcessoRemoto(AcessoRemotoModel acesso)
+    {
+        var confirmar = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Deseja excluir o acesso remoto de {acesso.NomeComputador}?"
+        );
+
+        if (!confirmar)
+            return;
+
+        await TicketService.ExcluirAcessoRemotoAsync(
+            acesso.Codigo,
+            acesso.CodCliente
+        );
+
+        await CarregarAcessosRemotosClienteSelecionado();
+
+        Mensagem = "Acesso remoto excluído com sucesso.";
+        Sucesso = true;
+    }
+
+    private async Task AtualizarStatusOnlineAcessosAsync(List<AcessoRemotoModel> acessos)
+    {
+        if (acessos == null || !acessos.Any())
+            return;
+
+        try
+        {
+            var status = await KHelpDeskApi.BuscarStatusDispositivosAsync(
+                acessos.Select(x => x.CodigoAcesso)
+            );
+
+            foreach (var acesso in acessos)
+            {
+                var codigo = acesso.CodigoAcesso?.Trim() ?? "";
+
+                acesso.Online = status.TryGetValue(codigo, out var online)
+                    ? online
+                    : false;
+            }
+        }
+        catch
+        {
+            foreach (var acesso in acessos)
+                acesso.Online = false;
+        }
+    }
+
+    private async Task AcessarRemoto(AcessoRemotoModel acesso)
+    {
+        if (acesso == null || string.IsNullOrWhiteSpace(acesso.CodigoAcesso))
+        {
+            Mensagem = "Código de acesso remoto não informado.";
+            Sucesso = false;
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "helpDesktop.abrirAcessoRemoto",
+                acesso.CodigoAcesso);
+
+            var ip = HttpContextAccessor.HttpContext?
+                         .Connection.RemoteIpAddress?.ToString() ?? "";
+
+            await AdminService.RegistrarLogRemotoAsync(
+                nomeCliente: ClienteAcessoRemotoSelecionado?.Nome ?? acesso.NomeCliente ?? "",
+                nomeComputador: acesso.NomeComputador ?? "",
+                usuario: UserState.CurrentUser?.Trim() ?? "",
+                ipOrigem: ip,
+                codCliente: ClienteAcessoRemotoSelecionado?.Codigo ?? acesso.CodCliente
+            );
+
+            Mensagem = "Acesso remoto iniciado.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro ao tentar acessar remotamente: " + ex.Message;
+            Sucesso = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private class PermissaoTelaDto
+    {
+        public string Modulo { get; set; }
+        public string Permissao { get; set; }
+        public string Titulo { get; set; }
+        public string Descricao { get; set; }
+        public bool Ativo { get; set; }
+
+        public PermissaoTelaDto(string modulo, string permissao, string titulo, string descricao)
+        {
+            Modulo = modulo;
+            Permissao = permissao;
+            Titulo = titulo;
+            Descricao = descricao;
+        }
+    }
+}

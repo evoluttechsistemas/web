@@ -1,0 +1,2896 @@
+@page "/dashboard"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject DashboardService DashboardService
+@inject NavigationManager Nav
+@inject EvolutCRM.Services.UserState UserState
+@using Microsoft.AspNetCore.WebUtilities
+@inject AdminService AdminService
+
+<style>
+    .dx {
+        --bg: #0b1220;
+        --bg-soft: #0f1a2e;
+        --panel: rgba(255, 255, 255, 0.035);
+        --panel-2: rgba(255, 255, 255, 0.06);
+        --stroke: rgba(255, 255, 255, 0.09);
+        --stroke-soft: rgba(255, 255, 255, 0.05);
+        --txt: #e8edf6;
+        --txt-mut: #8a98b3;
+        --txt-dim: #5d6b87;
+        --accent: #38e1ff;
+        --accent-2: #6c8cff;
+        --c-blue: #4aa8ff;
+        --c-green: #34d399;
+        --c-amber: #fbbf24;
+        --c-red: #fb6f70;
+        --c-purple: #b794f6;
+        --c-cyan: #22d3ee;
+        --c-slate: #94a3b8;
+        --glow: 0 0 0 1px var(--stroke), 0 18px 40px -18px rgba(0, 0, 0, 0.7);
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    .dx {
+        --grid-gap: 18px;
+        font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        max-width: 1640px;
+        margin: 0 auto;
+        padding: 26px 26px 60px;
+        color: var(--txt);
+        background: radial-gradient(1100px 520px at 12% -10%, rgba(56, 225, 255, 0.10), transparent 60%), radial-gradient(900px 500px at 100% 0%, rgba(108, 140, 255, 0.10), transparent 55%), var(--bg);
+        min-height: 100vh;
+        overflow-x: hidden;
+    }
+
+        .dx ::selection {
+            background: rgba(56, 225, 255, 0.3);
+        }
+
+    /* ---------- TOPBAR ---------- */
+    .dx-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+
+    .dx-brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+    }
+
+    .dx-logo {
+        width: 46px;
+        height: 46px;
+        border-radius: 13px;
+        flex: 0 0 auto;
+        background: linear-gradient(140deg, var(--accent), var(--accent-2));
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        box-shadow: 0 10px 26px -8px rgba(56, 225, 255, 0.55);
+    }
+
+    .dx-title {
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        line-height: 1.05;
+    }
+
+    .dx-sub {
+        font-size: 12.5px;
+        color: var(--txt-mut);
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 3px;
+    }
+
+    .dx-live {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--c-green);
+        font-weight: 700;
+        font-size: 11px;
+    }
+
+        .dx-live::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--c-green);
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+            animation: pulse 1.8s infinite;
+        }
+
+    @@keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+        }
+
+        70% {
+            box-shadow: 0 0 0 8px rgba(52, 211, 153, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+        }
+    }
+
+    /* ---------- TABS (segmented) ---------- */
+    .dx-tabs {
+        display: inline-flex;
+        padding: 5px;
+        gap: 4px;
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        backdrop-filter: blur(8px);
+    }
+
+    .dx-tab {
+        border: none;
+        background: transparent;
+        color: var(--txt-mut);
+        font-weight: 700;
+        font-size: 13.5px;
+        cursor: pointer;
+        padding: 10px 18px;
+        border-radius: 10px;
+        transition: .22s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        letter-spacing: -0.01em;
+    }
+
+        .dx-tab:hover {
+            color: var(--txt);
+        }
+
+        .dx-tab.on {
+            color: #06121f;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 8px 20px -8px rgba(56, 225, 255, 0.6);
+        }
+
+    /* ---------- SECTION LABEL ---------- */
+    .dx-eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 11.5px;
+        font-weight: 800;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--txt-dim);
+        margin: 30px 0 16px;
+    }
+
+        .dx-eyebrow::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, var(--stroke), transparent);
+        }
+
+        .dx-eyebrow .tag {
+            color: var(--accent);
+            -webkit-text-fill-color: var(--accent);
+        }
+
+    /* ---------- KPI STRIP ---------- */
+    .dx-kpis {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .dx-kpi {
+        position: relative;
+        overflow: hidden;
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 16px;
+        padding: 16px 16px 14px;
+        transition: .25s ease;
+    }
+
+        .dx-kpi:hover {
+            transform: translateY(-3px);
+            border-color: var(--k, var(--accent));
+            background: var(--panel-2);
+        }
+
+        .dx-kpi .spark {
+            position: absolute;
+            inset: auto 0 0 0;
+            height: 34px;
+            width: 100%;
+            opacity: .5;
+            pointer-events: none;
+        }
+
+    .dx-kpi-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+
+    .dx-kpi-ic {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+        background: color-mix(in srgb, var(--k, var(--accent)) 16%, transparent);
+        border: 1px solid color-mix(in srgb, var(--k, var(--accent)) 35%, transparent);
+    }
+
+    .dx-kpi-lbl {
+        font-size: 10.5px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--txt-mut);
+        text-align: right;
+        line-height: 1.25;
+    }
+
+    .dx-kpi-val {
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: -0.035em;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
+        position: relative;
+        z-index: 1;
+    }
+
+    .dx-kpi-foot {
+        margin-top: 9px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--txt-mut);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        position: relative;
+        z-index: 1;
+        line-height: 1.3;
+    }
+
+    .dx-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-weight: 800;
+        font-size: 11px;
+        padding: 2px 7px;
+        border-radius: 999px;
+    }
+
+        .dx-chip.up {
+            color: var(--c-green);
+            background: rgba(52,211,153,.13);
+        }
+
+        .dx-chip.down {
+            color: var(--c-red);
+            background: rgba(251,111,112,.13);
+        }
+
+        .dx-chip.flat {
+            color: var(--c-slate);
+            background: rgba(148,163,184,.13);
+        }
+
+    /* ---------- GRID / PANELS ---------- */
+    .dx-grid {
+        display: grid;
+        gap: var(--grid-gap);
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+    }
+
+    .dx-panel {
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 18px;
+        padding: 22px;
+        min-width: 0;
+        transition: border-color .25s ease;
+    }
+
+        .dx-panel:hover {
+            border-color: var(--stroke);
+        }
+
+    .span-4 {
+        grid-column: span 4;
+    }
+
+    .span-5 {
+        grid-column: span 5;
+    }
+
+    .span-6 {
+        grid-column: span 6;
+    }
+
+    .span-7 {
+        grid-column: span 7;
+    }
+
+    .span-8 {
+        grid-column: span 8;
+    }
+
+    .span-12 {
+        grid-column: span 12;
+    }
+
+    .dx-ph {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+        .dx-ph h3 {
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: -0.015em;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+        }
+
+            .dx-ph h3 .dot {
+                width: 9px;
+                height: 9px;
+                border-radius: 50%;
+                background: var(--accent);
+                box-shadow: 0 0 10px var(--accent);
+            }
+
+        .dx-ph .hint {
+            font-size: 11.5px;
+            color: var(--txt-dim);
+            font-weight: 600;
+        }
+
+    /* ---------- DONUT ---------- */
+    .donut-wrap {
+        display: flex;
+        align-items: center;
+        gap: 26px;
+        flex-wrap: wrap;
+    }
+
+    .donut-svg {
+        flex: 0 0 auto;
+    }
+
+    .donut-center {
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        fill: var(--txt);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .donut-center-lbl {
+        font-size: 10px;
+        font-weight: 700;
+        fill: var(--txt-dim);
+        letter-spacing: 0.12em;
+    }
+
+    .donut-legend {
+        flex: 1;
+        min-width: 180px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .dl-row {
+        display: grid;
+        grid-template-columns: 14px 1fr auto auto;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+    }
+
+    .dl-sw {
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+    }
+
+    .dl-name {
+        font-weight: 600;
+        color: var(--txt);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .dl-q {
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .dl-p {
+        font-weight: 700;
+        color: var(--txt-mut);
+        font-variant-numeric: tabular-nums;
+        min-width: 46px;
+        text-align: right;
+    }
+
+    /* ---------- TEMP BARS ---------- */
+    .tbars {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .tbar {
+        display: grid;
+        grid-template-columns: 120px 1fr 52px;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .tbar-l {
+        font-size: 13px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tbar-track {
+        height: 12px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.05);
+        overflow: hidden;
+        position: relative;
+    }
+
+    .tbar-fill {
+        height: 100%;
+        border-radius: 999px;
+        min-width: 6px;
+        transition: width .9s cubic-bezier(.4,0,.2,1);
+        box-shadow: 0 0 14px -2px currentColor;
+    }
+
+    .tbar-v {
+        font-size: 13px;
+        font-weight: 800;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ---------- STACKED AREA / EVOLUTION ---------- */
+    .area-host {
+        position: relative;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .area-svg {
+        display: block;
+        width: 100%;
+        min-width: 680px;
+    }
+
+        .area-svg .gl {
+            stroke: var(--stroke-soft);
+            stroke-width: 1;
+        }
+
+        .area-svg .axl {
+            fill: var(--txt-dim);
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+    .area-dot {
+        transition: r .2s ease;
+        cursor: pointer;
+    }
+
+        .area-dot:hover {
+            r: 5;
+        }
+
+    .legend-inline {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--stroke-soft);
+    }
+
+    .li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--txt-mut);
+    }
+
+        .li .sw {
+            width: 16px;
+            height: 4px;
+            border-radius: 4px;
+        }
+
+        .li b {
+            color: var(--txt);
+            font-variant-numeric: tabular-nums;
+        }
+
+    /* ---------- RANK LIST (users) ---------- */
+    .rank {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .rank-row {
+        display: grid;
+        grid-template-columns: 30px 1fr auto;
+        align-items: center;
+        gap: 14px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        background: rgba(255,255,255,.025);
+        border: 1px solid var(--stroke-soft);
+        transition: .2s ease;
+    }
+
+        .rank-row:hover {
+            background: rgba(255,255,255,.05);
+            transform: translateX(3px);
+            border-color: var(--stroke);
+        }
+
+    .rank-n {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--txt-dim);
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+    }
+
+    .rank-row.top1 .rank-n {
+        color: var(--c-amber);
+    }
+
+    .rank-row.top2 .rank-n {
+        color: var(--c-slate);
+    }
+
+    .rank-row.top3 .rank-n {
+        color: #d6905a;
+    }
+
+    .rank-main {
+        min-width: 0;
+    }
+
+    .rank-name {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .rank-meta {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 11.5px;
+        color: var(--txt-mut);
+        font-weight: 600;
+    }
+
+        .rank-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+    .rank-prog {
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,.06);
+        margin-top: 7px;
+        overflow: hidden;
+    }
+
+        .rank-prog i {
+            display: block;
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        }
+
+    .rank-val {
+        font-size: 17px;
+        font-weight: 800;
+        color: var(--c-green);
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+    }
+
+        .rank-val small {
+            display: block;
+            font-size: 10px;
+            color: var(--txt-dim);
+            font-weight: 700;
+            letter-spacing: .08em;
+        }
+
+    /* ---------- MONTHLY MATRIX (table-like) ---------- */
+    .mtx {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+        .mtx thead th {
+            text-align: right;
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            color: var(--txt-dim);
+            padding: 0 12px 12px;
+            border-bottom: 1px solid var(--stroke);
+        }
+
+            .mtx thead th:first-child {
+                text-align: left;
+            }
+
+        .mtx tbody td {
+            padding: 11px 12px;
+            border-bottom: 1px solid var(--stroke-soft);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+        }
+
+            .mtx tbody td:first-child {
+                text-align: left;
+                font-weight: 800;
+            }
+
+        .mtx tbody tr:hover {
+            background: rgba(255,255,255,.03);
+        }
+
+        .mtx .mono {
+            font-variant-numeric: tabular-nums;
+        }
+
+    .mtx-bar {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+
+    .mtx-pill {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 3px 9px;
+        border-radius: 999px;
+        display: inline-block;
+        min-width: 54px;
+        text-align: center;
+    }
+
+    .mtx-spark {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    .cell-blue {
+        color: var(--c-blue);
+    }
+
+    .cell-green {
+        color: var(--c-green);
+    }
+
+    .cell-amber {
+        color: var(--c-amber);
+    }
+
+    .cell-red {
+        color: var(--c-red);
+    }
+
+    /* ---------- SUPPORT: filter ---------- */
+    .dx-filter {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+        background: var(--panel);
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        padding: 12px 14px;
+        margin-bottom: 18px;
+    }
+
+    .ff {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+        .ff label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--txt-dim);
+        }
+
+        .ff input {
+            background: var(--bg-soft);
+            color: var(--txt);
+            border: 1px solid var(--stroke);
+            border-radius: 9px;
+            padding: 9px 11px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            color-scheme: dark;
+            width: 150px;
+        }
+
+            .ff input:focus {
+                outline: none;
+                border-color: var(--accent);
+                box-shadow: 0 0 0 3px rgba(56,225,255,.15);
+            }
+
+    .ff-btn {
+        border: none;
+        cursor: pointer;
+        border-radius: 9px;
+        padding: 10px 18px;
+        font-size: 13px;
+        font-weight: 800;
+        color: #06121f;
+        font-family: inherit;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        box-shadow: 0 8px 20px -10px rgba(56,225,255,.7);
+        transition: .2s ease;
+    }
+
+        .ff-btn:hover {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+
+    /* ---------- SUPPORT: day cards ---------- */
+    .day-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .day-card {
+        border: 1px solid var(--stroke);
+        border-radius: 14px;
+        overflow: hidden;
+        background: rgba(255,255,255,.02);
+    }
+
+    .day-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 16px;
+        background: rgba(255,255,255,.03);
+        border-bottom: 1px solid var(--stroke-soft);
+    }
+
+        .day-head strong {
+            font-size: 13.5px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .day-head .day-total {
+            font-size: 11.5px;
+            color: var(--txt-mut);
+            font-weight: 700;
+        }
+
+            .day-head .day-total b {
+                color: var(--accent);
+            }
+
+    .day-users {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+        padding: 14px 16px;
+    }
+
+    .du {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        background: var(--bg-soft);
+        border: 1px solid var(--stroke-soft);
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: .18s ease;
+    }
+
+        .du:hover {
+            border-color: var(--accent);
+            background: rgba(56,225,255,.06);
+            transform: translateY(-2px);
+        }
+
+        .du span {
+            color: var(--txt);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .du strong {
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+            font-size: 14px;
+            background: rgba(56,225,255,.12);
+            border-radius: 7px;
+            padding: 2px 9px;
+            flex: 0 0 auto;
+        }
+
+    /* ---------- SUPPORT: situacao chips grid ---------- */
+    .sit-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    .sit {
+        position: relative;
+        overflow: hidden;
+        border-radius: 14px;
+        padding: 16px;
+        background: rgba(255,255,255,.025);
+        border: 1px solid var(--stroke-soft);
+        transition: .2s ease;
+    }
+
+        .sit:hover {
+            transform: translateY(-3px);
+            border-color: var(--sc, var(--accent));
+        }
+
+        .sit::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: var(--sc, var(--accent));
+        }
+
+    .sit-v {
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .sit-l {
+        font-size: 11.5px;
+        font-weight: 700;
+        color: var(--txt-mut);
+        margin: 7px 0 9px;
+    }
+
+    .sit-bar {
+        height: 4px;
+        border-radius: 4px;
+        background: rgba(255,255,255,.07);
+        overflow: hidden;
+    }
+
+        .sit-bar i {
+            display: block;
+            height: 100%;
+            background: var(--sc, var(--accent));
+            border-radius: 4px;
+        }
+
+    .sit-p {
+        font-size: 11px;
+        font-weight: 800;
+        color: var(--sc, var(--accent));
+        margin-top: 6px;
+        display: inline-block;
+    }
+
+    /* ---------- SUPPORT: responsavel rows ---------- */
+    .resp {
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        max-height: 540px;
+        overflow-y: auto;
+        padding-right: 4px;
+    }
+
+        .resp::-webkit-scrollbar {
+            width: 7px;
+        }
+
+        .resp::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .resp::-webkit-scrollbar-thumb {
+            background: var(--stroke);
+            border-radius: 8px;
+        }
+
+    .resp-row {
+        display: grid;
+        grid-template-columns: 30px 1fr auto;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        border-radius: 12px;
+        background: rgba(255,255,255,.025);
+        border: 1px solid var(--stroke-soft);
+        transition: .2s ease;
+    }
+
+        .resp-row:hover {
+            background: rgba(255,255,255,.05);
+            border-color: var(--stroke);
+        }
+
+    .resp-n {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--txt-dim);
+        text-align: center;
+    }
+
+    .resp-name {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .resp-meta {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        font-size: 11px;
+        color: var(--txt-mut);
+        font-weight: 600;
+    }
+
+        .resp-meta span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+    .resp-side {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+    }
+
+    .resp-badge {
+        font-size: 11px;
+        font-weight: 800;
+        padding: 4px 10px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+        .resp-badge.has {
+            color: var(--c-red);
+            background: rgba(251,111,112,.14);
+        }
+
+        .resp-badge.zero {
+            color: var(--c-green);
+            background: rgba(52,211,153,.14);
+        }
+
+    .resp-time {
+        font-size: 13px;
+        font-weight: 800;
+        color: var(--accent);
+        white-space: nowrap;
+    }
+
+        .resp-time small {
+            display: block;
+            font-size: 9.5px;
+            color: var(--txt-dim);
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-align: right;
+        }
+
+    /* ---------- loading / empty ---------- */
+    .dx-load {
+        display: grid;
+        place-items: center;
+        min-height: 60vh;
+        gap: 18px;
+    }
+
+    .dx-spin {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        border: 4px solid var(--stroke);
+        border-top-color: var(--accent);
+        animation: spin 0.9s linear infinite;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .dx-load p {
+        color: var(--txt-mut);
+        font-weight: 700;
+        font-size: 14px;
+        letter-spacing: .02em;
+    }
+
+    .dx-empty {
+        text-align: center;
+        padding: 64px 28px;
+        border-radius: 18px;
+        background: var(--panel);
+        border: 1px dashed var(--stroke);
+    }
+
+        .dx-empty .ico {
+            font-size: 40px;
+            margin-bottom: 14px;
+        }
+
+        .dx-empty h3 {
+            font-size: 18px;
+            font-weight: 800;
+            margin-bottom: 8px;
+        }
+
+        .dx-empty p {
+            color: var(--txt-mut);
+            font-size: 13.5px;
+        }
+
+    /* ---------- MODAL ---------- */
+    .mb {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        padding: 22px;
+        background: rgba(5, 10, 20, 0.72);
+        backdrop-filter: blur(4px);
+        display: grid;
+        place-items: center;
+        animation: fade .2s ease;
+    }
+
+    @@keyframes fade {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
+    }
+
+    .mw {
+        width: min(840px, 100%);
+        max-height: 86vh;
+        overflow: hidden;
+        background: #1a2744;
+        border: 1px solid rgba(255,255,255,.18);
+        border-radius: 20px;
+        box-shadow: 0 30px 80px -20px rgba(0,0,0,.8);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .mh {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 20px 24px;
+        border-bottom: 1px solid rgba(255,255,255,.15);
+        background: #1e2e50;
+        border-radius: 20px 20px 0 0;
+    }
+
+        .mh h3 {
+            font-size: 17px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+            color: #e8edf6;
+        }
+
+        .mh .msub {
+            font-size: 12.5px;
+            color: #a0b0cc;
+            font-weight: 600;
+            margin-top: 3px;
+        }
+
+        .mh h3 {
+            font-size: 17px;
+            font-weight: 800;
+            letter-spacing: -0.01em;
+        }
+
+        .mh .msub {
+            font-size: 12.5px;
+            color: var(--txt-mut);
+            font-weight: 600;
+            margin-top: 3px;
+        }
+
+        .mh button {
+            border: none;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 11px;
+            background: rgba(251,111,112,.14);
+            color: var(--c-red);
+            font-weight: 800;
+            font-size: 15px;
+            transition: .18s ease;
+        }
+
+            .mh button:hover {
+                background: rgba(251,111,112,.24);
+            }
+
+    .mbody {
+        padding: 16px 24px 22px;
+        overflow-y: auto;
+        background: #1a2744;
+    }
+
+        .mbody::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .mbody::-webkit-scrollbar-thumb {
+            background: var(--stroke);
+            border-radius: 8px;
+        }
+
+    .mt {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        border-radius: 13px;
+        background: rgba(255,255,255,.07);
+        border: 1px solid rgba(255,255,255,.13);
+        cursor: pointer;
+        transition: .18s ease;
+    }
+
+        .mt:hover {
+            border-color: var(--accent);
+            background: rgba(56,225,255,.12);
+            transform: translateX(4px);
+        }
+
+    .mt-l {
+        min-width: 0;
+    }
+
+        .mt-l strong {
+            display: block;
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 4px;
+            color: #e8edf6;
+        }
+
+        .mt-l span {
+            display: block;
+            font-size: 12.5px;
+            color: #a0b0cc;
+            font-weight: 600;
+        }
+
+    .mt-r {
+        text-align: right;
+        flex: 0 0 auto;
+    }
+
+        .mt-r .st {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: rgba(108,140,255,.28);
+            color: #a8c0ff;
+            margin-bottom: 5px;
+        }
+
+        .mt-r small {
+            display: block;
+            font-size: 12px;
+            color: var(--accent);
+            font-weight: 800;
+        }
+
+    .m-empty {
+        text-align: center;
+        color: var(--txt-mut);
+        padding: 40px;
+        font-weight: 600;
+    }
+
+    /* ---------- RESPONSIVE ---------- */
+    @@media (max-width: 1280px) {
+        .dx-kpis {
+            grid-template-columns: repeat(3, minmax(0,1fr));
+        }
+
+        .span-4, .span-5, .span-6, .span-7, .span-8 {
+            grid-column: span 12;
+        }
+    }
+
+    @@media (max-width: 760px) {
+        .dx {
+            padding: 18px 14px 48px;
+        }
+
+        .dx-kpis {
+            grid-template-columns: repeat(2, minmax(0,1fr));
+            gap: 10px;
+        }
+
+        .dx-kpi-val {
+            font-size: 27px;
+        }
+
+        .dx-title {
+            font-size: 19px;
+        }
+
+        .dx-panel {
+            padding: 16px;
+        }
+
+        .donut-wrap {
+            gap: 16px;
+            justify-content: center;
+        }
+
+        .tbar {
+            grid-template-columns: 84px 1fr 44px;
+            gap: 9px;
+        }
+
+        .tbar-l {
+            font-size: 12px;
+        }
+
+        .mtx {
+            font-size: 12px;
+        }
+
+            .mtx thead th, .mtx tbody td {
+                padding: 8px 7px;
+            }
+
+        .mtx-spark {
+            display: none;
+        }
+
+        .day-users {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 420px) {
+        .dx-kpis {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ===== Crescimento mensal (gráfico portado do WPF) ===== */
+    .cresc-panel {
+        background: linear-gradient(180deg, rgba(13,71,161,.14), rgba(15,26,46,.0)), var(--panel);
+    }
+
+    .cresc-loading {
+        padding: 60px;
+        text-align: center;
+        color: var(--txt-mut);
+        font-weight: 700;
+    }
+
+    .cresc-host {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .cresc-svg {
+        display: block;
+        width: 100%;
+        min-width: 720px;
+    }
+
+        .cresc-svg .cg {
+            stroke: var(--stroke-soft);
+            stroke-width: 1;
+        }
+
+        .cresc-svg .zero {
+            stroke: rgba(255,255,255,.22);
+            stroke-width: 1.4;
+            stroke-dasharray: 4 4;
+        }
+
+        .cresc-svg .mlabel {
+            fill: var(--txt-mut);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .cresc-svg .vlabel {
+            fill: #fff;
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+    .cresc-bar {
+        transition: opacity .2s ease;
+        cursor: default;
+    }
+
+        .cresc-bar:hover {
+            opacity: .85;
+        }
+
+    .cresc-legend {
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--stroke-soft);
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--txt-mut);
+    }
+
+        .cresc-legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .cresc-legend .lo {
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .cresc-legend .lo-up {
+            background: linear-gradient(180deg,#42a5f5,#1565c0);
+        }
+
+        .cresc-legend .lo-down {
+            background: linear-gradient(180deg,#fb6f70,#c62828);
+        }
+
+        .cresc-legend .cresc-acum {
+            margin-left: auto;
+            color: var(--txt-dim);
+            font-weight: 600;
+        }
+
+    @@media (max-width: 760px) {
+        .cresc-legend .cresc-acum {
+            margin-left: 0;
+            width: 100%;
+        }
+    }
+
+    .cresc-meta {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .cresc-meta-item {
+        background: rgba(255,255,255,.03);
+        border: 1px solid var(--stroke-soft);
+        border-radius: 12px;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+        .cresc-meta-item .cml {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--txt-dim);
+        }
+
+        .cresc-meta-item .cmv {
+            font-size: 22px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+        }
+
+    @@media (max-width: 1280px) {
+        .cresc-meta {
+            grid-template-columns: repeat(3, minmax(0,1fr));
+        }
+    }
+
+    @@media (max-width: 760px) {
+        .cresc-meta {
+            grid-template-columns: repeat(2, minmax(0,1fr));
+        }
+    }
+
+
+    /* ===== PESQUISA DE SATISFAÇÃO ===== */
+    .pesq-kpis {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        margin-bottom: 18px;
+    }
+
+    .pesq-nota-stars {
+        font-size: 15px;
+        font-weight: 800;
+    }
+
+    @@media (max-width: 1280px) {
+        .pesq-kpis {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+    }
+
+    @@media (max-width: 760px) {
+        .pesq-kpis {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+</style>
+
+<div class="dx">
+
+    <!-- ============ TOPBAR ============ -->
+    <div class="dx-top">
+        <div class="dx-brand">
+            <div class="dx-logo">📊</div>
+            <div>
+                <div class="dx-title">Dashboard CRM</div>
+                <div class="dx-sub">
+                    Pipeline comercial &amp; suporte
+                    <span class="dx-live">ao vivo</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="dx-tabs">
+            <button class="dx-tab @(AbaAtual == "comercial" ? "on" : "")"
+                    @onclick='() => TrocarAba("comercial")'>
+                💼 Comercial
+            </button>
+            <button class="dx-tab @(AbaAtual == "suporte" ? "on" : "")"
+                    @onclick='() => TrocarAba("suporte")'>
+                🎧 Suporte
+            </button>
+        </div>
+    </div>
+
+    @if (Carregando)
+    {
+        <div class="dx-load">
+            <div class="dx-spin"></div>
+            <p>Carregando dados...</p>
+        </div>
+    }
+    else if (AbaAtual == "comercial")
+    {
+        @if (Data == null || Data.KPIs == null)
+        {
+            <div class="dx-empty">
+                <div class="ico">⚠️</div>
+                <h3>Nenhum dado disponível</h3>
+                <p>Não foi possível carregar as informações do dashboard comercial.</p>
+            </div>
+        }
+        else
+        {
+            <!-- ===== CRESCIMENTO MENSAL (portado do painel WPF) ===== -->
+            <div class="dx-eyebrow"><span class="tag">★</span> Crescimento mensal</div>
+
+            <div class="dx-grid">
+                <div class="dx-panel span-12 cresc-panel">
+                    <div class="dx-ph">
+                        <h3><span class="dot"></span> Crescimento mensal (%)</h3>
+                        <span class="hint">variação mês a mês · escada acumulada</span>
+                    </div>
+
+                    @if (CrescimentoMoM == null)
+                    {
+                        <div class="cresc-loading">Calculando crescimento...</div>
+                    }
+                    else
+                    {
+                        @((MarkupString)CrescimentoChart())
+                    }
+
+                    <div class="cresc-meta">
+                        <div class="cresc-meta-item">
+                            <span class="cml">Crescimento (mês)</span>
+                            <span class="cmv">@CrescimentoMesAtual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                        </div>
+                        <div class="cresc-meta-item">
+                            <span class="cml">Meta mensal</span>
+                            <span class="cmv">@MetaMensal.ToString("0")%</span>
+                        </div>
+                        <div class="cresc-meta-item">
+                            <span class="cml">Resultado mensal</span>
+                            <span class="cmv" style="color:@(ResultadoMensal < 0 ? "var(--c-red)" : "var(--c-green)");">
+                                @ResultadoMensal.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%
+                            </span>
+                        </div>
+                        <div class="cresc-meta-item">
+                            <span class="cml">Crescimento anual</span>
+                            <span class="cmv">@CrescimentoAnual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                        </div>
+                        <div class="cresc-meta-item">
+                            <span class="cml">Meta anual</span>
+                            <span class="cmv">@MetaAnual.ToString("0")%</span>
+                        </div>
+                        <div class="cresc-meta-item">
+                            <span class="cml">Resultado anual</span>
+                            <span class="cmv" style="color:@(ResultadoAnual < 0 ? "var(--c-red)" : "var(--c-green)");">
+                                @ResultadoAnual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="cresc-legend">
+                        <span><i class="lo lo-down"></i> queda no mês</span>
+                        <span><i class="lo lo-up"></i> alta no mês</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== KPI STRIP ===== -->
+            <div class="dx-eyebrow"><span class="tag">01</span> Métricas principais</div>
+
+            <div class="dx-kpis">
+                <div class="dx-kpi" style="--k: var(--c-blue);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">📊</div>
+                        <div class="dx-kpi-lbl">Total<br />de leads</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.TotalLeads</div>
+                    <div class="dx-kpi-foot">@Data.KPIs.LeadsEsteMe novos este mês</div>
+                    @((MarkupString)Sparkline(EvoSerie(m => m.LeadsCriados), "var(--c-blue)"))
+                </div>
+
+                <div class="dx-kpi" style="--k: var(--c-green);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">✅</div>
+                        <div class="dx-kpi-lbl">Leads<br />fechados</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.LeadsFechados</div>
+                    <div class="dx-kpi-foot">
+                        <span class="dx-chip up">@Data.KPIs.TaxaConversao%</span> conversão
+                    </div>
+                    @((MarkupString)Sparkline(EvoSerie(m => m.LeadsFechados), "var(--c-green)"))
+                </div>
+
+                <div class="dx-kpi" style="--k: var(--c-amber);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">🔄</div>
+                        <div class="dx-kpi-lbl">Leads<br />abertos</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.LeadsAbertos</div>
+                    <div class="dx-kpi-foot">Em andamento</div>
+                </div>
+
+                <div class="dx-kpi" style="--k: var(--c-red);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">❌</div>
+                        <div class="dx-kpi-lbl">Leads<br />perdidos</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.LeadsPerdidos</div>
+                    <div class="dx-kpi-foot">Requer atenção</div>
+                </div>
+
+                <div class="dx-kpi" style="--k: var(--c-purple);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">📅</div>
+                        <div class="dx-kpi-lbl">Este<br />mês</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.LeadsEsteMe</div>
+                    <div class="dx-kpi-foot">
+                        @{
+                            var cm = Data.KPIs.CrescimentoMensal;
+                            var cls = cm > 0 ? "up" : (cm < 0 ? "down" : "flat");
+                            var arr = cm > 0 ? "↑" : (cm < 0 ? "↓" : "→");
+                        }
+                        <span class="dx-chip @cls">@arr @Math.Abs(cm)%</span> vs mês anterior
+                    </div>
+                </div>
+
+                <div class="dx-kpi" style="--k: var(--c-cyan);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">🎯</div>
+                        <div class="dx-kpi-lbl">Taxa<br />conversão</div>
+                    </div>
+                    <div class="dx-kpi-val">@Data.KPIs.TaxaConversao<span style="font-size:18px;color:var(--txt-mut);">%</span></div>
+                    <div class="dx-kpi-foot">Performance geral</div>
+                </div>
+            </div>
+
+            <!-- ===== ANALYSES ===== -->
+            <div class="dx-eyebrow"><span class="tag">02</span> Análises detalhadas</div>
+
+            <div class="dx-grid">
+
+                @if (Data.LeadsPorStatus?.Any() == true)
+                {
+                    <div class="dx-panel span-5">
+                        <div class="dx-ph">
+                            <h3><span class="dot"></span> Distribuição por status</h3>
+                            <span class="hint">@Data.LeadsPorStatus.Sum(s => s.Quantidade) leads</span>
+                        </div>
+                        @((MarkupString)DonutStatus())
+                    </div>
+                }
+
+                @if (Data.LeadsPorTemperatura?.Any() == true)
+                {
+                    <div class="dx-panel span-7">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-amber);box-shadow:0 0 10px var(--c-amber);"></span> Temperatura dos leads</h3>
+                            <span class="hint">classificação do funil</span>
+                        </div>
+                        <div class="tbars">
+                            @{
+                                var maxTemp = Data.LeadsPorTemperatura.Max(t => t.Quantidade);
+                            }
+                            @foreach (var temp in Data.LeadsPorTemperatura)
+                            {
+                                var w = maxTemp > 0 ? (double)temp.Quantidade / maxTemp * 100 : 0;
+                                <div class="tbar">
+                                    <div class="tbar-l">
+                                        @ObterIconeTemperatura(temp.Temperatura) @temp.Temperatura
+                                    </div>
+                                    <div class="tbar-track">
+                                        <div class="tbar-fill" style="width:@w.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;background:@temp.Cor;color:@temp.Cor;"></div>
+                                    </div>
+                                    <div class="tbar-v">@temp.Quantidade</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (Data.EvolucaoMensal?.Any() == true)
+                {
+                    <div class="dx-panel span-8">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-green);box-shadow:0 0 10px var(--c-green);"></span> Evolução mensal</h3>
+                            <span class="hint">últimos @Data.EvolucaoMensal.Count meses</span>
+                        </div>
+                        <div class="area-host">
+                            @((MarkupString)AreaChart())
+                        </div>
+                        <div class="legend-inline">
+                            <div class="li"><span class="sw" style="background:var(--c-blue);"></span> Criados <b>@Data.EvolucaoMensal.Sum(m => m.LeadsCriados)</b></div>
+                            <div class="li"><span class="sw" style="background:var(--c-green);"></span> Fechados <b>@Data.EvolucaoMensal.Sum(m => m.LeadsFechados)</b></div>
+                        </div>
+                    </div>
+                }
+
+                @if (Data.TopUsuarios?.Any() == true)
+                {
+                    <div class="dx-panel span-4">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-amber);box-shadow:0 0 10px var(--c-amber);"></span> Top usuários</h3>
+                        </div>
+                        <div class="rank">
+                            @{
+                                var rank = 1; var maxFech = Data.TopUsuarios.Take(5).Max(u => u.LeadsAtivos);
+                            }
+                            @foreach (var user in Data.TopUsuarios.Take(5))
+                            {
+                                var prog = maxFech > 0 ? (double)user.LeadsAtivos / maxFech * 100 : 0;
+                                <div class="rank-row @(rank <= 3 ? "top" + rank : "")">
+                                    <div class="rank-n">@rank</div>
+                                    <div class="rank-main">
+                                        <div class="rank-name">@user.Usuario</div>
+                                        <div class="rank-meta">
+                                            <span>📊 @user.LeadsAtivos</span>
+                                            <span>✅ @user.LeadsFechados</span>
+                                        </div>
+                                        <div class="rank-prog"><i style="width:@prog.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></i></div>
+                                    </div>
+                                    <div class="rank-val">@user.TaxaConversao%<small>CONV</small></div>
+                                </div>
+                                rank++;
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (Data.EvolucaoMensal?.Any() == true)
+                {
+                    <div class="dx-panel span-12">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-purple);box-shadow:0 0 10px var(--c-purple);"></span> Performance mensal detalhada</h3>
+                            <span class="hint">criados · fechados · em aberto · perdidos · conversão</span>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="mtx">
+                                <thead>
+                                    <tr>
+                                        <th>Mês</th>
+                                        <th>Criados</th>
+                                        <th>Fechados</th>
+                                        <th>Em aberto</th>
+                                        <th>Perdidos</th>
+                                        <th>Conversão</th>
+                                        <th>Performance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var mes in Data.EvolucaoMensal.OrderBy(m => DateTime.ParseExact(m.Mes, "MM/yyyy", null)))
+                                    {
+                                        <tr>
+                                            <td>@mes.Mes</td>
+                                            <td class="cell-blue">@mes.LeadsCriados</td>
+                                            <td class="cell-green">@mes.LeadsFechados</td>
+                                            <td class="cell-amber">@mes.LeadsEmAberto</td>
+                                            <td class="cell-red">@mes.LeadsPerdidos</td>
+                                            <td>
+                                                <span class="mtx-bar">
+                                                    <span class="mtx-pill" style="background:color-mix(in srgb, @ObterCorTaxaConversao(mes.TaxaConversao) 18%, transparent);color:@ObterCorTaxaConversao(mes.TaxaConversao);">@mes.TaxaConversao%</span>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span style="color:@ObterCorTaxaConversao(mes.TaxaConversao);font-weight:800;">@ObterIconePerformance(mes.TaxaConversao)</span>
+                                                <div style="font-size:10.5px;color:var(--txt-dim);font-weight:600;margin-top:2px;">@ObterContextoMercado(mes.TaxaConversao)</div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+
+    else if (AbaAtual == "suporte")
+    {
+        @if (CarregandoSuporte)
+        {
+            <div class="dx-load">
+                <div class="dx-spin"></div>
+                <p>Carregando suporte...</p>
+            </div>
+        }
+        else if (SuporteData == null || SuporteData.KPIs == null)
+        {
+            <div class="dx-empty">
+                <div class="ico">🎧</div>
+                <h3>Nenhum dado de suporte carregado</h3>
+                @if (ErroSuporte != null)
+                {
+                    <p style="color:var(--c-red);font-size:12px;margin-top:8px;">@ErroSuporte</p>
+                }
+                else
+                {
+                    <p>Clique novamente na aba Suporte ou verifique o carregamento dos dados.</p>
+                }
+            </div>
+        }
+        else
+        {
+            <!-- ===== 01 MÉTRICAS ===== -->
+            <div class="dx-eyebrow"><span class="tag">01</span> Métricas de suporte</div>
+
+            <div class="dx-filter">
+                <div class="ff">
+                    <label>Início</label>
+                    <input type="date" @bind="SuporteDataInicial" />
+                </div>
+                <div class="ff">
+                    <label>Fim</label>
+                    <input type="date" @bind="SuporteDataFinal" />
+                </div>
+                <button class="ff-btn" @onclick="CarregarSuporte">Filtrar período</button>
+            </div>
+
+            <div class="dx-kpis">
+                <div class="dx-kpi" style="--k: var(--c-blue);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">📂</div>
+                        <div class="dx-kpi-lbl">Tickets<br />abertos</div>
+                    </div>
+                    <div class="dx-kpi-val">@SuporteData.KPIs.TotalAbertos</div>
+                    <div class="dx-kpi-foot">Não finalizados</div>
+                </div>
+                <div class="dx-kpi" style="--k: var(--c-amber);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">🔄</div>
+                        <div class="dx-kpi-lbl">Em<br />andamento</div>
+                    </div>
+                    <div class="dx-kpi-val">@SuporteData.KPIs.EmAndamento</div>
+                    <div class="dx-kpi-foot">Em progresso</div>
+                </div>
+                <div class="dx-kpi" style="--k: var(--c-purple);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">⏳</div>
+                        <div class="dx-kpi-lbl">Pendente<br />cliente</div>
+                    </div>
+                    <div class="dx-kpi-val">@SuporteData.KPIs.PendenteCliente</div>
+                    <div class="dx-kpi-foot">Aguardando retorno</div>
+                </div>
+                <div class="dx-kpi" style="--k: var(--c-green);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">✅</div>
+                        <div class="dx-kpi-lbl">Finalizados<br />no mês</div>
+                    </div>
+                    <div class="dx-kpi-val">@SuporteData.KPIs.FinalizadosMes</div>
+                    <div class="dx-kpi-foot">Resolvidos no período</div>
+                </div>
+                <div class="dx-kpi" style="--k: var(--c-cyan);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">🆕</div>
+                        <div class="dx-kpi-lbl">Abertos<br />no mês</div>
+                    </div>
+                    <div class="dx-kpi-val">@SuporteData.KPIs.AbertosMes</div>
+                    <div class="dx-kpi-foot">Novos chamados</div>
+                </div>
+                <div class="dx-kpi" style="--k: var(--c-slate);">
+                    <div class="dx-kpi-head">
+                        <div class="dx-kpi-ic">🕒</div>
+                        <div class="dx-kpi-lbl">Tempo<br />médio</div>
+                    </div>
+                    <div class="dx-kpi-val" style="font-size:24px;">@SuporteData.KPIs.TempoMedioAbertoTexto</div>
+                    <div class="dx-kpi-foot">Tickets deste mês</div>
+                </div>
+            </div>
+
+            <!-- ===== 02 ANÁLISES ===== -->
+            <div class="dx-eyebrow"><span class="tag">02</span> Análises de tickets</div>
+
+            <div class="dx-grid">
+                @if (SuporteData.TicketsPorSituacao?.Any() == true)
+                {
+                    <div class="dx-panel span-5">
+                        <div class="dx-ph">
+                            <h3><span class="dot"></span> Tickets por situação</h3>
+                            <span class="hint">@SuporteData.TicketsPorSituacao.Sum(t => t.Quantidade) no período</span>
+                        </div>
+                        <div class="sit-grid">
+                            @{
+                                var idxS = 0;
+                            }
+                            @foreach (var item in SuporteData.TicketsPorSituacao.Take(8))
+                            {
+                                var sc = CorSituacao(idxS);
+                                <div class="sit" style="--sc:@sc;">
+                                    <div class="sit-v">@item.Quantidade</div>
+                                    <div class="sit-l">@item.Situacao</div>
+                                    <div class="sit-bar"><i style="width:@item.Percentual.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;"></i></div>
+                                    <span class="sit-p">@item.Percentual%</span>
+                                </div>
+                                idxS++;
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (SuporteData.TicketsPorUsuario?.Any() == true)
+                {
+                    <div class="dx-panel span-7">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-green);box-shadow:0 0 10px var(--c-green);"></span> Tickets por responsável</h3>
+                            <span class="hint">tempo médio de resposta</span>
+                        </div>
+                        <div class="resp">
+                            @{
+                                var rs = 1;
+                            }
+                            @foreach (var user in SuporteData.TicketsPorUsuario.Take(10))
+                            {
+                                <div class="resp-row">
+                                    <div class="resp-n">@rs</div>
+                                    <div class="rank-main" style="min-width:0;">
+                                        <div class="resp-name">@user.Usuario</div>
+                                        <div class="resp-meta">
+                                            <span>📂 @user.Abertos abertos</span>
+                                            <span>✅ @user.Finalizados final.</span>
+                                            <span>📊 @user.Total total</span>
+                                        </div>
+                                    </div>
+                                    <div class="resp-side">
+                                        <div class="resp-badge @(user.AbertosAgora > 0 ? "has" : "zero")"
+                                             style="@(user.AbertosAgora > 0 ? "cursor:pointer;" : "")"
+                                             @onclick="() => AbrirModalTicketsAbertosUsuario(user.Usuario, user.AbertosAgora)">
+                                            @(user.AbertosAgora > 0 ? "🔴" : "🟢") @user.AbertosAgora em aberto
+                                        </div>
+                                        <div class="resp-time">@user.TempoMedioRespostaTexto<small>MÉDIA</small></div>
+                                    </div>
+                                </div>
+                                rs++;
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="dx-panel span-12">
+                    <div class="dx-ph">
+                        <h3><span class="dot" style="background:var(--c-purple);box-shadow:0 0 10px var(--c-purple);"></span> Tickets por dia e usuário</h3>
+                        <span class="hint">clique em um card para ver os tickets</span>
+                    </div>
+                    <div class="dx-filter">
+                        <div class="ff">
+                            <label>Início</label>
+                            <input type="date" @bind="TicketsUsuarioDataInicial" />
+                        </div>
+                        <div class="ff">
+                            <label>Fim</label>
+                            <input type="date" @bind="TicketsUsuarioDataFinal" />
+                        </div>
+                        <button class="ff-btn" @onclick="FiltrarTicketsPorUsuarioDia">Filtrar dias</button>
+                    </div>
+                    <div class="day-stack">
+                        @foreach (var grupoDia in SuporteData.TicketsPorDiaUsuario.GroupBy(x => x.DiaTexto))
+                        {
+                            <div class="day-card">
+                                <div class="day-head">
+                                    <strong>🗓️ @grupoDia.Key</strong>
+                                    <span class="day-total"><b>@grupoDia.Sum(x => x.Quantidade)</b> tickets no dia</span>
+                                </div>
+                                <div class="day-users">
+                                    @foreach (var item in grupoDia)
+                                    {
+                                        <div class="du" @onclick="() => AbrirModalTicketsUsuario(item.Usuario, item.Data)">
+                                            <span>@item.Usuario</span>
+                                            <strong>@item.Quantidade</strong>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 03 PESQUISA DE SATISFAÇÃO ===== -->
+            <div class="dx-eyebrow"><span class="tag">03</span> Pesquisa de satisfação</div>
+
+            <div class="dx-filter">
+                <div class="ff">
+                    <label>Início</label>
+                    <input type="date" @bind="PesquisaDataInicial" />
+                </div>
+                <div class="ff">
+                    <label>Fim</label>
+                    <input type="date" @bind="PesquisaDataFinal" />
+                </div>
+                <button class="ff-btn" @onclick="CarregarPesquisa">Filtrar período</button>
+            </div>
+
+            @if (CarregandoPesquisa)
+            {
+                <div class="dx-load">
+                    <div class="dx-spin"></div>
+                    <p>Carregando pesquisa...</p>
+                </div>
+            }
+            else if (PesquisaData != null)
+            {
+                <div class="dx-kpis">
+                    <div class="dx-kpi" style="--k: var(--c-blue);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">📤</div><div class="dx-kpi-lbl">Pesquisas<br />enviadas</div></div>
+                        <div class="dx-kpi-val">@PesquisaData.TotalEnviadas</div>
+                        <div class="dx-kpi-foot">No período</div>
+                    </div>
+                    <div class="dx-kpi" style="--k: var(--c-green);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">💬</div><div class="dx-kpi-lbl">Respondidas</div></div>
+                        <div class="dx-kpi-val">@PesquisaData.TotalRespondidas</div>
+                        <div class="dx-kpi-foot">
+                            @(PesquisaData.TotalEnviadas > 0
+                                ? Math.Round((decimal)PesquisaData.TotalRespondidas / PesquisaData.TotalEnviadas * 100, 1)
+                                : 0)% de resposta
+                        </div>
+                    </div>
+                    <div class="dx-kpi" style="--k: var(--c-amber);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">⭐</div><div class="dx-kpi-lbl">Com nota</div></div>
+                        <div class="dx-kpi-val">@PesquisaData.TotalComNota</div>
+                        <div class="dx-kpi-foot">Avaliações recebidas</div>
+                    </div>
+                    <div class="dx-kpi" style="--k: var(--c-cyan);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">🎯</div><div class="dx-kpi-lbl">Média geral</div></div>
+                        <div class="dx-kpi-val">
+                            @PesquisaData.MediaNota.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
+                            <span style="font-size:18px;color:var(--txt-mut);">/5</span>
+                        </div>
+                        <div class="dx-kpi-foot">
+                            @(PesquisaData.MediaNota >= 4.5m ? "⭐⭐⭐⭐⭐" :
+                              PesquisaData.MediaNota >= 3.5m ? "⭐⭐⭐⭐" :
+                              PesquisaData.MediaNota >= 2.5m ? "⭐⭐⭐" :
+                              PesquisaData.MediaNota >= 1.5m ? "⭐⭐" : "⭐")
+                        </div>
+                    </div>
+                    <div class="dx-kpi" style="--k: var(--c-red);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">❌</div><div class="dx-kpi-lbl">Erros<br />de envio</div></div>
+                        <div class="dx-kpi-val">@PesquisaData.TotalErro</div>
+                        <div class="dx-kpi-foot">Falhas no WhatsApp</div>
+                    </div>
+                    <div class="dx-kpi" style="--k: var(--c-purple);">
+                        <div class="dx-kpi-head"><div class="dx-kpi-ic">📊</div><div class="dx-kpi-lbl">Taxa<br />resposta</div></div>
+                        <div class="dx-kpi-val">
+                            @(PesquisaData.TotalEnviadas > 0
+                                ? Math.Round((decimal)PesquisaData.TotalRespondidas / PesquisaData.TotalEnviadas * 100, 0)
+                                : 0)<span style="font-size:18px;color:var(--txt-mut);">%</span>
+                        </div>
+                        <div class="dx-kpi-foot">Engajamento</div>
+                    </div>
+                </div>
+
+                <div class="dx-grid">
+                    <div class="dx-panel span-5">
+                        <div class="dx-ph">
+                            <h3><span class="dot" style="background:var(--c-amber);box-shadow:0 0 10px var(--c-amber);"></span> Distribuição de notas</h3>
+                            <span class="hint">@PesquisaData.TotalComNota avaliações</span>
+                        </div>
+                        <div class="tbars">
+                            @foreach (var (nota, qtd, cor) in new[] {
+                            (5, PesquisaData.Nota5, "#34d399"),
+                            (4, PesquisaData.Nota4, "#4aa8ff"),
+                            (3, PesquisaData.Nota3, "#fbbf24"),
+                            (2, PesquisaData.Nota2, "#fb923c"),
+                            (1, PesquisaData.Nota1, "#fb6f70")
+                        })
+                            {
+                                var pct = PesquisaData.TotalComNota > 0
+                                    ? (double)qtd / PesquisaData.TotalComNota * 100 : 0;
+                                <div class="tbar">
+                                    <div class="tbar-l" style="color:@cor; font-weight:700;">
+                                        @nota
+                                    </div>
+                                    <div class="tbar-track">
+                                        <div class="tbar-fill" style="width:@pct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;background:@cor;color:@cor;"></div>
+                                    </div>
+                                    <div class="tbar-v">@qtd</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="dx-panel span-7">
+                        <div class="dx-ph">
+                            <h3><span class="dot"></span> Listagem detalhada</h3>
+                            <span class="hint">@PesquisaData.Detalhes.Count registros</span>
+                        </div>
+                        <div style="overflow-x:auto;">
+                            <table class="mtx">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align:left;">Ticket</th>
+                                        <th style="text-align:left;">Telefone</th>
+                                        <th>Enviado</th>
+                                        <th>Respondido</th>
+                                        <th>Nota</th>
+                                        <th style="text-align:left;">Observação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in PesquisaData.Detalhes.Take(50))
+                                    {
+                                        <tr>
+                                            <td style="text-align:left;">
+                                                <span style="cursor:pointer;color:var(--accent);"
+                                                      @onclick="() => AbrirTicket(p.CodTicket)">
+                                                    #@p.CodTicket
+                                                </span>
+                                            </td>
+                                            <td style="text-align:left;font-size:12px;color:var(--txt-mut);">@p.Telefone</td>
+                                            <td style="font-size:12px;">@p.DataEnvio.ToString("dd/MM HH:mm")</td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(p.ErroEnvio))
+                                                {
+                                                    <span class="dx-chip down" title="@p.ErroEnvio">❌ Erro</span>
+                                                }
+                                                else if (p.Respondido)
+                                                {
+                                                    <span class="dx-chip up">✅ Sim</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="dx-chip flat">⏳ Não</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (p.Nota.HasValue)
+                                                {
+                                                    var corNota = p.Nota switch
+                                                    {
+                                                        5 => "#34d399",
+                                                        4 => "#4aa8ff",
+                                                        3 => "#fbbf24",
+                                                        2 => "#fb923c",
+                                                        _ => "#fb6f70"
+                                                    };
+                                                    <span style="font-weight:800;color:@corNota;font-size:15px;">@p.Nota ★</span>
+                                                }
+                                                else
+                                                {
+                                                    <span style="color:var(--txt-dim);">—</span>
+                                                }
+                                            </td>
+                                            <td style="text-align:left;font-size:12px;color:var(--txt-mut);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                                @(string.IsNullOrWhiteSpace(p.Observacao) ? "—" : p.Observacao)
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+@if (ModalTicketsUsuarioAberto)
+{
+    <div class="mb">
+        <div class="mw">
+            <div class="mh">
+                <div>
+                    <h3>Tickets de @ModalTicketsUsuarioNome</h3>
+                    <div class="msub">
+                        @(ModalTicketsUsuarioLista.All(t => t.DataHoraAbertura.Date == ModalTicketsUsuarioData.Date)
+                            ? ModalTicketsUsuarioData.ToString("dd/MM/yyyy")
+                            : "Tickets em aberto")
+                    </div>
+                </div>
+                <button @onclick="FecharModalTicketsUsuario">✕</button>
+            </div>
+            <div class="mbody">
+                @if (ModalTicketsUsuarioLista.Any())
+                {
+                    @foreach (var ticket in ModalTicketsUsuarioLista)
+                    {
+                        <div class="mt" @onclick="() => AbrirTicket(ticket.Codigo)">
+                            <div class="mt-l">
+                                <strong>#@ticket.Codigo · @ticket.Assunto</strong>
+                                <span>@ticket.Cliente</span>
+                            </div>
+                            <div class="mt-r">
+                                <span class="st">@ticket.Situacao</span>
+                                <small>@ticket.DataHoraAbertura.ToString("HH:mm")</small>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p class="m-empty">Nenhum ticket encontrado.</p>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    private decimal MetaMensal = 10m;   // default igual ao WPF
+    private decimal MetaAnual = 100m;
+    private double[]? CrescimentoMoM;
+    private double[]? CrescimentoAcumulado;
+    private string[]? CrescimentoMesesLabel;
+    private bool ModalTicketsUsuarioAberto = false;
+    private string ModalTicketsUsuarioNome = "";
+    private DateTime ModalTicketsUsuarioData;
+    private List<TicketDetalheUsuarioDia> ModalTicketsUsuarioLista = new();
+
+    private PesquisaSatisfacaoData? PesquisaData;
+    private DateTime PesquisaDataInicial = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime PesquisaDataFinal = DateTime.Today;
+    private bool CarregandoPesquisa = false;
+
+    private async Task AbrirModalTicketsUsuario(string usuario, DateTime data)
+    {
+        ModalTicketsUsuarioNome = usuario;
+        ModalTicketsUsuarioData = data;
+
+        ModalTicketsUsuarioLista = await DashboardService.GetTicketsDetalheUsuarioDiaAsync(usuario, data);
+
+        ModalTicketsUsuarioAberto = true;
+    }
+
+    private void FecharModalTicketsUsuario()
+    {
+        ModalTicketsUsuarioAberto = false;
+        ModalTicketsUsuarioLista.Clear();
+    }
+    private DateTime TicketsUsuarioDataInicial = DateTime.Today;
+    private DateTime TicketsUsuarioDataFinal = DateTime.Today;
+    private DashboardData? Data;
+    private SuporteDashboardData? SuporteData;
+
+    private bool Carregando = true;
+    private string AbaAtual = "comercial";
+    private DateTime SuporteDataInicial = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime SuporteDataFinal = DateTime.Today;
+
+    private string? ErroSuporte = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        int tentativas = 0;
+        while (!UserState.IsReady && tentativas < 100)
+        {
+            await Task.Delay(50);
+            tentativas++;
+        }
+
+        if (!UserState.IsReady || UserState.CurrentCompanyId <= 0)
+        {
+            Console.WriteLine("❌ Dashboard: UserState ainda não carregado.");
+            Carregando = false;
+            return;
+        }
+
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("aba", out var aba))
+            AbaAtual = aba.ToString();
+
+        // Comercial sempre carrega (KPIs rápidos)
+        await CarregarDashboard();
+        Carregando = false;
+        StateHasChanged();
+
+        if (AbaAtual == "suporte")
+        {
+            await CarregarSuporte();
+            StateHasChanged(); // ← garante render após suporte carregar
+        }
+    }
+
+    private async Task CarregarDashboard()
+    {
+        Carregando = true;
+
+        try
+        {
+            Data = await DashboardService.GetDashboardDataAsync();
+
+            var metas = await AdminService.ObterMetasPainelAsync();   // <<< AdminService, não DashboardService
+            MetaMensal = metas.mensal;
+            MetaAnual = metas.anual;
+
+            await CalcularCrescimentoMensalAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ ERRO ao carregar dashboard: {ex.Message}");
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private void AbrirCard(int codigo)
+    {
+        Nav.NavigateTo($"/card/{codigo}");
+    }
+
+    private string ObterIconeTemperatura(string temperatura)
+    {
+        return (temperatura?.ToUpper() ?? "") switch
+        {
+            "QUENTE" => "🔥",
+            "MORNO" => "🟡",
+            "FRIO" => "🧊",
+            "MUITO FRIO" => "❄️",
+            _ => "📊"
+        };
+    }
+
+    private string ObterCorTemperatura(string temperatura)
+    {
+        return (temperatura?.ToUpper() ?? "") switch
+        {
+            "QUENTE" => "#f44336",
+            "MORNO" => "#ff9800",
+            "FRIO" => "#03a9f4",
+            "MUITO FRIO" => "#5c6bc0",
+            _ => "#9e9e9e"
+        };
+    }
+
+    private string ObterCorStatus(string status)
+    {
+        return status.ToUpper() switch
+        {
+            "FECHADO" or "CONCLUIDO" => "#e8f5e9",
+            "ABERTO" => "#e3f2fd",
+            "PERDIDO" or "CANCELADO" => "#ffebee",
+            _ => "#f5f5f5"
+        };
+    }
+
+    // ✅ AJUSTADO: Cores realistas baseadas em benchmarks de mercado
+    private string ObterCorTaxaConversao(decimal taxa)
+    {
+        return taxa switch
+        {
+            >= 15 => "#2e7d32",  // Verde escuro - Excelente (15%+)
+            >= 10 => "#4caf50",  // Verde - Muito Boa (10-15%)
+            >= 6 => "#8bc34a",   // Verde claro - Boa (6-10%)
+            >= 3 => "#ff9800",   // Laranja - Normal (3-6%)
+            _ => "#f44336"       // Vermelho - Muito Baixo (0-3%)
+        };
+    }
+
+    // ✅ AJUSTADO: Ícones e textos realistas
+    private string ObterIconePerformance(decimal taxa)
+    {
+        return taxa switch
+        {
+            >= 15 => "🚀 Excelente",      // 15%+ (top 5% do mercado)
+            >= 10 => "🔥 Muito Boa",      // 10-15% (top 20%)
+            >= 6 => "👍 Boa",             // 6-10% (acima da média)
+            >= 3 => "⚠️ Normal",          // 3-6% (média de mercado)
+            _ => "📉 Muito Baixo"         // 0-3% (abaixo da média)
+        };
+    }
+
+    // ✅ NOVO: Método para mostrar contexto de mercado
+    private string ObterContextoMercado(decimal taxa)
+    {
+        return taxa switch
+        {
+            >= 15 => "Top 5% do mercado",
+            >= 10 => "Top 20% do mercado",
+            >= 6 => "Acima da média",
+            >= 3 => "Dentro da média (tráfego frio)",
+            _ => "Abaixo da média - Requer atenção"
+        };
+    }
+
+    private async Task TrocarAba(string aba)
+    {
+        AbaAtual = aba;
+
+        Nav.NavigateTo($"/dashboard?aba={aba}", replace: true);
+
+        if (aba == "suporte" && SuporteData == null)
+        {
+            await CarregarSuporte();
+        }
+    }
+
+
+    private bool CarregandoSuporte = false;
+    private async Task CarregarSuporte()
+    {
+        CarregandoSuporte = true;
+        StateHasChanged();
+
+        try
+        {
+            if (SuporteDataFinal < SuporteDataInicial)
+            {
+                var temp = SuporteDataInicial;
+                SuporteDataInicial = SuporteDataFinal;
+                SuporteDataFinal = temp;
+            }
+
+            SuporteData = await DashboardService.GetSuporteDashboardDataAsync(
+                SuporteDataInicial,
+                SuporteDataFinal
+            );
+        }
+        catch (Exception ex)
+        {
+            ErroSuporte = ex.Message;
+            Console.WriteLine($"❌ ERRO ao carregar dashboard suporte: {ex.Message}");
+        }
+        finally
+        {
+            CarregandoSuporte = false;
+            StateHasChanged(); // ← renderiza com os dados
+        }
+    }
+
+    private async Task FiltrarTicketsPorUsuarioDia()
+    {
+        if (TicketsUsuarioDataFinal < TicketsUsuarioDataInicial)
+        {
+            var temp = TicketsUsuarioDataInicial;
+            TicketsUsuarioDataInicial = TicketsUsuarioDataFinal;
+            TicketsUsuarioDataFinal = temp;
+        }
+
+        SuporteData.TicketsPorDiaUsuario = await DashboardService.GetTicketsPorDiaUsuarioAsync(
+            TicketsUsuarioDataInicial,
+            TicketsUsuarioDataFinal
+        );
+    }
+
+    private void AbrirTicket(int codigo)
+    {
+        Nav.NavigateTo($"/ticket/{codigo}?voltar=/dashboard?aba=suporte");
+    }
+
+    // ====================================================================
+    // HELPERS APENAS VISUAIS (SVG) - não tocam em dados nem em lógica.
+    // As tags são construídas a partir da constante LT ("<") para que o
+    // parser do Razor não interprete o conteúdo como markup.
+    // ====================================================================
+    private const string LT = "<";
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+    private static string F(double v) => v.ToString("0.##", Inv);
+    // Crescimento ANUAL (igual ao WPF): vendas do ano atual vs ano anterior.
+    private double CrescimentoAnual;
+
+    // Crescimento do MÊS ATUAL = MoM do mês corrente (Jan=índice 0).
+    private double CrescimentoMesAtual =>
+        (CrescimentoMoM != null && CrescimentoMoM.Length >= DateTime.Now.Month)
+            ? CrescimentoMoM[DateTime.Now.Month - 1]
+            : 0;
+
+    // Resultado = crescimento − meta (idêntico ao WPF)
+    private double ResultadoMensal => CrescimentoMesAtual - (double)MetaMensal;
+    private double ResultadoAnual => CrescimentoAnual - (double)MetaAnual;
+
+    // Série numérica a partir da evolução mensal (ordenada por mês)
+    private List<double> EvoSerie(Func<EvolucaoMensal, int> sel)
+    {
+        if (Data?.EvolucaoMensal == null || !Data.EvolucaoMensal.Any())
+            return new List<double>();
+
+        return Data.EvolucaoMensal
+            .OrderBy(m => DateTime.ParseExact(m.Mes, "MM/yyyy", null))
+            .Select(m => (double)sel(m))
+            .ToList();
+    }
+
+    // Mini gráfico de linha de fundo para os cards de KPI
+    private string Sparkline(List<double> serie, string cor)
+    {
+        if (serie == null || serie.Count < 2) return "";
+
+        double w = 200, h = 34;
+        double max = serie.Max();
+        double min = serie.Min();
+        double range = max - min;
+        if (range <= 0) range = 1;
+
+        var pts = new List<string>();
+        for (int i = 0; i < serie.Count; i++)
+        {
+            double x = serie.Count == 1 ? 0 : i / (double)(serie.Count - 1) * w;
+            double y = h - ((serie[i] - min) / range) * (h - 6) - 3;
+            pts.Add(F(x) + "," + F(y));
+        }
+
+        var line = string.Join(" ", pts);
+        var area = "0," + F(h) + " " + line + " " + F(w) + "," + F(h);
+        var gid = "sg" + Guid.NewGuid().ToString("N").Substring(0, 6);
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(LT + "svg class='spark' viewBox='0 0 " + F(w) + " " + F(h) + "' preserveAspectRatio='none' xmlns='http://www.w3.org/2000/svg'>");
+        sb.Append(LT + "defs>" + LT + "linearGradient id='" + gid + "' x1='0' y1='0' x2='0' y2='1'>");
+        sb.Append(LT + "stop offset='0%' stop-color='" + cor + "' stop-opacity='0.35'/>");
+        sb.Append(LT + "stop offset='100%' stop-color='" + cor + "' stop-opacity='0'/>");
+        sb.Append(LT + "/linearGradient>" + LT + "/defs>");
+        sb.Append(LT + "polygon points='" + area + "' fill='url(#" + gid + ")'/>");
+        sb.Append(LT + "polyline points='" + line + "' fill='none' stroke='" + cor + "' stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round'/>");
+        sb.Append(LT + "/svg>");
+        return sb.ToString();
+    }
+
+    private static readonly string[] DonutCores =
+        { "#4aa8ff", "#34d399", "#fbbf24", "#fb6f70", "#b794f6", "#22d3ee", "#94a3b8", "#f472b6" };
+
+    // Donut chart de distribuição por status (comercial)
+    private string DonutStatus()
+    {
+        var itens = Data!.LeadsPorStatus.Take(6).ToList();
+        var total = itens.Sum(s => s.Quantidade);
+        if (total <= 0) return LT + "p style='color:var(--txt-mut);'>Sem dados." + LT + "/p>";
+
+        double cx = 90, cy = 90, r = 70, sw = 22;
+        double circ = 2 * Math.PI * r;
+        double offset = 0;
+        var segs = new System.Text.StringBuilder();
+
+        for (int i = 0; i < itens.Count; i++)
+        {
+            double frac = (double)itens[i].Quantidade / total;
+            double len = frac * circ;
+            var cor = DonutCores[i % DonutCores.Length];
+            segs.Append(LT + "circle cx='" + F(cx) + "' cy='" + F(cy) + "' r='" + F(r) + "' fill='none' stroke='" + cor + "' stroke-width='" + F(sw) + "' ");
+            segs.Append("stroke-dasharray='" + F(len) + " " + F(circ - len) + "' stroke-dashoffset='" + F(-offset) + "' ");
+            segs.Append("transform='rotate(-90 " + F(cx) + " " + F(cy) + ")' stroke-linecap='butt'/>");
+            offset += len;
+        }
+
+        var legend = new System.Text.StringBuilder();
+        for (int i = 0; i < itens.Count; i++)
+        {
+            var cor = DonutCores[i % DonutCores.Length];
+            legend.Append(LT + "div class='dl-row'>");
+            legend.Append(LT + "span class='dl-sw' style='background:" + cor + ";'>" + LT + "/span>");
+            legend.Append(LT + "span class='dl-name'>" + System.Net.WebUtility.HtmlEncode(itens[i].Status) + LT + "/span>");
+            legend.Append(LT + "span class='dl-q'>" + itens[i].Quantidade + LT + "/span>");
+            legend.Append(LT + "span class='dl-p'>" + itens[i].Percentual + "%" + LT + "/span>");
+            legend.Append(LT + "/div>");
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(LT + "div class='donut-wrap'>");
+        sb.Append(LT + "svg class='donut-svg' width='180' height='180' viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'>");
+        sb.Append(LT + "circle cx='" + F(cx) + "' cy='" + F(cy) + "' r='" + F(r) + "' fill='none' stroke='rgba(255,255,255,0.05)' stroke-width='" + F(sw) + "'/>");
+        sb.Append(segs.ToString());
+        sb.Append(LT + "text class='donut-center' x='90' y='86' text-anchor='middle'>" + total + LT + "/text>");
+        sb.Append(LT + "text class='donut-center-lbl' x='90' y='104' text-anchor='middle'>LEADS" + LT + "/text>");
+        sb.Append(LT + "/svg>");
+        sb.Append(LT + "div class='donut-legend'>" + legend.ToString() + LT + "/div>");
+        sb.Append(LT + "/div>");
+        return sb.ToString();
+    }
+
+    // Gráfico de área (criados x fechados) - evolução mensal comercial
+    private string AreaChart()
+    {
+        var meses = Data!.EvolucaoMensal
+            .OrderBy(m => DateTime.ParseExact(m.Mes, "MM/yyyy", null))
+            .ToList();
+        if (!meses.Any()) return "";
+
+        double w = Math.Max(680, meses.Count * 64);
+        double h = 280, padL = 36, padR = 16, padT = 18, padB = 34;
+        double iw = w - padL - padR, ih = h - padT - padB;
+
+        double max = Math.Max(1, meses.Max(m => Math.Max(m.LeadsCriados, m.LeadsFechados)));
+        double step = Math.Max(1, Math.Ceiling(max / 4.0));
+        double top = step * 4;
+
+        Func<int, double> X = i => meses.Count == 1 ? padL + iw / 2 : padL + i / (double)(meses.Count - 1) * iw;
+        Func<double, double> Y = v => padT + ih - (v / top) * ih;
+
+        var grid = new System.Text.StringBuilder();
+        for (int g = 0; g <= 4; g++)
+        {
+            double val = top / 4 * g;
+            double y = Y(val);
+            grid.Append(LT + "line class='gl' x1='" + F(padL) + "' y1='" + F(y) + "' x2='" + F(w - padR) + "' y2='" + F(y) + "'/>");
+            grid.Append(LT + "text class='axl' x='" + F(padL - 8) + "' y='" + F(y + 3) + "' text-anchor='end'>" + F(val) + LT + "/text>");
+        }
+
+        Func<Func<EvolucaoMensal, int>, string, string, string> buildSeries = (sel, cor, gid) =>
+        {
+            var line = new System.Text.StringBuilder();
+            var xs = new List<double>();
+            var ys = new List<double>();
+            for (int i = 0; i < meses.Count; i++)
+            {
+                double x = X(i), y = Y(sel(meses[i]));
+                xs.Add(x); ys.Add(y);
+                line.Append((i == 0 ? "M" : "L") + F(x) + " " + F(y) + " ");
+            }
+            var areaPath = line.ToString() + "L " + F(xs[xs.Count - 1]) + " " + F(padT + ih) + " L " + F(xs[0]) + " " + F(padT + ih) + " Z";
+
+            var dots = new System.Text.StringBuilder();
+            for (int i = 0; i < meses.Count; i++)
+            {
+                dots.Append(LT + "circle class='area-dot' cx='" + F(xs[i]) + "' cy='" + F(ys[i]) + "' r='3.2' fill='" + cor + "'>");
+                dots.Append(LT + "title>" + meses[i].Mes + ": " + sel(meses[i]) + LT + "/title>" + LT + "/circle>");
+            }
+
+            var s = new System.Text.StringBuilder();
+            s.Append(LT + "defs>" + LT + "linearGradient id='" + gid + "' x1='0' y1='0' x2='0' y2='1'>");
+            s.Append(LT + "stop offset='0%' stop-color='" + cor + "' stop-opacity='0.28'/>");
+            s.Append(LT + "stop offset='100%' stop-color='" + cor + "' stop-opacity='0'/>");
+            s.Append(LT + "/linearGradient>" + LT + "/defs>");
+            s.Append(LT + "path d='" + areaPath + "' fill='url(#" + gid + ")'/>");
+            s.Append(LT + "path d='" + line.ToString().Trim() + "' fill='none' stroke='" + cor + "' stroke-width='2.4' stroke-linejoin='round' stroke-linecap='round'/>");
+            s.Append(dots.ToString());
+            return s.ToString();
+        };
+
+        var labels = new System.Text.StringBuilder();
+        for (int i = 0; i < meses.Count; i++)
+        {
+            labels.Append(LT + "text class='axl' x='" + F(X(i)) + "' y='" + F(h - 10) + "' text-anchor='middle'>" + meses[i].Mes + LT + "/text>");
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(LT + "svg class='area-svg' viewBox='0 0 " + F(w) + " " + F(h) + "' xmlns='http://www.w3.org/2000/svg'>");
+        sb.Append(grid.ToString());
+        sb.Append(buildSeries(m => m.LeadsCriados, "#4aa8ff", "ac"));
+        sb.Append(buildSeries(m => m.LeadsFechados, "#34d399", "af"));
+        sb.Append(labels.ToString());
+        sb.Append(LT + "/svg>");
+        return sb.ToString();
+    }
+
+    // Cor por índice para os cards de situação (suporte)
+    private string CorSituacao(int idx)
+    {
+        var cores = new[] { "#4aa8ff", "#fbbf24", "#b794f6", "#34d399", "#22d3ee", "#fb6f70", "#94a3b8", "#f472b6" };
+        return cores[idx % cores.Length];
+    }
+
+    // Replica CarregarGraficoColunas() do painel WPF: base = soma de vendas por mês,
+    // crescimento MoM, e barras em "escada" acumulada (Math.Max(0, mom)).
+    private async Task CalcularCrescimentoMensalAsync()
+    {
+        int ano = DateTime.Now.Year;
+
+        // 1 query no lugar de 25
+        var totais = await DashboardService.GetTotaisVendaAnosAsync(ano);
+
+        double Get(int a, int m) =>
+            totais.TryGetValue((a, m), out var v) ? v : 0;
+
+        var valores = Enumerable.Range(1, 12)
+            .Select(m => Get(ano, m))
+            .ToArray();
+
+        var mom = new double[12];
+        for (int i = 0; i < 12; i++)
+        {
+            double atual = valores[i];
+            double anterior = i == 0 ? Get(ano - 1, 12) : valores[i - 1];
+            mom[i] = anterior > 0 ? ((atual - anterior) / anterior) * 100.0 : 0;
+        }
+
+        var acum = new double[12];
+        double acumulado = 0;
+        for (int i = 0; i < 12; i++)
+        {
+            acumulado += Math.Max(0, mom[i]);
+            acum[i] = acumulado;
+        }
+
+        CrescimentoMoM = mom;
+        CrescimentoAcumulado = acum;
+        CrescimentoMesesLabel = Enumerable.Range(1, 12)
+            .Select(m => new DateTime(ano, m, 1)
+                .ToString("MMM", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")))
+            .ToArray();
+
+        // crescimento anual
+        double totalAnoAtual = valores.Sum();
+        double totalAnoAnterior = Enumerable.Range(1, 12).Sum(m => Get(ano - 1, m));
+
+        CrescimentoAnual = totalAnoAnterior > 0
+            ? ((totalAnoAtual / totalAnoAnterior) * 100.0) - 100.0
+            : 0;
+    }
+
+    // Gráfico de crescimento mensal em "escada acumulada" (portado do painel WPF).
+    // Altura da barra = acumulado; rótulo acima = MoM real do mês (pode ser negativo).
+    private string CrescimentoChart()
+    {
+        if (CrescimentoMoM == null || CrescimentoAcumulado == null
+            || CrescimentoMesesLabel == null || CrescimentoMoM.Length == 0)
+            return "";
+
+        int n = CrescimentoMoM.Length;
+        double w = Math.Max(720, n * 78);
+        double h = 460, padL = 24, padR = 24, padT = 40, padB = 46;
+        double iw = w - padL - padR, ih = h - padT - padB;
+
+        double maxV = CrescimentoAcumulado.Max();
+        double minV = Math.Min(CrescimentoAcumulado.Min(), CrescimentoMoM.Min());
+        double yMin = Math.Min(minV - 5, -2);
+        double yMax = Math.Max(maxV + 5, 10);
+        double span = (yMax - yMin) <= 0 ? 1 : (yMax - yMin);
+
+        Func<double, double> Y = v => padT + ih - ((v - yMin) / span) * ih;
+        double slot = iw / n;
+        double bw = Math.Min(54, slot * 0.62);
+
+        string[] grad = { "#0D47A1", "#1565C0", "#1E88E5", "#42A5F5", "#4FC3F7", "#80DEEA" };
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append(LT + "svg class='cresc-svg' viewBox='0 0 " + F(w) + " " + F(h) + "' xmlns='http://www.w3.org/2000/svg'>");
+
+        // gradiente de alta por barra + um gradiente de queda
+        sb.Append(LT + "defs>");
+        for (int i = 0; i < n; i++)
+        {
+            int idx = n == 1 ? 0 : (int)Math.Round(i / (double)(n - 1) * (grad.Length - 1));
+            string c = grad[idx];
+            sb.Append(LT + "linearGradient id='cb" + i + "' x1='0' y1='0' x2='0' y2='1'>");
+            sb.Append(LT + "stop offset='0%' stop-color='" + c + "'/>");
+            sb.Append(LT + "stop offset='100%' stop-color='" + c + "' stop-opacity='0.62'/>");
+            sb.Append(LT + "/linearGradient>");
+        }
+        sb.Append(LT + "linearGradient id='cbdown' x1='0' y1='0' x2='0' y2='1'>");
+        sb.Append(LT + "stop offset='0%' stop-color='#fb6f70'/>");
+        sb.Append(LT + "stop offset='100%' stop-color='#c62828' stop-opacity='0.62'/>");
+        sb.Append(LT + "/linearGradient>");
+        sb.Append(LT + "/defs>");
+
+        // grid horizontal
+        for (int g = 0; g <= 4; g++)
+        {
+            double val = yMin + span / 4 * g;
+            double y = Y(val);
+            sb.Append(LT + "line class='cg' x1='" + F(padL) + "' y1='" + F(y) + "' x2='" + F(w - padR) + "' y2='" + F(y) + "'/>");
+        }
+
+        // linha do zero
+        double yZero = Y(0);
+        sb.Append(LT + "line class='zero' x1='" + F(padL) + "' y1='" + F(yZero) + "' x2='" + F(w - padR) + "' y2='" + F(yZero) + "'/>");
+
+        for (int i = 0; i < n; i++)
+        {
+            double cx = padL + slot * i + slot / 2;
+            double bx = cx - bw / 2;
+            double top = CrescimentoAcumulado[i];
+            double yTop = Y(top);
+            double barH = Math.Max(2, yZero - yTop);
+
+            bool subiu = CrescimentoMoM[i] >= 0;
+            string fill = subiu ? "url(#cb" + i + ")" : "url(#cbdown)";
+
+            sb.Append(LT + "rect class='cresc-bar' x='" + F(bx) + "' y='" + F(yTop) + "' width='" + F(bw)
+                + "' height='" + F(barH) + "' rx='7' fill='" + fill + "'>");
+            sb.Append(LT + "title>" + CrescimentoMesesLabel[i] + ": " + CrescimentoMoM[i].ToString("0", Inv) + "% no mês"
+                + " (acum. " + top.ToString("0", Inv) + "%)" + LT + "/title>");
+            sb.Append(LT + "/rect>");
+
+            // rótulo = MoM real do mês (igual ao WPF)
+            double yLbl = yTop - 10;
+            sb.Append(LT + "text class='vlabel' x='" + F(cx) + "' y='" + F(yLbl)
+                + "' text-anchor='middle'>" + CrescimentoMoM[i].ToString("0", Inv) + "%" + LT + "/text>");
+
+            // mês no eixo X
+            sb.Append(LT + "text class='mlabel' x='" + F(cx) + "' y='" + F(h - 16)
+                + "' text-anchor='middle'>" + CrescimentoMesesLabel[i] + LT + "/text>");
+        }
+
+        sb.Append(LT + "/svg>");
+        return sb.ToString();
+    }
+
+    private async Task CarregarPesquisa()
+    {
+        CarregandoPesquisa = true;
+        StateHasChanged();
+        try
+        {
+            PesquisaData = await DashboardService.GetPesquisaSatisfacaoAsync(
+                PesquisaDataInicial, PesquisaDataFinal);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ ERRO pesquisa: {ex.Message}");
+        }
+        finally
+        {
+            CarregandoPesquisa = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AbrirModalTicketsAbertosUsuario(string usuario, int qtd)
+    {
+        if (qtd == 0) return;
+
+        ModalTicketsUsuarioNome = usuario;
+        ModalTicketsUsuarioData = DateTime.Today; // usado só pro label, adapte se quiser
+        ModalTicketsUsuarioLista = await DashboardService.GetTicketsAbertosUsuarioAsync(usuario);
+        ModalTicketsUsuarioAberto = true;
+    }
+}

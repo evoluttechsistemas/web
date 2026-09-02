@@ -1,0 +1,182 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+
+    <link rel="stylesheet" href="app.css?v=@DateTime.Now.Ticks" />
+    <link rel="stylesheet" href="EvolutCRM.styles.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="icon" type="image/x-icon" href="images/favicon.ico" />
+
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+
+    <script src="/js/crm-notify.js?v=3"></script>
+    <script src="/js/ticket-audio.js"></script>
+    <script src="_framework/blazor.web.js"></script>
+    <script src="/js/screen-recorder.js"></script>
+    <script src="js/ticketAudio.js"></script>
+    <script src="/js/Acesso-Remoto.js"></script>
+
+    <script>
+        window.chatInternoRef = null;
+        window.setChatInternoRef = (ref) => { window.chatInternoRef = ref; };
+
+        document.addEventListener('paste', async function (e) {
+        if (!window.chatInternoRef) return;
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of items) {
+        if (item.type.startsWith('image/')) {
+        const blob = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = async function () {
+        const base64 = reader.result.split(',')[1];
+        await window.chatInternoRef.invokeMethodAsync(
+        'ReceberImagemColada', base64, item.type
+        );
+        };
+        reader.readAsDataURL(blob);
+        e.preventDefault();
+        break;
+        }
+        }
+        });
+    </script>
+
+    <script>
+        function setupBlazorReconnection() {
+        try {
+        if (!window.Blazor) { setTimeout(setupBlazorReconnection, 100); return; }
+        if (!window.Blazor.defaultReconnectionHandler) { setTimeout(setupBlazorReconnection, 100); return; }
+
+        console.log("✅ Configurando reconexão Blazor");
+
+        window.Blazor.defaultReconnectionHandler._reconnectCallback = async (reconnect) => {
+        console.log("🔄 Tentando reconectar...");
+        document.body.style.opacity = "0.6";
+        try {
+        await reconnect();
+        console.log("✅ Reconectado com sucesso");
+        document.body.style.opacity = "1";
+        } catch (err) {
+        console.error("❌ Falha ao reconectar:", err);
+        document.body.style.opacity = "1";
+        setTimeout(() => location.reload(), 3000);
+        }
+        };
+        } catch (err) {
+        console.error("❌ Erro ao configurar reconexão:", err);
+        }
+        }
+
+        setTimeout(setupBlazorReconnection, 50);
+
+    </script>
+
+    <script>
+            window.clShowModal = (id, itens) => {
+                document.getElementById('cl-blazor-root')?.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'cl-blazor-root';
+                overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:16px;font-family:inherit';
+
+                const modal = document.createElement('div');
+                modal.style.cssText = 'background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:520px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;color:#e2e8f0';
+
+                const header = `
+                        <div style="padding:20px 24px 16px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:12px;flex-shrink:0">
+                            <div style="width:40px;height:40px;border-radius:10px;background:rgba(59,130,246,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-size:15px;font-weight:600;color:#f1f5f9">Novidades do sistema</div>
+                                <div style="font-size:12px;color:#94a3b8;margin-top:1px">Confira o que foi atualizado</div>
+                            </div>
+                        </div>`;
+
+                const tipoLabel = { NOVO: 'Novo', MELHORIA: 'Melhoria', CORRECAO: 'Correção', REMOCAO: 'Removido' };
+                const tipoCor = {
+                    NOVO: 'background:rgba(34,197,94,0.15);color:#4ade80',
+                    MELHORIA: 'background:rgba(59,130,246,0.15);color:#60a5fa',
+                    CORRECAO: 'background:rgba(245,158,11,0.15);color:#fbbf24',
+                    REMOCAO: 'background:rgba(239,68,68,0.15);color:#f87171'
+                };
+
+                let bodyHtml = '<div style="overflow-y:auto;padding:12px 16px;flex:1;display:flex;flex-direction:column;gap:2px">';
+                itens.forEach(item => {
+                    const cor = tipoCor[item.tipoAlteracao] || tipoCor.MELHORIA;
+                    const label = tipoLabel[item.tipoAlteracao] || item.tipoAlteracao;
+                    const destaque = item.destaque ? 'background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2)' : 'border:1px solid transparent';
+                    const clicavel = item.referencia ? 'cursor:pointer;' : '';
+                    const onclick = item.referencia ? `onclick="window.open('/curso-tutorial/${item.codEmp}/${item.referencia}', '_blank')"` : '';
+
+                    const verDocBtn = item.referencia ? `
+                    <div style="margin-top:8px">
+                        <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:#1d4ed8;background:#dbeafe;border:1px solid #93c5fd;border-radius:6px;padding:3px 9px;">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Abrir documentação
+                        </span>
+                    </div>` : '';
+
+                    const fundoItem = item.referencia
+                        ? 'background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.25);'
+                        : destaque;
+
+                    bodyHtml += `
+                    <div style="display:flex;gap:12px;align-items:flex-start;padding:10px;border-radius:10px;${fundoItem}${clicavel}" ${onclick}>
+                        <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#94a3b8">
+                            <i class="ti ${item.icone}"></i>
+                        </div>
+                        <div style="flex:1;min-width:0">
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+                                <span style="font-size:13px;font-weight:500;color:#f1f5f9">${item.titulo}</span>
+                                <span style="font-size:11px;font-weight:500;padding:2px 7px;border-radius:20px;${cor}">${label}</span>
+                            </div>
+                            ${item.descricao ? `<p style="font-size:12px;color:#94a3b8;margin:0;line-height:1.5">${item.descricao}</p>` : ''}
+                            ${verDocBtn}
+                        </div>
+                    </div>`;
+                });
+                bodyHtml += '</div>';
+
+                const versoes = [...new Set(itens.map(i => 'v' + i.versao))].join(' · ');
+                const footer = `
+                        <div style="padding:14px 20px;border-top:1px solid rgba(255,255,255,0.08);display:flex;justify-content:space-between;align-items:center;flex-shrink:0">
+                            <span style="font-size:12px;color:#64748b;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:3px 10px">${versoes}</span>
+                            <div style="display:flex;gap:8px">
+                                <button id="cl-btn-depois" style="display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:13px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;cursor:pointer">
+                                    <i class="ti ti-clock"></i> Ver depois
+                                </button>
+                                <button id="cl-btn-ok" style="display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;font-size:13px;background:#3b82f6;border:none;color:#fff;cursor:pointer;font-weight:500">
+                                    <i class="ti ti-check"></i> Não Mostrar Mais
+                                </button>
+                            </div>
+                        </div>`;
+
+                modal.innerHTML = header + bodyHtml + footer;
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+
+                return new Promise(resolve => {
+                    document.getElementById('cl-btn-depois').onclick = () => { overlay.remove(); resolve('depois'); };
+                    document.getElementById('cl-btn-ok').onclick = () => { overlay.remove(); resolve('ok'); };
+                });
+            };
+
+            window.clHideModal = () => {
+                document.getElementById('cl-blazor-root')?.remove();
+            };
+    </script>
+
+</body>
+
+</html>

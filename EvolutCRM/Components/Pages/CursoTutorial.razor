@@ -1,0 +1,1652 @@
+﻿@page "/curso-tutorial"
+@page "/curso-tutorial/{Slug}"
+@page "/curso-tutorial/{CodEmp:int}/{Slug}"
+
+@layout TutorialPublicLayout
+@attribute [AllowAnonymous]
+
+@inject EvolutCRM.Services.DocumentacaoService DocumentacaoService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+
+@using EvolutCRM.Components.Layout
+@using EvolutCRM.Models
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+
+<style>
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    .ct-root {
+        min-height: 100vh;
+        background: #f8fafc;
+        font-family: 'Inter', 'IBM Plex Sans', -apple-system, sans-serif;
+        color: #0a0f1e;
+    }
+
+    /* TOPBAR */
+    .ct-topbar {
+        position: sticky;
+        top: 0;
+        z-index: 200;
+        background: rgba(255,255,255,.88);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .ct-topbar-inner {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 0 24px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .ct-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        flex-shrink: 0;
+    }
+
+    .ct-logo {
+        height: 32px;
+        object-fit: contain;
+    }
+
+    .ct-brand-divider {
+        width: 1px;
+        height: 20px;
+        background: #e2e8f0;
+        margin: 0 2px;
+    }
+
+    .ct-brand-label {
+        font-size: 13px;
+        font-weight: 700;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .ct-search-wrap {
+        flex: 1;
+        max-width: 480px;
+        position: relative;
+    }
+
+    .ct-search-ico {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #94a3b8;
+        font-size: 15px;
+        pointer-events: none;
+    }
+
+    .ct-search {
+        width: 100%;
+        height: 38px;
+        padding: 0 16px 0 38px;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 999px;
+        font-size: 13px;
+        font-family: inherit;
+        background: #f8fafc;
+        color: #0a0f1e;
+        outline: none;
+        transition: border-color .2s, box-shadow .2s, background .2s;
+    }
+
+        .ct-search:focus {
+            border-color: #2563eb;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+
+        .ct-search::placeholder {
+            color: #94a3b8;
+        }
+
+    .ct-topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .ct-mode-tabs {
+        display: flex;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 3px;
+        gap: 2px;
+    }
+
+    .ct-mode-tab {
+        border: none;
+        background: transparent;
+        border-radius: 999px;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        color: #64748b;
+        cursor: pointer;
+        transition: all .2s;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+    }
+
+        .ct-mode-tab.active {
+            background: #fff;
+            color: #0a0f1e;
+            box-shadow: 0 1px 4px rgba(10,15,30,.1);
+        }
+
+    /* HERO */
+    .ct-hero {
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #312e81 100%);
+        padding: 56px 24px 48px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
+
+        .ct-hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(ellipse 60% 50% at 20% 50%, rgba(99,102,241,.25) 0%, transparent 70%), radial-gradient(ellipse 40% 60% at 80% 30%, rgba(37,99,235,.3) 0%, transparent 70%);
+        }
+
+    .ct-hero-content {
+        position: relative;
+        z-index: 1;
+        max-width: 640px;
+        margin: 0 auto;
+    }
+
+    .ct-hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255,255,255,.12);
+        border: 1px solid rgba(255,255,255,.2);
+        border-radius: 999px;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: rgba(255,255,255,.9);
+        margin-bottom: 20px;
+        letter-spacing: .02em;
+    }
+
+    .ct-hero-title {
+        font-size: clamp(2rem,5vw,3rem);
+        font-weight: 900;
+        color: #fff;
+        line-height: 1.1;
+        letter-spacing: -.02em;
+        margin-bottom: 14px;
+    }
+
+        .ct-hero-title span {
+            background: linear-gradient(90deg,#60a5fa,#a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+    .ct-hero-sub {
+        font-size: 16px;
+        color: rgba(255,255,255,.65);
+        font-weight: 500;
+        line-height: 1.6;
+        margin-bottom: 28px;
+    }
+
+    .ct-hero-stats {
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        flex-wrap: wrap;
+    }
+
+    .ct-hero-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+    }
+
+        .ct-hero-stat strong {
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .ct-hero-stat span {
+            font-size: 11px;
+            color: rgba(255,255,255,.55);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+
+    /* CATALOG */
+    .ct-catalog {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 32px 24px 80px;
+    }
+
+    .ct-cat-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+
+    .ct-cat-count {
+        font-size: 13px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+        .ct-cat-count strong {
+            color: #0a0f1e;
+            font-weight: 700;
+        }
+
+    .ct-filters {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .ct-filter {
+        border: 1.5px solid #e2e8f0;
+        background: #fff;
+        border-radius: 999px;
+        padding: 5px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: inherit;
+        color: #64748b;
+        cursor: pointer;
+        transition: all .18s;
+    }
+
+        .ct-filter:hover {
+            border-color: #2563eb;
+            color: #2563eb;
+        }
+
+        .ct-filter.active {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+    .ct-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill,minmax(300px,1fr));
+        gap: 20px;
+    }
+
+    .ct-card {
+        background: #fff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: border-color .2s, box-shadow .2s, transform .2s;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .ct-card:hover {
+            border-color: #93c5fd;
+            box-shadow: 0 8px 32px rgba(10,15,30,.12);
+            transform: translateY(-3px);
+        }
+
+            .ct-card:hover .ct-card-arrow {
+                background: #2563eb;
+                color: #fff;
+                transform: translateX(2px);
+            }
+
+    .ct-card-img {
+        width: 100%;
+        aspect-ratio: 16/9;
+        overflow: hidden;
+        background: linear-gradient(135deg,#dbeafe,#ede9fe);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 3rem;
+        font-weight: 900;
+        color: #2563eb;
+        position: relative;
+        flex-shrink: 0;
+    }
+
+        .ct-card-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+    .ct-card-img-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top,rgba(10,15,30,.3),transparent 50%);
+        opacity: 0;
+        transition: opacity .2s;
+    }
+
+    .ct-card:hover .ct-card-img-overlay {
+        opacity: 1;
+    }
+
+    .ct-card-cat-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(10,15,30,.55);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,.15);
+        border-radius: 999px;
+        padding: 3px 10px;
+        font-size: 10px;
+        font-weight: 700;
+        color: rgba(255,255,255,.9);
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+
+    .ct-card-body {
+        padding: 18px 20px 16px;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .ct-card-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: #0a0f1e;
+        line-height: 1.35;
+    }
+
+    .ct-card-desc {
+        font-size: 13px;
+        color: #64748b;
+        line-height: 1.5;
+        flex: 1;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .ct-card-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 12px;
+        border-top: 1px solid #f1f5f9;
+        margin-top: 4px;
+    }
+
+    .ct-card-date {
+        font-size: 11px;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .ct-card-arrow {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #2563eb;
+        display: grid;
+        place-items: center;
+        font-size: 13px;
+        font-weight: 700;
+        transition: all .18s;
+        flex-shrink: 0;
+    }
+
+    .ct-empty {
+        grid-column: 1/-1;
+        padding: 64px 24px;
+        text-align: center;
+        background: #fff;
+        border: 1.5px dashed #e2e8f0;
+        border-radius: 14px;
+    }
+
+    .ct-empty-icon {
+        font-size: 3rem;
+        margin-bottom: 12px;
+        display: block;
+    }
+
+    .ct-empty-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1e2d4a;
+        margin-bottom: 6px;
+    }
+
+    .ct-empty-sub {
+        font-size: 13px;
+        color: #64748b;
+    }
+
+    /* COURSE VIEW */
+    .ct-course {
+        max-width: 1360px;
+        margin: 0 auto;
+        padding: 24px 24px 80px;
+        display: grid;
+        grid-template-columns: 300px minmax(0,1fr);
+        gap: 24px;
+        align-items: start;
+    }
+
+    .ct-sidebar {
+        position: sticky;
+        top: 84px;
+        background: #fff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(10,15,30,.08),0 4px 16px rgba(10,15,30,.06);
+    }
+
+    .ct-sidebar-head {
+        padding: 18px 18px 14px;
+        border-bottom: 1px solid #f1f5f9;
+        background: linear-gradient(135deg,#f8fafc,#fff);
+    }
+
+    .ct-sidebar-eyebrow {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: #2563eb;
+        margin-bottom: 6px;
+    }
+
+    .ct-sidebar-course-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: #0a0f1e;
+        line-height: 1.3;
+    }
+
+    .ct-prog-wrap {
+        padding: 12px 18px;
+        border-bottom: 1px solid #f1f5f9;
+        background: #fafbfc;
+    }
+
+    .ct-prog-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .ct-prog-label {
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    .ct-prog-pct {
+        font-size: 12px;
+        font-weight: 800;
+        color: #2563eb;
+    }
+
+    .ct-prog-track {
+        height: 5px;
+        background: #e2e8f0;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    .ct-prog-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg,#16a34a,#2563eb);
+        transition: width .5s cubic-bezier(.4,0,.2,1);
+    }
+
+    .ct-lesson-list {
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 280px);
+        overflow-y: auto;
+        padding: 8px;
+        gap: 2px;
+        scrollbar-width: thin;
+        scrollbar-color: #e2e8f0 transparent;
+    }
+
+        .ct-lesson-list::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .ct-lesson-list::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 999px;
+        }
+
+    .ct-lesson-btn {
+        width: 100%;
+        border: 1.5px solid transparent;
+        background: transparent;
+        border-radius: 10px;
+        padding: 9px 10px;
+        text-align: left;
+        cursor: pointer;
+        transition: all .15s;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-family: inherit;
+    }
+
+        .ct-lesson-btn:hover {
+            background: #f8fafc;
+            border-color: #e2e8f0;
+        }
+
+        .ct-lesson-btn.active {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+        }
+
+    .ct-lesson-idx {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #f8fafc;
+        border: 1.5px solid #e2e8f0;
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+        transition: all .15s;
+    }
+
+    .ct-lesson-btn.active .ct-lesson-idx {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .ct-lesson-thumb-mini {
+        width: 44px;
+        aspect-ratio: 16/9;
+        border-radius: 5px;
+        overflow: hidden;
+        background: linear-gradient(135deg,#dbeafe,#ede9fe);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 800;
+        color: #2563eb;
+    }
+
+        .ct-lesson-thumb-mini img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+    .ct-lesson-info {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .ct-lesson-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: #1e2d4a;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .ct-lesson-btn.active .ct-lesson-name {
+        color: #1d4ed8;
+        font-weight: 700;
+    }
+
+    /* ARTICLE */
+    .ct-article {
+        background: #fff;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(10,15,30,.08),0 4px 16px rgba(10,15,30,.06);
+    }
+
+    .ct-read-progress {
+        height: 3px;
+        background: #f1f5f9;
+        position: relative;
+    }
+
+    .ct-read-fill {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        background: linear-gradient(90deg,#2563eb,#7c3aed);
+        width: 0%;
+        transition: width .1s;
+        border-radius: 0 999px 999px 0;
+    }
+
+    .ct-cover {
+        width: 100%;
+        aspect-ratio: 16/5.5;
+        overflow: hidden;
+        background: linear-gradient(135deg,#0f172a 0%,#1e3a8a 60%,#312e81 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 5rem;
+        font-weight: 900;
+        color: rgba(255,255,255,.2);
+        position: relative;
+    }
+
+        .ct-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+    .ct-cover-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top,rgba(10,15,30,.65) 0%,transparent 60%);
+    }
+
+    .ct-cover-info {
+        position: absolute;
+        bottom: 22px;
+        left: 28px;
+        right: 28px;
+        color: #fff;
+        z-index: 1;
+    }
+
+    .ct-cover-kicker {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: #93c5fd;
+        margin-bottom: 6px;
+    }
+
+    .ct-cover-title {
+        font-size: clamp(1.4rem,3vw,2.2rem);
+        font-weight: 800;
+        line-height: 1.15;
+        letter-spacing: -.01em;
+    }
+
+    .ct-article-header {
+        padding: 28px 32px 20px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .ct-article-desc {
+        font-size: 16px;
+        color: #64748b;
+        line-height: 1.65;
+        font-weight: 500;
+        margin-bottom: 16px;
+    }
+
+    .ct-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .ct-meta-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    .ct-article-body {
+        padding: 32px 32px 40px;
+    }
+
+    /* RICH CONTENT */
+    .ct-rich {
+        font-size: 16px;
+        line-height: 1.8;
+        color: #1e293b;
+        max-width: 760px;
+    }
+
+        .ct-rich > * + * {
+            margin-top: .75em;
+        }
+
+        .ct-rich h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #0a0f1e;
+            letter-spacing: -.02em;
+            line-height: 1.2;
+            margin-top: 1.8em;
+        }
+
+        .ct-rich h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #0a0f1e;
+            padding-bottom: .4em;
+            border-bottom: 1px solid #f1f5f9;
+            margin-top: 1.6em;
+            letter-spacing: -.01em;
+        }
+
+        .ct-rich h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #0a0f1e;
+            margin-top: 1.4em;
+        }
+
+        .ct-rich p {
+            margin: .6em 0;
+        }
+
+        .ct-rich ul, .ct-rich ol {
+            padding-left: 1.6em;
+            margin: .6em 0;
+        }
+
+        .ct-rich li {
+            margin: .3em 0;
+        }
+
+        .ct-rich strong {
+            font-weight: 700;
+            color: #0a0f1e;
+        }
+
+        .ct-rich em {
+            font-style: italic;
+        }
+
+        .ct-rich mark {
+            background: #fef08a;
+            color: #713f12;
+            border-radius: 3px;
+            padding: 1px 4px;
+        }
+
+        .ct-rich a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+
+        .ct-rich blockquote {
+            border-left: 3px solid #2563eb;
+            padding: .75em 1.25em;
+            background: #eff6ff;
+            border-radius: 0 10px 10px 0;
+            color: #1e40af;
+            font-style: italic;
+            margin: 1.2em 0;
+        }
+
+        .ct-rich pre {
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 12px;
+            padding: 18px 20px;
+            font-size: 13.5px;
+            overflow-x: auto;
+            line-height: 1.65;
+            margin: 1.2em 0;
+        }
+
+        .ct-rich code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            padding: 1px 6px;
+            font-size: .88em;
+            color: #c026d3;
+        }
+
+        .ct-rich pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            color: inherit;
+            font-size: inherit;
+        }
+
+        .ct-rich hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 2em 0;
+        }
+
+        .ct-rich img {
+            max-width: 100%;
+            border-radius: 10px;
+            display: block;
+            margin: 1.2em 0;
+            border: 1px solid #e2e8f0;
+        }
+
+        .ct-rich table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1.2em 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .ct-rich th {
+            background: #f8fafc;
+            font-weight: 700;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: #64748b;
+        }
+
+        .ct-rich td, .ct-rich th {
+            border: 1px solid #e2e8f0;
+            padding: 10px 14px;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        .ct-rich tr:nth-child(even) td {
+            background: #fafbfc;
+        }
+
+        .ct-rich iframe {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+            border-radius: 12px;
+            display: block;
+            margin: 1.2em 0;
+        }
+
+        .ct-rich .de-callout {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            padding: 14px 16px;
+            border-radius: 10px;
+            margin: 1.2em 0;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+        }
+
+            .ct-rich .de-callout[data-type="warning"] {
+                background: #fffbeb;
+                border-color: #fde68a;
+            }
+
+            .ct-rich .de-callout[data-type="danger"] {
+                background: #fff1f2;
+                border-color: #fecdd3;
+            }
+
+            .ct-rich .de-callout[data-type="success"] {
+                background: #f0fdf4;
+                border-color: #bbf7d0;
+            }
+
+        .ct-rich .de-callout-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .ct-rich .de-img-wrap {
+            display: block;
+            margin: 1.2em 0;
+        }
+
+            .ct-rich .de-img-wrap img {
+                border-radius: 10px;
+                max-width: 100%;
+                border: 1px solid #e2e8f0;
+            }
+
+        .ct-rich .de-video-wrap {
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 1.2em 0;
+            background: #000;
+        }
+
+            .ct-rich .de-video-wrap iframe {
+                width: 100%;
+                aspect-ratio: 16/9;
+                border: none;
+                display: block;
+            }
+
+            .ct-rich .de-video-wrap video {
+                width: 100%;
+                display: block;
+            }
+
+        .ct-rich .de-table-wrap {
+            overflow-x: auto;
+            margin: 1.2em 0;
+        }
+
+    /* ARTICLE FOOTER */
+    .ct-article-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 20px 32px 28px;
+        border-top: 1px solid #f1f5f9;
+        background: #fafbfc;
+    }
+
+    .ct-nav-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1.5px solid #e2e8f0;
+        background: #fff;
+        border-radius: 10px;
+        padding: 10px 18px;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: inherit;
+        color: #1e2d4a;
+        cursor: pointer;
+        transition: all .18s;
+        white-space: nowrap;
+    }
+
+        .ct-nav-btn:hover:not(:disabled) {
+            border-color: #2563eb;
+            color: #2563eb;
+            background: #eff6ff;
+            transform: translateX(-2px);
+        }
+
+        .ct-nav-btn.next:hover:not(:disabled) {
+            transform: translateX(2px);
+        }
+
+        .ct-nav-btn:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .ct-nav-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(37,99,235,.3);
+        }
+
+            .ct-nav-btn.primary:hover:not(:disabled) {
+                background: #1d4ed8;
+                border-color: #1d4ed8;
+            }
+
+    .ct-nav-center {
+        text-align: center;
+    }
+
+    .ct-nav-progress {
+        font-size: 13px;
+        font-weight: 700;
+        color: #1e2d4a;
+    }
+
+    .ct-nav-sub {
+        font-size: 11px;
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    /* LOADING */
+    .ct-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 70vh;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .ct-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e2e8f0;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: ct-spin .75s linear infinite;
+    }
+    @@keyframes ct-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .ct-loading-text {
+        font-size: 14px;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    /* RESPONSIVE */
+    @@media(max-width: 1024px)
+
+    {
+        .ct-course {
+            grid-template-columns: 260px minmax(0,1fr);
+            gap: 16px;
+        }
+    }
+    @@media(max-width: 800px)
+
+    {
+        .ct-course {
+            grid-template-columns: 1fr;
+        }
+
+        .ct-sidebar {
+            position: static;
+        }
+
+        .ct-lesson-list {
+            max-height: 240px;
+        }
+
+        .ct-topbar-center {
+            display: none;
+        }
+
+        .ct-article-header, .ct-article-body, .ct-article-footer {
+            padding-left: 18px;
+            padding-right: 18px;
+        }
+
+        .ct-cover-info {
+            left: 18px;
+            right: 18px;
+        }
+
+        .ct-hero {
+            padding: 40px 18px 36px;
+        }
+    }
+    @@media(max-width: 560px)
+
+    {
+        .ct-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .ct-mode-tab span {
+            display: none;
+        }
+
+        .ct-hero-stats {
+            gap: 16px;
+        }
+
+        .ct-article-footer {
+            flex-direction: column;
+        }
+
+        .ct-nav-btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+
+    @@media (max-width: 800px) {
+        .ct-topbar-inner {
+            flex-wrap: wrap;
+            height: auto;
+            padding: 10px 16px;
+            gap: 10px;
+        }
+
+        .ct-search-wrap {
+            order: 3;
+            max-width: 100%;
+            width: 100%;
+        }
+    }
+
+    @@media (max-width: 560px) {
+        .ct-hero-stat strong {
+            font-size: 18px;
+        }
+
+        .ct-hero-stats {
+            gap: 20px;
+            padding: 0 8px;
+        }
+
+        .ct-hero {
+            padding: 32px 16px 28px;
+        }
+
+        .ct-article-header,
+        .ct-article-body,
+        .ct-article-footer {
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        .ct-cover-info {
+            left: 14px;
+            right: 14px;
+        }
+
+        .ct-cover-title {
+            font-size: 1.2rem;
+        }
+
+        .ct-rich {
+            font-size: 15px;
+        }
+
+        .ct-article-footer {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .ct-nav-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .ct-nav-center {
+            order: -1;
+        }
+    }
+</style>
+
+<div class="ct-root">
+
+    <header class="ct-topbar">
+        <div class="ct-topbar-inner">
+            <a class="ct-brand" href="/curso-tutorial/@codEmpAtual">
+                <img src="/images/logo-evoluttech.png" alt="EvolutTech" class="ct-logo" />
+                <div class="ct-brand-divider"></div>
+                <span class="ct-brand-label">Central de ajuda</span>
+            </a>
+            <div class="ct-search-wrap">
+                <span class="ct-search-ico">🔍</span>
+                <input class="ct-search" placeholder="Buscar tutoriais..."
+                       value="@buscaGlobal" @oninput="OnBuscaInput" />
+            </div>
+            <div class="ct-topbar-right">
+                <div class="ct-mode-tabs">
+                    <button class="ct-mode-tab @(modoVisualizacao == "catalogo" ? "active" : "")"
+                            @onclick='() => AlterarModo("catalogo")'>
+                        ⊞ <span>Todos</span>
+                    </button>
+                    <button class="ct-mode-tab @(modoVisualizacao == "curso" ? "active" : "")"
+                            @onclick='() => AlterarModo("curso")'>
+                        ▶ <span>Curso</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    @if (carregando)
+    {
+        <div class="ct-loading">
+            <div class="ct-spinner"></div>
+            <span class="ct-loading-text">Carregando tutoriais...</span>
+        </div>
+    }
+    else if (!todosOsTutoriais.Any())
+    {
+        <div style="max-width:520px;margin:100px auto;text-align:center;padding:0 24px;">
+            <div style="font-size:3.5rem;margin-bottom:16px;">📚</div>
+            <div style="font-size:20px;font-weight:800;color:#0a0f1e;margin-bottom:8px;">Nenhum tutorial disponível</div>
+            <div style="font-size:14px;color:#64748b;line-height:1.6;">Os tutoriais aparecerão aqui assim que forem publicados.</div>
+        </div>
+    }
+    else if (modoVisualizacao == "catalogo" || !string.IsNullOrWhiteSpace(buscaGlobal))
+    {
+        @if (string.IsNullOrWhiteSpace(buscaGlobal))
+        {
+            <div class="ct-hero">
+                <div class="ct-hero-content">
+                    <div class="ct-hero-badge">📚 Base de conhecimento</div>
+                    <h1 class="ct-hero-title">Central de <span>Ajuda</span></h1>
+                    <p class="ct-hero-sub">Tutoriais completos para você aproveitar ao máximo o sistema.</p>
+                    <div class="ct-hero-stats">
+                        <div class="ct-hero-stat"><strong>@todosOsTutoriais.Count</strong><span>Tutoriais</span></div>
+                        <div class="ct-hero-stat"><strong>@categorias.Count</strong><span>Categorias</span></div>
+                        <div class="ct-hero-stat"><strong>100%</strong><span>Gratuito</span></div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="ct-catalog">
+            <div class="ct-cat-toolbar">
+                <div class="ct-cat-count">
+                    @if (!string.IsNullOrWhiteSpace(buscaGlobal))
+                    {
+                        <span><strong>@TutoriaisFiltrados.Count()</strong> resultado(s) para "@buscaGlobal"</span>
+                    }
+                    else
+                    {
+                        <span><strong>@TutoriaisFiltrados.Count()</strong> tutorial(is)@(!string.IsNullOrWhiteSpace(categoriaAtiva) ? $" em {categoriaAtiva}" : "")</span>
+                    }
+                </div>
+                @if (categorias.Count > 0 && string.IsNullOrWhiteSpace(buscaGlobal))
+                {
+                    <div class="ct-filters">
+                        <button class="ct-filter @(categoriaAtiva == "" ? "active" : "")" @onclick='() => categoriaAtiva = ""'>Todos</button>
+                        @foreach (var cat in categorias)
+                        {
+                            var c = cat;
+                            <button class="ct-filter @(categoriaAtiva == c ? "active" : "")" @onclick="() => categoriaAtiva = c">@c</button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="ct-grid">
+                @if (!TutoriaisFiltrados.Any())
+                {
+                    <div class="ct-empty">
+                        <span class="ct-empty-icon">🔍</span>
+                        <div class="ct-empty-title">Nenhum resultado encontrado</div>
+                        <div class="ct-empty-sub">Tente buscar por outro termo ou explore as categorias.</div>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var doc in TutoriaisFiltrados)
+                    {
+                        var d = doc;
+                        <div class="ct-card" @onclick="() => AbrirTutorial(d)">
+                            <div class="ct-card-img">
+                                @if (d.Thumbnail != null)
+                                {
+                                    <img src="/api/thumbnail/@d.Codigo" alt="@d.Titulo" />
+                                }
+                                else
+                                {
+                                    <span>@ObterInicial(d.Titulo)</span>
+                                }
+                                <div class="ct-card-img-overlay"></div>
+                                @if (!string.IsNullOrWhiteSpace(d.Categoria))
+                                {
+                                    <div class="ct-card-cat-badge">@d.Categoria</div>
+                                }
+                            </div>
+                            <div class="ct-card-body">
+                                <div class="ct-card-title">@d.Titulo</div>
+                                @if (!string.IsNullOrWhiteSpace(d.Descricao))
+                                {
+                                    <div class="ct-card-desc">@d.Descricao</div>
+                                }
+                                <div class="ct-card-footer">
+                                    <span class="ct-card-date">@d.DataHoraAlteracao.ToString("dd/MM/yyyy")</span>
+                                    <span class="ct-card-arrow">→</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="ct-course">
+            <aside class="ct-sidebar">
+                <div class="ct-sidebar-head">
+                    <div class="ct-sidebar-eyebrow">Curso</div>
+                    <div class="ct-sidebar-course-name">@TituloCurso</div>
+                </div>
+                <div class="ct-prog-wrap">
+                    <div class="ct-prog-top">
+                        <span class="ct-prog-label">@(indiceAtual + 1) de @tutoriaisCurso.Count aulas</span>
+                        <span class="ct-prog-pct">@Progresso%</span>
+                    </div>
+                    <div class="ct-prog-track">
+                        <div class="ct-prog-fill" style="width:@Progresso%"></div>
+                    </div>
+                </div>
+                <div class="ct-lesson-list">
+                    @for (var i = 0; i < tutoriaisCurso.Count; i++)
+                    {
+                        var item = tutoriaisCurso[i];
+                        var idx = i;
+                        <button type="button" class="ct-lesson-btn @(idx == indiceAtual ? "active" : "")"
+                                @onclick="() => Selecionar(idx)">
+                            <span class="ct-lesson-idx">@(idx + 1)</span>
+                            <span class="ct-lesson-thumb-mini">
+                                @if (item.Thumbnail != null)
+                                {
+                                    <img src="/api/thumbnail/@item.Codigo" alt="" />
+                                }
+                                else
+                                {
+
+                                    @ObterInicial(item.Titulo)
+                                }
+                            </span>
+                            <span class="ct-lesson-info">
+                                <span class="ct-lesson-name">@item.Titulo</span>
+                            </span>
+                        </button>
+                    }
+                </div>
+            </aside>
+
+            <main>
+                @if (Atual != null)
+                {
+                    <article class="ct-article">
+                        <div class="ct-read-progress">
+                            <div class="ct-read-fill" id="ct-read-fill"></div>
+                        </div>
+                        <div class="ct-cover">
+                            @if (Atual.Thumbnail != null)
+                            {
+                                <img src="/api/thumbnail/@Atual.Codigo" alt="@Atual.Titulo" />
+                            }
+                            else
+                            {
+
+                                <span>@ObterInicial(Atual.Titulo)</span>
+                            }
+                            <div class="ct-cover-overlay"></div>
+                            <div class="ct-cover-info">
+                                @if (!string.IsNullOrWhiteSpace(Atual.Categoria))
+                                {
+                                    <div class="ct-cover-kicker">@Atual.Categoria</div>
+                                }
+                                <div class="ct-cover-title">@Atual.Titulo</div>
+                            </div>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(Atual.Descricao))
+                        {
+                            <div class="ct-article-header">
+                                <p class="ct-article-desc">@Atual.Descricao</p>
+                                <div class="ct-meta-row">
+                                    <span class="ct-meta-tag">📅 @Atual.DataHoraAlteracao.ToString("dd/MM/yyyy HH:mm")</span>
+                                    <span class="ct-meta-tag">📖 Aula @(indiceAtual + 1) de @tutoriaisCurso.Count</span>
+                                </div>
+                            </div>
+                        }
+                        <div class="ct-article-body">
+                            @foreach (var bloco in Atual.Blocos.OrderBy(x => x.Ordem))
+                            {
+                                @if (!string.IsNullOrWhiteSpace(bloco.Conteudo))
+                                {
+                                    <div class="ct-rich">
+                                        @((MarkupString)PrepararHtmlSeguro(bloco.Conteudo))
+                                    </div>
+                                }
+                            }
+                        </div>
+                        <div class="ct-article-footer">
+                            <button type="button" class="ct-nav-btn" disabled="@(indiceAtual == 0)" @onclick="Anterior">← Anterior</button>
+                            <div class="ct-nav-center">
+                                <div class="ct-nav-progress">@(indiceAtual + 1) / @tutoriaisCurso.Count</div>
+                                <div class="ct-nav-sub">@Progresso% concluído</div>
+                            </div>
+                            <button type="button" class="ct-nav-btn primary next" disabled="@(indiceAtual >= tutoriaisCurso.Count - 1)" @onclick="Proximo">Próxima aula →</button>
+                        </div>
+                    </article>
+                }
+            </main>
+        </div>
+    }
+</div>
+
+<script>
+    (function() {
+        function updateReadProgress() {
+            var fill = document.getElementById('ct-read-fill');
+            if (!fill) return;
+            var body = document.querySelector('.ct-article-body');
+            if (!body) { fill.style.width = '0%'; return; }
+            var rect = body.getBoundingClientRect();
+            var total = body.offsetHeight;
+            var visible = Math.max(0, window.innerHeight - rect.top);
+            var pct = Math.min(100, Math.round((visible / total) * 100));
+            fill.style.width = pct + '%';
+        }
+        window.addEventListener('scroll', updateReadProgress, { passive: true });
+        updateReadProgress();
+    })();
+</script>
+
+@code {
+    [Parameter] public int? CodEmp { get; set; }
+    [Parameter] public string? Slug { get; set; }
+
+    private List<DocumentacaoTutorialModel> todosOsTutoriais = new();
+    private List<DocumentacaoTutorialModel> tutoriaisCurso = new();
+    private int indiceAtual;
+    private bool carregando = true;
+    private int codEmpAtual;
+    private string modoVisualizacao = "catalogo";
+    private string buscaGlobal = "";
+    private string categoriaAtiva = "";
+    private List<string> categorias = new();
+
+    private DocumentacaoTutorialModel? Atual =>
+        tutoriaisCurso.Count > 0
+            ? tutoriaisCurso[Math.Clamp(indiceAtual, 0, tutoriaisCurso.Count - 1)]
+            : null;
+
+    private string TituloCurso =>
+        tutoriaisCurso.FirstOrDefault()?.Categoria is { Length: > 0 } cat ? cat : "Tutoriais";
+
+    private int Progresso =>
+        tutoriaisCurso.Count == 0 ? 0
+        : (int)Math.Round(((indiceAtual + 1) / (double)tutoriaisCurso.Count) * 100);
+
+    private IEnumerable<DocumentacaoTutorialModel> TutoriaisFiltrados =>
+        todosOsTutoriais.Where(x =>
+            (string.IsNullOrWhiteSpace(categoriaAtiva) || x.Categoria == categoriaAtiva) &&
+            (string.IsNullOrWhiteSpace(buscaGlobal) ||
+             x.Titulo.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase) ||
+             x.Descricao.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase) ||
+             x.Categoria.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        codEmpAtual = CodEmp.GetValueOrDefault() > 0
+            ? CodEmp.Value
+            : UserState.CurrentCompanyId;
+
+        todosOsTutoriais = await DocumentacaoService.ListarAsync(codEmpAtual, somentePublicados: true);
+
+        categorias = todosOsTutoriais
+            .Select(x => x.Categoria)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(Slug))
+        {
+            var encontrado = todosOsTutoriais.FirstOrDefault(x =>
+                x.Slug.Equals(Slug, StringComparison.OrdinalIgnoreCase));
+
+            if (encontrado != null)
+            {
+                var categoria = encontrado.Categoria;
+                tutoriaisCurso = !string.IsNullOrWhiteSpace(categoria)
+                    ? todosOsTutoriais.Where(x =>
+                        x.Categoria.Equals(categoria, StringComparison.OrdinalIgnoreCase)).ToList()
+                    : todosOsTutoriais.ToList();
+
+                indiceAtual = tutoriaisCurso.FindIndex(x =>
+                    x.Slug.Equals(Slug, StringComparison.OrdinalIgnoreCase));
+
+                if (indiceAtual < 0) indiceAtual = 0;
+                modoVisualizacao = "curso";
+                await CarregarAulaAtual();
+            }
+        }
+        else if (todosOsTutoriais.Any())
+        {
+            tutoriaisCurso = todosOsTutoriais.ToList();
+            modoVisualizacao = "catalogo";
+        }
+
+        carregando = false;
+    }
+
+    private async Task CarregarAulaAtual()
+    {
+        if (tutoriaisCurso.Count == 0) return;
+        var idx = Math.Clamp(indiceAtual, 0, tutoriaisCurso.Count - 1);
+        if (tutoriaisCurso[idx].Blocos.Count == 0)
+        {
+            tutoriaisCurso[idx] =
+                await DocumentacaoService.BuscarAsync(tutoriaisCurso[idx].Codigo, codEmpAtual)
+                ?? tutoriaisCurso[idx];
+        }
+    }
+
+    private async Task Selecionar(int indice)
+    {
+        indiceAtual = indice;
+        await CarregarAulaAtual();
+        Nav.NavigateTo($"/curso-tutorial/{codEmpAtual}/{tutoriaisCurso[indiceAtual].Slug}", replace: true);
+    }
+
+    private async Task Proximo()
+    {
+        if (indiceAtual < tutoriaisCurso.Count - 1)
+            await Selecionar(indiceAtual + 1);
+    }
+
+    private async Task Anterior()
+    {
+        if (indiceAtual > 0)
+            await Selecionar(indiceAtual - 1);
+    }
+
+    private async Task AbrirTutorial(DocumentacaoTutorialModel doc)
+    {
+        var categoria = doc.Categoria;
+        tutoriaisCurso = !string.IsNullOrWhiteSpace(categoria)
+            ? todosOsTutoriais.Where(x =>
+                x.Categoria.Equals(categoria, StringComparison.OrdinalIgnoreCase)).ToList()
+            : todosOsTutoriais.ToList();
+
+        indiceAtual = tutoriaisCurso.FindIndex(x => x.Codigo == doc.Codigo);
+        if (indiceAtual < 0) indiceAtual = 0;
+
+        buscaGlobal = "";
+        modoVisualizacao = "curso";
+        await CarregarAulaAtual();
+        Nav.NavigateTo($"/curso-tutorial/{codEmpAtual}/{tutoriaisCurso[indiceAtual].Slug}", replace: true);
+    }
+
+    private void AlterarModo(string modo)
+    {
+        modoVisualizacao = modo;
+        buscaGlobal = "";
+        if (modo == "catalogo")
+            Nav.NavigateTo($"/curso-tutorial/{codEmpAtual}", replace: true);
+    }
+
+    private void OnBuscaInput(ChangeEventArgs e)
+    {
+        buscaGlobal = e.Value?.ToString() ?? "";
+        if (!string.IsNullOrWhiteSpace(buscaGlobal))
+            modoVisualizacao = "catalogo";
+    }
+
+    private static string PrepararHtmlSeguro(string conteudo)
+    {
+        if (string.IsNullOrWhiteSpace(conteudo)) return "";
+        var html = conteudo;
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-img-controls"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-resize-handle"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-video-controls"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"<script[\s\S]*?</script>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"on\w+=""[^""]*""", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return html;
+    }
+
+    private static string ObterInicial(string texto)
+        => string.IsNullOrWhiteSpace(texto) ? "D" : texto.Trim()[0].ToString().ToUpperInvariant();
+}

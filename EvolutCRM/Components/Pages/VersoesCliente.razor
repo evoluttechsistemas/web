@@ -1,0 +1,1241 @@
+﻿@page "/admin/vs-clientes"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject AdminService AdminService
+@inject TicketService TicketService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+    :root {
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-2: #f8fbff;
+        --surface-3: #eef6ff;
+        --border: #d9e6f5;
+        --border-2: #bfd3ec;
+        --primary: #0d47a1;
+        --primary-2: #1565c0;
+        --primary-3: #42a5f5;
+        --primary-soft: #eaf4ff;
+        --primary-ultra: #f5f9ff;
+        --text: #172033;
+        --text-2: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --success: #16a34a;
+        --success-2: #15803d;
+        --success-soft: #ecfdf5;
+        --warning: #d97706;
+        --warning-2: #b45309;
+        --warning-soft: #fffbeb;
+        --danger: #dc2626;
+        --danger-2: #b91c1c;
+        --danger-soft: #fff1f2;
+        --info: #0284c7;
+        --info-soft: #e0f2fe;
+        --shadow-sm: 0 2px 8px rgba(15, 23, 42, .05);
+        --shadow: 0 12px 34px rgba(13, 71, 161, .10);
+        --shadow-lg: 0 20px 55px rgba(13, 71, 161, .15);
+        --radius: 20px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    .admin-card {
+        position: relative;
+        width: 100%;
+        min-height: calc(100vh - 32px);
+        padding: 24px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .14), transparent 30%), radial-gradient(circle at top left, rgba(22, 163, 74, .09), transparent 28%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        box-shadow: var(--shadow);
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        overflow: hidden;
+        animation: versionFadeUp .28s ease both;
+    }
+
+        .admin-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--primary-3), var(--success));
+            z-index: 2;
+        }
+
+        .admin-card::after {
+            content: "";
+            position: absolute;
+            right: -110px;
+            top: -110px;
+            width: 260px;
+            height: 260px;
+            border-radius: 999px;
+            background: rgba(13, 71, 161, .055);
+            pointer-events: none;
+        }
+
+    .card-title {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 5px;
+        color: var(--text);
+        font-size: 21px;
+        font-weight: 900;
+        letter-spacing: -.035em;
+        line-height: 1.15;
+    }
+
+        .card-title::before {
+            content: "💻";
+            width: 42px;
+            height: 42px;
+            border-radius: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary), var(--primary-2));
+            color: #ffffff;
+            box-shadow: 0 10px 24px rgba(13, 71, 161, .24);
+            font-size: 19px;
+            flex: 0 0 auto;
+        }
+
+    .card-subtitle {
+        position: relative;
+        z-index: 3;
+        margin: 0 0 22px 54px;
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    .filters {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: minmax(280px, 2fr) minmax(170px, .75fr) minmax(170px, .75fr);
+        gap: 12px;
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .08), transparent 30%), #ffffff;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-input {
+        width: 100%;
+        height: 46px;
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        padding: 0 15px;
+        background: #ffffff;
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        outline: none;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+        transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+    }
+
+    .filters input.admin-input:first-child {
+        padding-left: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 14px center;
+        background-size: 17px;
+    }
+
+    .filters input.admin-input:nth-child(2) {
+        padding-left: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2'/%3E%3Cpath d='M7 9l5-5 5 5'/%3E%3Cpath d='M12 4v12'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 14px center;
+        background-size: 17px;
+    }
+
+    select.admin-input {
+        appearance: none;
+        cursor: pointer;
+        padding-right: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 17px;
+    }
+
+    .admin-input::placeholder {
+        color: var(--muted-2);
+        font-weight: 500;
+    }
+
+    .admin-input:hover {
+        border-color: var(--border-2);
+        background-color: #ffffff;
+    }
+
+    .admin-input:focus {
+        border-color: var(--primary-3);
+        box-shadow: 0 0 0 4px rgba(66, 165, 245, .14), var(--shadow-sm);
+        transform: translateY(-1px);
+    }
+
+    .summary-grid {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: repeat(7, minmax(120px, 1fr));
+        gap: 12px;
+        margin-bottom: 22px;
+    }
+
+    .summary-card {
+        position: relative;
+        min-height: 116px;
+        padding: 17px 16px;
+        border: 1.5px solid var(--border);
+        border-radius: 18px;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.75), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--primary-ultra) 100%);
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+        .summary-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow);
+            border-color: var(--primary-3);
+        }
+
+        .summary-card::before {
+            content: "";
+            position: absolute;
+            right: -26px;
+            top: -26px;
+            width: 88px;
+            height: 88px;
+            border-radius: 999px;
+            background: rgba(13, 71, 161, .08);
+        }
+
+        .summary-card::after {
+            position: absolute;
+            right: 14px;
+            top: 14px;
+            width: 32px;
+            height: 32px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            font-weight: 900;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, .08);
+        }
+
+        .summary-card:nth-child(1)::after {
+            content: "👥";
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .summary-card:nth-child(2)::after,
+        .summary-card:nth-child(5)::after {
+            content: "✓";
+            background: #dcfce7;
+            color: var(--success);
+        }
+
+        .summary-card:nth-child(3)::after,
+        .summary-card:nth-child(6)::after {
+            content: "!";
+            background: #fef3c7;
+            color: var(--warning);
+        }
+
+        .summary-card:nth-child(4)::after {
+            content: "💻";
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+
+        .summary-card:nth-child(7)::after {
+            content: "?";
+            background: #ffe4e6;
+            color: var(--danger);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .summary-card.ok {
+            border-color: #bbf7d0;
+            background: radial-gradient(circle at top right, rgba(255,255,255,.75), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--success-soft) 100%);
+        }
+
+            .summary-card.ok::before {
+                background: rgba(22, 163, 74, .10);
+            }
+
+        .summary-card.warn {
+            border-color: #fde68a;
+            background: radial-gradient(circle at top right, rgba(255,255,255,.75), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--warning-soft) 100%);
+        }
+
+            .summary-card.warn::before {
+                background: rgba(217, 119, 6, .10);
+            }
+
+        .summary-card.danger {
+            border-color: #fecdd3;
+            background: radial-gradient(circle at top right, rgba(255,255,255,.75), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--danger-soft) 100%);
+        }
+
+            .summary-card.danger::before {
+                background: rgba(220, 38, 38, .09);
+            }
+
+        .summary-card span {
+            position: relative;
+            z-index: 2;
+            display: block;
+            max-width: calc(100% - 34px);
+            margin-bottom: 10px;
+            color: var(--muted);
+            font-size: 10px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            line-height: 1.35;
+        }
+
+        .summary-card strong {
+            position: relative;
+            z-index: 2;
+            display: block;
+            color: var(--text);
+            font-size: 30px;
+            font-weight: 900;
+            line-height: 1;
+            letter-spacing: -.04em;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .summary-card.ok strong {
+            color: var(--success);
+        }
+
+        .summary-card.warn strong {
+            color: var(--warning);
+        }
+
+        .summary-card.danger strong {
+            color: var(--danger);
+        }
+
+    .version-client-card {
+        position: relative;
+        z-index: 3;
+        margin-bottom: 15px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: #ffffff;
+        box-shadow: var(--shadow-sm);
+        overflow: hidden;
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+        animation: versionFadeUp .22s ease both;
+    }
+
+        .version-client-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary-3);
+            box-shadow: var(--shadow);
+        }
+
+        .version-client-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 auto 0 0;
+            width: 4px;
+            background: linear-gradient(180deg, var(--primary), var(--primary-3));
+            z-index: 2;
+        }
+
+    .version-client-head {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px 18px 24px;
+        border-bottom: 1px solid var(--border);
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .10), transparent 30%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    }
+
+        .version-client-head > div {
+            min-width: 0;
+        }
+
+        .version-client-head strong {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 900;
+            line-height: 1.25;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+            .version-client-head strong::before {
+                content: "🏢";
+                width: 30px;
+                height: 30px;
+                border-radius: 11px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                background: var(--primary-soft);
+                color: var(--primary);
+                font-size: 14px;
+                flex: 0 0 auto;
+            }
+
+        .version-client-head small {
+            display: block;
+            margin: 5px 0 0 40px;
+            color: var(--muted);
+            font-size: 11.5px;
+            font-weight: 600;
+            line-height: 1.35;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+    .btn-whatsapp {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-height: 28px;
+        margin-top: 9px;
+        margin-left: 40px;
+        padding: 5px 11px;
+        border-radius: 999px;
+        border: 1px solid #bbf7d0;
+        background: #dcfce7;
+        color: #166534;
+        font-size: 10.5px;
+        font-weight: 900;
+        text-decoration: none;
+        transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+
+        .btn-whatsapp::before {
+            content: "☏";
+            font-size: 12px;
+        }
+
+        .btn-whatsapp:hover {
+            transform: translateY(-1px);
+            background: var(--success-soft);
+            box-shadow: 0 8px 18px rgba(22, 163, 74, .14);
+        }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(13, 71, 161, .12);
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        font-weight: 900;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+
+    .version-client-head > .badge::before {
+        content: "💻";
+        margin-right: 6px;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    .badge.status-ok {
+        background: #dcfce7;
+        color: #166534;
+        border-color: #bbf7d0;
+    }
+
+        .badge.status-ok::before {
+            content: "✓";
+            margin-right: 6px;
+            font-family: 'Sora', Arial, sans-serif;
+        }
+
+    .badge.status-danger {
+        background: #ffe4e6;
+        color: var(--danger-2);
+        border-color: #fecdd3;
+    }
+
+        .badge.status-danger::before {
+            content: "●";
+            margin-right: 6px;
+            font-size: 8px;
+            animation: versionPulseDanger 1.35s ease-in-out infinite;
+        }
+
+    .badge.status-empty {
+        background: #f1f5f9;
+        color: var(--muted);
+        border-color: #cbd5e1;
+    }
+
+        .badge.status-empty::before {
+            content: "?";
+            margin-right: 6px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+    .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        background: #ffffff;
+    }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 9px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: #eef4fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: #bfd3ec;
+            border-radius: 999px;
+        }
+
+            .table-wrap::-webkit-scrollbar-thumb:hover {
+                background: #9dbbe0;
+            }
+
+    table {
+        width: 100%;
+        min-width: 840px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+    }
+
+    th {
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #f8fbff 0%, #edf5ff 100%);
+        color: var(--muted);
+        text-align: left;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+    }
+
+    td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #edf2f7;
+        background: #ffffff;
+        color: var(--text-2);
+        font-size: 12.5px;
+        font-weight: 650;
+        vertical-align: middle;
+        transition: background .16s ease, color .16s ease;
+    }
+
+    tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    tbody tr:hover td {
+        background: var(--primary-soft);
+    }
+
+    td[data-label="Computador"] {
+        color: var(--text);
+        font-weight: 900;
+    }
+
+        td[data-label="Computador"]::before {
+            display: none;
+        }
+
+    td[data-label="Computador"] {
+        position: relative;
+        padding-left: 48px;
+    }
+
+        td[data-label="Computador"]::after {
+            content: "🖥️";
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 25px;
+            height: 25px;
+            border-radius: 9px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+    td[data-label="Versão instalada"],
+    td[data-label="Versão esperada"] {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        font-weight: 800;
+        color: var(--primary);
+    }
+
+    td[data-label="Último acesso"] {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 800;
+        color: var(--text-2);
+    }
+
+    .ultimo-acesso-antigo {
+        color: var(--danger) !important;
+        font-weight: 900 !important;
+        background: linear-gradient(90deg, rgba(255, 241, 242, .85), transparent) !important;
+    }
+
+        .ultimo-acesso-antigo::before {
+            content: "⚠ ";
+            font-family: 'Sora', Arial, sans-serif;
+        }
+
+    @@media (max-width: 1280px) {
+        .summary-grid {
+            grid-template-columns: repeat(4, minmax(140px, 1fr));
+        }
+
+        .filters {
+            grid-template-columns: 1fr 190px 190px;
+        }
+    }
+
+    @@media (max-width: 960px) {
+        .admin-card {
+            padding: 18px;
+            border-radius: 18px;
+        }
+
+        .card-title {
+            font-size: 18px;
+        }
+
+            .card-title::before {
+                width: 38px;
+                height: 38px;
+                border-radius: 14px;
+            }
+
+        .card-subtitle {
+            margin-left: 50px;
+        }
+
+        .filters {
+            grid-template-columns: 1fr;
+            padding: 14px;
+        }
+
+        .summary-grid {
+            grid-template-columns: repeat(2, minmax(150px, 1fr));
+        }
+
+        .version-client-head {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+            .version-client-head > .badge {
+                margin-left: 40px;
+            }
+    }
+
+    @@media (max-width: 650px) {
+        .admin-card {
+            min-height: auto;
+            padding: 14px;
+            border-radius: 16px;
+        }
+
+        .card-title {
+            align-items: flex-start;
+            font-size: 16px;
+        }
+
+            .card-title::before {
+                display: none;
+            }
+
+        .card-subtitle {
+            margin: 8px 0 18px;
+            font-size: 12px;
+        }
+
+        .admin-input {
+            height: 44px;
+            font-size: 12px;
+        }
+
+        .summary-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .summary-card {
+            min-height: 96px;
+            padding: 15px;
+        }
+
+            .summary-card strong {
+                font-size: 27px;
+            }
+
+        .version-client-card {
+            border-radius: 18px;
+        }
+
+        .version-client-head {
+            padding: 16px;
+        }
+
+            .version-client-head strong {
+                white-space: normal;
+            }
+
+            .version-client-head small {
+                margin-left: 0;
+                white-space: normal;
+            }
+
+            .btn-whatsapp,
+            .version-client-head > .badge {
+                margin-left: 0;
+            }
+
+        .table-wrap {
+            overflow: visible;
+            background: transparent;
+        }
+
+        table {
+            min-width: unset;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+
+        thead {
+            display: none;
+        }
+
+        tbody,
+        tr,
+        td {
+            display: block;
+            width: 100%;
+        }
+
+            tbody tr {
+                border: 1px solid var(--border);
+                border-radius: 16px;
+                background: #ffffff;
+                box-shadow: var(--shadow-sm);
+                overflow: hidden;
+                margin: 10px;
+                transition: transform .16s ease, box-shadow .16s ease;
+            }
+
+                tbody tr:hover {
+                    transform: translateY(-2px);
+                    box-shadow: var(--shadow);
+                }
+
+                    tbody tr:hover td {
+                        background: #ffffff;
+                    }
+
+        td {
+            display: grid;
+            grid-template-columns: 135px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+            padding: 11px 13px;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 12px;
+        }
+
+            td:last-child {
+                border-bottom: none;
+            }
+
+            td::before {
+                content: attr(data-label);
+                display: block !important;
+                color: var(--muted);
+                font-family: 'Sora', Arial, sans-serif;
+                font-size: 9.5px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+            }
+
+            td[data-label="Computador"] {
+                padding-left: 13px;
+            }
+
+                td[data-label="Computador"]::after {
+                    display: none;
+                }
+
+        .ultimo-acesso-antigo {
+            background: #fff1f2 !important;
+        }
+    }
+
+    @@media (max-width: 430px) {
+        td {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        .summary-card::after {
+            display: none;
+        }
+
+        .summary-card span {
+            max-width: 100%;
+        }
+    }
+
+    @@keyframes versionFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes versionPulseDanger {
+        0%, 100% {
+            opacity: .45;
+            transform: scale(.9);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(1.18);
+        }
+    }
+</style>
+
+<div class="admin-card">
+   
+
+    <div class="filters">
+        <input class="admin-input"
+               placeholder="Buscar cliente, computador, código ou versão..."
+               @bind="FiltroVersoes"
+               @bind:event="oninput" />
+        <input class="admin-input"
+               placeholder="Versão esperada"
+               @bind="VersaoAtualEsperada"
+               @bind:event="oninput" />
+        <select class="admin-input" @bind="FiltroStatusVersao">
+            <option value="todos">Todos</option>
+            <option value="atualizados">Atualizados</option>
+            <option value="desatualizados">Desatualizados</option>
+            <option value="semversao">Sem versão</option>
+        </select>
+    </div>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <span>Total clientes</span>
+            <strong>@TotalClientes</strong>
+        </div>
+        <div class="summary-card ok">
+            <span>Clientes atualizados</span>
+            <strong>@TotalClientesAtualizados</strong>
+        </div>
+        <div class="summary-card danger">
+            <span>Clientes desatualizados</span>
+            <strong>@TotalClientesDesatualizados</strong>
+        </div>
+        <div class="summary-card">
+            <span>Total PCs</span>
+            <strong>@TotalComputadores</strong>
+        </div>
+        <div class="summary-card ok">
+            <span>PCs atualizados</span>
+            <strong>@TotalAtualizados</strong>
+        </div>
+        <div class="summary-card warn">
+            <span>PCs desatualizados</span>
+            <strong>@TotalDesatualizados</strong>
+        </div>
+        <div class="summary-card danger">
+            <span>PCs sem versão</span>
+            <strong>@TotalSemVersao</strong>
+        </div>
+    </div>
+
+    @foreach (var cliente in VersoesFiltradas)
+    {
+        <div class="version-client-card">
+            <div class="version-client-head">
+                <div>
+                    <strong>@NomeCliente(cliente)</strong>
+                    <small>Código: @cliente.CodCliente | @cliente.RazaoSocial</small>
+                    @if (!string.IsNullOrWhiteSpace(cliente.Telefone))
+                    {
+                        <a class="btn-whatsapp"
+                           href="@GerarLinkWhatsapp(cliente.Telefone)"
+                           target="_blank">
+                            WhatsApp
+                        </a>
+                    }
+                </div>
+                <span class="badge">@cliente.Computadores.Count computador(es)</span>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Computador</th>
+                            <th>Versão instalada</th>
+                            <th>Versão esperada</th>
+                            <th>Último acesso</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pc in cliente.Computadores)
+                        {
+                            <tr>
+                                <td data-label="Computador">@pc.NomeComputador</td>
+                                <td data-label="Versão instalada">@(string.IsNullOrWhiteSpace(pc.Versao) ? "Sem versão" : pc.Versao)</td>
+                                <td data-label="Versão esperada">@VersaoAtualEsperada</td>
+                                <td data-label="Último acesso" class="@(UltimoAcessoAntigo(pc.DataHoraUltimoAcesso) ? "ultimo-acesso-antigo" : "")">
+                                    @FormatarUltimoAcesso(pc.DataHoraUltimoAcesso)
+                                </td>
+                                <td data-label="Status">
+                                    <span class="badge @GetStatusClass(pc)">@StatusVersao(pc)</span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    
+    private PeriodicTimer? _refreshTimer;
+    private string FiltroVersoes = "";
+    private string FiltroStatusVersao = "todos";
+    private string VersaoAtualEsperada = "";
+    
+    private List<AdminClienteVersaoDto> VersoesClientes = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            VersoesClientes = await AdminService.ListarVersoesClientesAsync();
+
+            VersaoAtualEsperada = ObterUltimaVersaoDetectada();
+
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(20));
+        _ = AutoRefreshLoop();
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+        _refreshTimer = null;
+    }
+
+    private async Task AutoRefreshLoop()
+    {
+        try
+        {
+            while (_refreshTimer != null && await _refreshTimer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        var uri = Nav.ToBaseRelativePath(Nav.Uri).ToLower();
+
+                        if (!uri.StartsWith("admin"))
+                            return;
+
+                            var versaoDigitada = VersaoAtualEsperada;
+
+                            VersoesClientes = await AdminService.ListarVersoesClientesAsync();
+
+                            VersaoAtualEsperada = string.IsNullOrWhiteSpace(versaoDigitada)
+                                ? ObterUltimaVersaoDetectada()
+                                : versaoDigitada;
+
+                            StateHasChanged();
+                        
+                    }
+                    catch
+                    {
+                    }
+                });
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private string NomeCliente(AdminClienteVersaoDto cliente)
+    {
+        return !string.IsNullOrWhiteSpace(cliente.NomeFantasia)
+            ? cliente.NomeFantasia
+            : cliente.RazaoSocial;
+    }
+
+    private int TotalClientes => VersoesClientes.Count;
+
+    private int TotalClientesAtualizados =>
+        VersoesClientes.Count(c =>
+            c.Computadores.Any(pc =>
+                !string.IsNullOrWhiteSpace(pc.Versao)
+                && EstaNaUltimaVersao(pc.Versao)));
+
+    private int TotalClientesDesatualizados =>
+        VersoesClientes.Count(c =>
+            !c.Computadores.Any(pc =>
+                !string.IsNullOrWhiteSpace(pc.Versao)
+                && EstaNaUltimaVersao(pc.Versao))
+            && c.Computadores.Any());
+
+    private int TotalComputadores =>
+        VersoesClientes.SelectMany(c => c.Computadores).Count();
+
+    private int TotalAtualizados =>
+        VersoesClientes.SelectMany(c => c.Computadores)
+            .Count(pc => EstaNaUltimaVersao(pc.Versao));
+
+    private int TotalDesatualizados =>
+        VersoesClientes.SelectMany(c => c.Computadores)
+            .Count(pc => !string.IsNullOrWhiteSpace(pc.Versao) && !EstaNaUltimaVersao(pc.Versao));
+
+    private int TotalSemVersao =>
+        VersoesClientes.SelectMany(c => c.Computadores)
+            .Count(pc => string.IsNullOrWhiteSpace(pc.Versao));
+
+    private string GerarLinkWhatsapp(string telefone)
+    {
+        var numeros = new string((telefone ?? "").Where(char.IsDigit).ToArray());
+
+        if (string.IsNullOrWhiteSpace(numeros))
+            return "#";
+
+        if (!numeros.StartsWith("55"))
+            numeros = "55" + numeros;
+
+        return $"https://wa.me/{numeros}";
+    }
+
+    private string FormatarUltimoAcesso(object? data)
+    {
+        if (data == null)
+            return "Sem acesso";
+
+        if (data is DateTime dt)
+            return dt.ToString("dd/MM/yyyy HH:mm");
+
+        if (data is TimeOnly time)
+            return time.ToString("HH:mm");
+
+        return data.ToString() ?? "-";
+    }
+
+    private bool UltimoAcessoAntigo(object? data)
+    {
+        if (data == null)
+            return true;
+
+        if (data is DateTime dt)
+            return dt <= DateTime.Now.AddMonths(-3);
+
+        return false;
+    }
+
+    private IEnumerable<AdminClienteVersaoDto> VersoesFiltradas =>
+        VersoesClientes
+            .Select(c => new AdminClienteVersaoDto
+            {
+                CodCliente = c.CodCliente,
+                RazaoSocial = c.RazaoSocial,
+                NomeFantasia = c.NomeFantasia,
+                Telefone = c.Telefone,
+                Computadores = c.Computadores
+                    .Where(pc => PassaFiltroVersao(c, pc))
+                    .Where(PassaFiltroStatus)
+                    .ToList()
+            })
+            .Where(c => c.Computadores.Any());
+
+    private bool PassaFiltroVersao(AdminClienteVersaoDto cliente, AdminComputadorVersaoDto pc)
+    {
+        if (string.IsNullOrWhiteSpace(FiltroVersoes))
+            return true;
+
+        return cliente.CodCliente.ToString().Contains(FiltroVersoes)
+            || (cliente.RazaoSocial ?? "").Contains(FiltroVersoes, StringComparison.OrdinalIgnoreCase)
+            || (cliente.NomeFantasia ?? "").Contains(FiltroVersoes, StringComparison.OrdinalIgnoreCase)
+            || (pc.NomeComputador ?? "").Contains(FiltroVersoes, StringComparison.OrdinalIgnoreCase)
+            || (pc.Versao ?? "").Contains(FiltroVersoes, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool PassaFiltroStatus(AdminComputadorVersaoDto pc)
+    {
+        return FiltroStatusVersao switch
+        {
+            "atualizados" => EstaNaUltimaVersao(pc.Versao),
+            "desatualizados" => !string.IsNullOrWhiteSpace(pc.Versao) && !EstaNaUltimaVersao(pc.Versao),
+            "semversao" => string.IsNullOrWhiteSpace(pc.Versao),
+            _ => true
+        };
+    }
+
+    private string GetStatusClass(AdminComputadorVersaoDto pc)
+    {
+        if (string.IsNullOrWhiteSpace(pc.Versao))
+            return "status-empty";
+
+        return EstaNaUltimaVersao(pc.Versao)
+            ? "status-ok"
+            : "status-danger";
+    }
+
+    private string StatusVersao(AdminComputadorVersaoDto pc)
+    {
+        if (string.IsNullOrWhiteSpace(pc.Versao))
+            return "Sem versão";
+
+        return EstaNaUltimaVersao(pc.Versao)
+            ? "Atualizado"
+            : "Desatualizado";
+    }
+
+    private bool EstaNaUltimaVersao(string? versao)
+    {
+        if (string.IsNullOrWhiteSpace(versao) || string.IsNullOrWhiteSpace(VersaoAtualEsperada))
+            return false;
+
+        var versaoInstalada = CriarChaveVersao(versao);
+        var versaoEsperada = CriarChaveVersao(VersaoAtualEsperada);
+
+        return versaoInstalada >= versaoEsperada;
+    }
+
+    private string ObterUltimaVersaoDetectada()
+    {
+        return VersoesClientes
+            .SelectMany(c => c.Computadores)
+            .Select(c => c.Versao)
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct()
+            .OrderByDescending(v => CriarChaveVersao(v!))
+            .FirstOrDefault() ?? "";
+    }
+
+    private string NormalizarVersao(string versao)
+    {
+        return versao
+            .Trim()
+            .ToUpper()
+            .Replace("VERSAO", "")
+            .Replace("VERSÃO", "")
+            .Replace("V", "")
+            .Replace(" ", "");
+    }
+
+    private Version CriarChaveVersao(string versao)
+    {
+        var limpa = NormalizarVersao(versao);
+
+        var partes = limpa
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p =>
+            {
+                var numero = new string(p.Where(char.IsDigit).ToArray());
+                return int.TryParse(numero, out var n) ? n : 0;
+            })
+            .ToList();
+
+        while (partes.Count < 4)
+            partes.Add(0);
+
+        return new Version(partes[0], partes[1], partes[2], partes[3]);
+    }
+}

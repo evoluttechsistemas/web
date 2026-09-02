@@ -1,0 +1,43 @@
+﻿@namespace EvolutCRM.Pages
+@inject EvolutCRM.Services.ChangelogService ChangelogService
+@inject IJSRuntime JS
+@using EvolutCRM.Models
+@inject EvolutCRM.Services.UserState UserState
+
+@code {
+    private string _usuario = "";
+    private List<ChangelogVersao> versoes = new();
+
+    public async Task VerificarChangelog(string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(usuario))
+            return;
+
+        _usuario = usuario.Trim();
+        versoes = await ChangelogService.ObterChangelogNaoLidoAsync(_usuario, "HELP");
+
+        if (!versoes.Any())
+            return;
+
+        var itens = versoes.SelectMany(v => v.Itens.Select(i => new
+        {
+            titulo = i.Titulo,
+            descricao = i.Descricao ?? "",
+            icone = i.Icone ?? "ti-news",
+            tipoAlteracao = i.TipoAlteracao,
+            versao = v.Versao,
+            destaque = i.Destaque,
+            referencia = i.Referencia ?? "",
+            codEmp = UserState.CurrentCompanyId
+        })).ToArray();
+
+        var resultado = await JS.InvokeAsync<string>("clShowModal", "cl-blazor-root", itens);
+
+        var codigos = versoes.SelectMany(v => v.Itens).Select(i => i.Codigo).ToList();
+
+        if (resultado == "ok")
+            await ChangelogService.MarcarNaoMostrarMaisAsync(_usuario, codigos);
+        else
+            await ChangelogService.MarcarVerDepoisAsync(_usuario, codigos);
+    }
+}

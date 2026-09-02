@@ -1,0 +1,1094 @@
+﻿@page "/admin/permissoes"
+
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+
+@inject AdminService AdminService
+@inject UserState UserState
+
+<style>
+    .perm-page {
+        --perm-bg: #f6f8fb;
+        --perm-surface: #ffffff;
+        --perm-soft: #eef4ff;
+        --perm-line: #d8e2ef;
+        --perm-line-2: #c4d3e5;
+        --perm-text: #172033;
+        --perm-muted: #64748b;
+        --perm-primary: #174ea6;
+        --perm-primary-2: #2563eb;
+        --perm-green: #15803d;
+        --perm-green-bg: #ecfdf3;
+        --perm-red: #b91c1c;
+        --perm-red-bg: #fff1f2;
+        --perm-shadow: 0 10px 26px rgba(15, 23, 42, .08);
+        width: 100%;
+        min-height: calc(100vh - 24px);
+        padding: 12px;
+        border: 1px solid var(--perm-line);
+        border-radius: 12px;
+        background: var(--perm-bg);
+        color: var(--perm-text);
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 11px;
+    }
+
+    .perm-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+
+    .perm-title h2 {
+        margin: 0;
+        color: var(--perm-text);
+        font-size: 16px;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+
+    .perm-title span {
+        display: block;
+        margin-top: 2px;
+        color: var(--perm-muted);
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .perm-company {
+        padding: 6px 9px;
+        border: 1px solid var(--perm-line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--perm-muted);
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .perm-message {
+        min-height: 28px;
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        padding: 7px 10px;
+        border: 1px solid var(--perm-line);
+        border-radius: 9px;
+        background: #fff;
+        color: var(--perm-muted);
+        font-size: 10.5px;
+        font-weight: 700;
+    }
+
+        .perm-message.ok {
+            border-color: #bbf7d0;
+            background: var(--perm-green-bg);
+            color: var(--perm-green);
+        }
+
+        .perm-message.warn {
+            border-color: #fecdd3;
+            background: var(--perm-red-bg);
+            color: var(--perm-red);
+        }
+
+    .perm-metas {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) 140px 140px auto;
+        gap: 8px;
+        align-items: end;
+        margin-bottom: 10px;
+        padding: 10px;
+        border: 1px solid var(--perm-line);
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+    }
+
+        .perm-metas strong {
+            display: block;
+            color: var(--perm-text);
+            font-size: 11.5px;
+            font-weight: 800;
+        }
+
+        .perm-metas small {
+            display: block;
+            margin-top: 2px;
+            color: var(--perm-muted);
+            font-size: 9.5px;
+            font-weight: 600;
+            line-height: 1.35;
+        }
+
+    .perm-field label {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--perm-muted);
+        font-size: 9px;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .perm-input {
+        width: 100%;
+        height: 30px;
+        padding: 0 9px;
+        border: 1px solid var(--perm-line-2);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--perm-text);
+        font-size: 10.5px;
+        font-weight: 650;
+        outline: none;
+    }
+
+        .perm-input:focus {
+            border-color: var(--perm-primary-2);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .13);
+        }
+
+    .perm-layout {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 1fr);
+        gap: 10px;
+        align-items: start;
+    }
+
+    .perm-users,
+    .perm-panel {
+        border: 1px solid var(--perm-line);
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, .04);
+    }
+
+    .perm-users {
+        position: sticky;
+        top: 8px;
+        overflow: hidden;
+    }
+
+    .perm-users-top,
+    .perm-panel-top {
+        padding: 9px;
+        border-bottom: 1px solid var(--perm-line);
+        background: linear-gradient(180deg, #fff, #f8fbff);
+    }
+
+    .perm-users-title,
+    .perm-panel-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 7px;
+    }
+
+        .perm-users-title strong,
+        .perm-panel-title strong {
+            font-size: 11px;
+            font-weight: 850;
+        }
+
+    .perm-count {
+        min-width: 22px;
+        height: 20px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 7px;
+        border-radius: 999px;
+        background: var(--perm-soft);
+        color: var(--perm-primary);
+        font-size: 9px;
+        font-weight: 850;
+    }
+
+    .perm-user-list {
+        max-height: calc(100vh - 245px);
+        overflow: auto;
+        padding: 6px;
+    }
+
+    .perm-user-row {
+        width: 100%;
+        min-height: 34px;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 4px;
+        padding: 6px 8px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--perm-text);
+        text-align: left;
+        cursor: pointer;
+    }
+
+        .perm-user-row:hover {
+            background: #f8fbff;
+            border-color: var(--perm-line);
+        }
+
+        .perm-user-row.active {
+            border-color: var(--perm-primary-2);
+            background: var(--perm-soft);
+            box-shadow: inset 3px 0 0 var(--perm-primary-2);
+        }
+
+        .perm-user-row:disabled {
+            cursor: not-allowed;
+            opacity: .65;
+        }
+
+    .perm-user-name {
+        overflow: hidden;
+        color: var(--perm-text);
+        font-size: 10.5px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .perm-user-code {
+        color: var(--perm-muted);
+        font-family: Consolas, monospace;
+        font-size: 9px;
+        font-weight: 800;
+    }
+
+    .perm-panel {
+        min-height: 420px;
+        overflow: hidden;
+    }
+
+    .perm-panel-top {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+
+    .perm-user-selected {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+        .perm-user-selected h3 {
+            margin: 0;
+            color: var(--perm-text);
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .perm-user-selected span {
+            color: var(--perm-muted);
+            font-size: 9.5px;
+            font-weight: 700;
+        }
+
+    .perm-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 7px;
+        flex-wrap: wrap;
+    }
+
+    .perm-filters {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .perm-modules {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+
+    .perm-chip {
+        height: 24px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 8px;
+        border: 1px solid var(--perm-line);
+        border-radius: 999px;
+        background: #fff;
+        color: var(--perm-muted);
+        font-size: 9.5px;
+        font-weight: 800;
+        cursor: pointer;
+    }
+
+        .perm-chip.active {
+            border-color: var(--perm-primary-2);
+            background: var(--perm-primary);
+            color: #fff;
+        }
+
+    .perm-btn {
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 0 11px;
+        border: 1px solid var(--perm-line-2);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--perm-primary);
+        font-size: 10px;
+        font-weight: 850;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .perm-btn:hover {
+            border-color: var(--perm-primary-2);
+            background: var(--perm-soft);
+        }
+
+        .perm-btn.primary {
+            border-color: var(--perm-primary);
+            background: var(--perm-primary);
+            color: #fff;
+        }
+
+            .perm-btn.primary:hover {
+                background: var(--perm-primary-2);
+            }
+
+        .perm-btn:disabled {
+            cursor: not-allowed;
+            opacity: .6;
+        }
+
+    .perm-body {
+        max-height: calc(100vh - 270px);
+        overflow: auto;
+        padding: 9px;
+    }
+
+    .perm-empty {
+        padding: 26px 12px;
+        color: var(--perm-muted);
+        text-align: center;
+        font-size: 11px;
+        font-weight: 750;
+    }
+
+    .perm-groups {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(285px, 1fr));
+        gap: 8px;
+    }
+
+    .perm-group {
+        border: 1px solid var(--perm-line);
+        border-radius: 9px;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    .perm-group-head {
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 0 8px;
+        border-bottom: 1px solid var(--perm-line);
+        background: #f8fbff;
+    }
+
+        .perm-group-head strong {
+            color: var(--perm-primary);
+            font-size: 10px;
+            font-weight: 900;
+        }
+
+        .perm-group-head span {
+            color: var(--perm-muted);
+            font-size: 9px;
+            font-weight: 800;
+        }
+
+    .perm-items {
+        display: grid;
+        gap: 1px;
+        background: var(--perm-line);
+    }
+
+    .perm-item {
+        min-height: 42px;
+        display: grid;
+        grid-template-columns: 18px minmax(0, 1fr);
+        gap: 7px;
+        align-items: start;
+        padding: 7px 8px;
+        background: #fff;
+        cursor: pointer;
+    }
+
+        .perm-item:hover {
+            background: #f8fbff;
+        }
+
+        .perm-item.checked {
+            background: #f0fdf4;
+        }
+
+    .perm-check {
+        width: 15px;
+        height: 15px;
+        margin-top: 1px;
+        accent-color: var(--perm-green);
+    }
+
+    .perm-item strong {
+        display: block;
+        margin-bottom: 2px;
+        overflow: hidden;
+        color: var(--perm-text);
+        font-size: 10.2px;
+        font-weight: 850;
+        line-height: 1.15;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .perm-item small {
+        display: block;
+        color: var(--perm-muted);
+        font-size: 9px;
+        font-weight: 600;
+        line-height: 1.25;
+    }
+
+    .perm-footer {
+        position: sticky;
+        bottom: 0;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 8px 9px;
+        border-top: 1px solid var(--perm-line);
+        background: rgba(255, 255, 255, .96);
+        backdrop-filter: blur(8px);
+    }
+
+    .perm-summary {
+        color: var(--perm-muted);
+        font-size: 10px;
+        font-weight: 750;
+    }
+
+    @@media (max-width: 1050px) {
+        .perm-layout {
+            grid-template-columns: 220px minmax(0, 1fr);
+        }
+
+        .perm-metas {
+            grid-template-columns: 1fr 120px 120px;
+        }
+
+            .perm-metas .perm-actions {
+                grid-column: 1 / -1;
+                justify-content: flex-start;
+            }
+    }
+
+    @@media (max-width: 760px) {
+        .perm-page {
+            padding: 9px;
+        }
+
+        .perm-head,
+        .perm-user-selected,
+        .perm-footer {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .perm-layout,
+        .perm-metas,
+        .perm-filters {
+            grid-template-columns: 1fr;
+        }
+
+        .perm-users {
+            position: relative;
+            top: 0;
+        }
+
+        .perm-user-list,
+        .perm-body {
+            max-height: none;
+        }
+
+        .perm-groups {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="perm-page">
+    <div class="perm-head">
+        <div class="perm-title">
+            <h2>Permissões do CRM</h2>
+            <span>Usuários ativos, módulos e acessos do sistema.</span>
+        </div>
+        <div class="perm-company">
+            @UserState.CurrentCompany (@UserState.CurrentCompanyId)
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(MensagemPermissao))
+    {
+        <div class="@ClasseMensagem(MensagemPermissao)">
+            @MensagemPermissao
+        </div>
+    }
+
+    @if (Carregando)
+    {
+        <div class="perm-empty">Carregando permissões...</div>
+    }
+    else if (!PodeAcessarAdmin || !PodeGerenciarPermissoes)
+    {
+        <div class="perm-empty">Você não tem permissão para acessar esta tela.</div>
+    }
+    else
+    {
+        <section class="perm-metas">
+            <div>
+                <strong>Metas do painel</strong>
+                <small>Define as metas de crescimento exibidas no Dashboard.</small>
+            </div>
+
+            <div class="perm-field">
+                <label>Mensal (%)</label>
+                <input class="perm-input" type="number" step="0.1"
+                       value="@MetaMensalInput.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                       @onchange="AlterarMetaMensal" />
+            </div>
+
+            <div class="perm-field">
+                <label>Anual (%)</label>
+                <input class="perm-input" type="number" step="0.1"
+                       value="@MetaAnualInput.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                       @onchange="AlterarMetaAnual" />
+            </div>
+
+            <div class="perm-actions">
+                <button type="button" class="perm-btn primary" @onclick="SalvarMetasPainel" disabled="@SalvandoMetas">
+                    @(SalvandoMetas ? "Salvando..." : "Salvar metas")
+                </button>
+                @if (!string.IsNullOrWhiteSpace(MensagemMeta))
+                {
+                    <span class="perm-summary">@MensagemMeta</span>
+                }
+            </div>
+        </section>
+
+        <div class="perm-layout">
+            <aside class="perm-users">
+                <div class="perm-users-top">
+                    <div class="perm-users-title">
+                        <strong>Usuários</strong>
+                        <span class="perm-count">@UsuariosFiltrados.Count()</span>
+                    </div>
+                    <input class="perm-input"
+                           placeholder="Buscar usuário..."
+                           @bind="FiltroUsuarios"
+                           @bind:event="oninput" />
+                </div>
+
+                <div class="perm-user-list">
+                    @foreach (var user in UsuariosFiltrados)
+                    {
+                        <button type="button"
+                                class="@ClasseUsuario(user)"
+                                @onclick="() => SelecionarUsuario(user)">
+                            <span class="perm-user-name">@user.Usuario</span>
+                            <span class="perm-user-code">#@user.Codigo</span>
+                        </button>
+                    }
+                </div>
+            </aside>
+
+            <section class="perm-panel">
+                @if (UsuarioSelecionado == null)
+                {
+                    <div class="perm-empty">Selecione um usuário para configurar permissões.</div>
+                }
+                else
+                {
+                    <div class="perm-panel-top">
+                        <div class="perm-user-selected">
+                            <div>
+                                <h3>@UsuarioSelecionado.Usuario</h3>
+                                <span>@PermissoesAtivas de @PermissoesTela.Count permissões ativas</span>
+                            </div>
+
+                            <div class="perm-actions">
+                                <button type="button" class="perm-btn" @onclick="MarcarTodas">Marcar todas</button>
+                                <button type="button" class="perm-btn" @onclick="DesmarcarTodas">Desmarcar todas</button>
+                                <button type="button" class="perm-btn primary" @onclick="SalvarPermissoesUsuario" disabled="@SalvandoPermissoes">
+                                    @(SalvandoPermissoes ? "Salvando..." : "Salvar permissões")
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="perm-filters">
+                            <input class="perm-input"
+                                   placeholder="Filtrar permissão, código ou descrição..."
+                                   @bind="FiltroPermissoes"
+                                   @bind:event="oninput" />
+
+                            <span class="perm-summary">@PermissoesFiltradas.Count() exibidas</span>
+                        </div>
+
+                        <div class="perm-modules">
+                            <button type="button" class="@ClasseModulo(null)" @onclick="() => SelecionarModulo(null)">
+                                Todos <span>@PermissoesTela.Count</span>
+                            </button>
+
+                            @foreach (var modulo in ModulosPermissao)
+                            {
+                                <button type="button" class="@ClasseModulo(modulo)" @onclick="() => SelecionarModulo(modulo)">
+                                    @modulo <span>@QuantidadeModulo(modulo)</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="perm-body">
+                        @if (!PermissoesFiltradas.Any())
+                        {
+                            <div class="perm-empty">Nenhuma permissão encontrada com o filtro informado.</div>
+                        }
+                        else
+                        {
+                            <div class="perm-groups">
+                                @foreach (var grupo in PermissoesFiltradas.GroupBy(p => p.Modulo).OrderBy(g => g.Key))
+                                {
+                                    <div class="perm-group">
+                                        <div class="perm-group-head">
+                                            <strong>@grupo.Key</strong>
+                                            <span>@grupo.Count(p => p.Ativo)/@grupo.Count()</span>
+                                        </div>
+
+                                        <div class="perm-items">
+                                            @foreach (var item in grupo.OrderBy(p => p.Titulo))
+                                            {
+                                                <label class="@ClassePermissao(item)">
+                                                    <input class="perm-check"
+                                                           type="checkbox"
+                                                           checked="@item.Ativo"
+                                                           @onchange="e => MarcarPermissao(item, e)" />
+                                                    <span>
+                                                        <strong title="@item.Permissao">@item.Titulo</strong>
+                                                        <small>@item.Descricao</small>
+                                                    </span>
+                                                </label>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="perm-footer">
+                        <span class="perm-summary">@PermissoesAtivas permissões ativas para @UsuarioSelecionado.Usuario</span>
+                        <div class="perm-actions">
+                            <button type="button" class="perm-btn" @onclick="RecarregarUsuarioSelecionado" disabled="@SalvandoPermissoes">
+                                Recarregar
+                            </button>
+                            <button type="button" class="perm-btn primary" @onclick="SalvarPermissoesUsuario" disabled="@SalvandoPermissoes">
+                                @(SalvandoPermissoes ? "Salvando..." : "Salvar permissões")
+                            </button>
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private bool SalvandoMetas = false;
+    private string MensagemMeta = "";
+    private decimal MetaMensalInput = 10m;
+    private decimal MetaAnualInput = 100m;
+    private bool Carregando = true;
+    private string MensagemPermissao = "";
+
+    private bool PermissaoGeral = false;
+    private bool PodeAcessarAdmin = false;
+    private bool PodeGerenciarPermissoes = false;
+    private bool SalvandoPermissoes = false;
+
+    private List<AdminUsuarioCrmDto> Usuarios = new();
+    private string FiltroUsuarios = "";
+    private string FiltroPermissoes = "";
+    private string? ModuloSelecionado = null;
+
+    private AdminUsuarioCrmDto? UsuarioSelecionado;
+    private List<PermissaoTelaDto> PermissoesTela = new();
+
+    private IEnumerable<AdminUsuarioCrmDto> UsuariosFiltrados =>
+        string.IsNullOrWhiteSpace(FiltroUsuarios)
+            ? Usuarios
+            : Usuarios.Where(u =>
+                (u.Usuario ?? "").Contains(FiltroUsuarios, StringComparison.OrdinalIgnoreCase) ||
+                u.Codigo.ToString().Contains(FiltroUsuarios.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<string> ModulosPermissao =>
+        PermissoesTela
+            .Select(p => p.Modulo)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(p => p);
+
+    private IEnumerable<PermissaoTelaDto> PermissoesFiltradas
+    {
+        get
+        {
+            var q = PermissoesTela.AsEnumerable();
+
+            if (!string.IsNullOrWhiteSpace(ModuloSelecionado))
+                q = q.Where(p => string.Equals(p.Modulo, ModuloSelecionado, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(FiltroPermissoes))
+            {
+                var termo = FiltroPermissoes.Trim();
+                q = q.Where(p =>
+                    p.Modulo.Contains(termo, StringComparison.OrdinalIgnoreCase) ||
+                    p.Permissao.Contains(termo, StringComparison.OrdinalIgnoreCase) ||
+                    p.Titulo.Contains(termo, StringComparison.OrdinalIgnoreCase) ||
+                    p.Descricao.Contains(termo, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return q;
+        }
+    }
+
+    private int PermissoesAtivas => PermissoesTela.Count(p => p.Ativo);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Carregando = true;
+        MensagemPermissao = "";
+
+        try
+        {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            {
+                MensagemPermissao = "Usuário ainda não foi carregado. Atualize a página.";
+                PodeAcessarAdmin = false;
+                return;
+            }
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ACESSAR"
+            );
+
+            PodeGerenciarPermissoes = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_PERMISSOES"
+            );
+
+            if (!PodeAcessarAdmin || !PodeGerenciarPermissoes)
+            {
+                MensagemPermissao = "Você não tem permissão para acessar a tela de permissões.";
+                return;
+            }
+
+            Usuarios = await AdminService.ListarUsuariosCrmAsync();
+            MontarPermissoesPadrao();
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao carregar permissões: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task SelecionarUsuario(AdminUsuarioCrmDto user)
+    {
+        UsuarioSelecionado = user;
+        MensagemPermissao = "";
+        FiltroPermissoes = "";
+        ModuloSelecionado = null;
+
+        MontarPermissoesPadrao();
+
+        var permissoesBanco = await AdminService.ListarPermissoesUsuarioAsync(user.Codigo);
+
+        foreach (var item in PermissoesTela)
+        {
+            var encontrada = permissoesBanco.FirstOrDefault(p =>
+                string.Equals(p.Modulo?.Trim(), item.Modulo?.Trim(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(p.Permissao?.Trim(), item.Permissao?.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            item.Ativo = encontrada?.Ativo == true;
+        }
+
+        PermissaoGeral = PermissoesTela.Any() && PermissoesTela.All(p => p.Ativo);
+    }
+
+    private async Task RecarregarUsuarioSelecionado()
+    {
+        if (UsuarioSelecionado is not null)
+            await SelecionarUsuario(UsuarioSelecionado);
+    }
+
+    private void MarcarPermissao(PermissaoTelaDto item, ChangeEventArgs e)
+    {
+        item.Ativo = ValorBool(e);
+        PermissaoGeral = PermissoesTela.Any() && PermissoesTela.All(p => p.Ativo);
+        MensagemPermissao = "Existem alterações pendentes para salvar.";
+    }
+
+    private void MarcarTodas()
+    {
+        foreach (var item in PermissoesFiltradas)
+            item.Ativo = true;
+
+        PermissaoGeral = PermissoesTela.Any() && PermissoesTela.All(p => p.Ativo);
+        MensagemPermissao = "Permissões exibidas foram marcadas. Salve para gravar.";
+    }
+
+    private void DesmarcarTodas()
+    {
+        foreach (var item in PermissoesFiltradas)
+            item.Ativo = false;
+
+        PermissaoGeral = false;
+        MensagemPermissao = "Permissões exibidas foram desmarcadas. Salve para gravar.";
+    }
+
+    private void SelecionarModulo(string? modulo)
+    {
+        ModuloSelecionado = modulo;
+    }
+
+    private async Task SalvarPermissoesUsuario()
+    {
+        if (!PodeGerenciarPermissoes)
+        {
+            MensagemPermissao = "Você não tem permissão para alterar permissões.";
+            return;
+        }
+
+        if (UsuarioSelecionado == null)
+            return;
+
+        try
+        {
+            SalvandoPermissoes = true;
+            MensagemPermissao = "Salvando permissões...";
+
+            var usuarioLogado = UserState.CurrentUser?.Trim().ToUpperInvariant() ?? "ADMIN";
+
+            foreach (var item in PermissoesTela)
+            {
+                await AdminService.SalvarPermissaoUsuarioAsync(
+                    UsuarioSelecionado.Codigo,
+                    item.Modulo.Trim(),
+                    item.Permissao.Trim(),
+                    item.Ativo,
+                    usuarioLogado
+                );
+            }
+
+            await SelecionarUsuario(UsuarioSelecionado);
+            MensagemPermissao = "Permissões salvas com sucesso.";
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao salvar permissões: " + ex.Message;
+        }
+        finally
+        {
+            SalvandoPermissoes = false;
+        }
+    }
+
+    private void AlterarMetaMensal(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(
+            e.Value?.ToString(),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var valor))
+        {
+            MetaMensalInput = valor;
+        }
+    }
+
+    private void AlterarMetaAnual(ChangeEventArgs e)
+    {
+        if (decimal.TryParse(
+            e.Value?.ToString(),
+            System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var valor))
+        {
+            MetaAnualInput = valor;
+        }
+    }
+
+    private async Task SalvarMetasPainel()
+    {
+        if (!PodeGerenciarPermissoes)
+        {
+            MensagemMeta = "Sem permissão para alterar metas.";
+            return;
+        }
+
+        try
+        {
+            SalvandoMetas = true;
+            MensagemMeta = "Salvando...";
+
+            var usuarioLogado = UserState.CurrentUser?.Trim().ToUpper() ?? "ADMIN";
+            await AdminService.SalvarMetasPainelAsync(MetaMensalInput, MetaAnualInput, usuarioLogado);
+
+            MensagemMeta = "Metas salvas com sucesso.";
+        }
+        catch (Exception ex)
+        {
+            MensagemMeta = "Erro ao salvar: " + ex.Message;
+        }
+        finally
+        {
+            SalvandoMetas = false;
+        }
+    }
+
+    private int QuantidadeModulo(string modulo) =>
+        PermissoesTela.Count(p => string.Equals(p.Modulo, modulo, StringComparison.OrdinalIgnoreCase));
+
+    private string ClasseUsuario(AdminUsuarioCrmDto user) =>
+        UsuarioSelecionado?.Codigo == user.Codigo
+            ? "perm-user-row active"
+            : "perm-user-row";
+
+    private string ClassePermissao(PermissaoTelaDto item) =>
+        item.Ativo ? "perm-item checked" : "perm-item";
+
+    private string ClasseModulo(string? modulo) =>
+        string.Equals(ModuloSelecionado, modulo, StringComparison.OrdinalIgnoreCase)
+            ? "perm-chip active"
+            : "perm-chip";
+
+    private static string ClasseMensagem(string mensagem)
+    {
+        if (mensagem.Contains("sucesso", StringComparison.OrdinalIgnoreCase))
+            return "perm-message ok";
+
+        if (mensagem.Contains("erro", StringComparison.OrdinalIgnoreCase) ||
+            mensagem.Contains("não tem permissão", StringComparison.OrdinalIgnoreCase))
+            return "perm-message warn";
+
+        return "perm-message";
+    }
+
+    private static bool ValorBool(ChangeEventArgs e) =>
+        e.Value is bool b
+            ? b
+            : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
+
+    private void MontarPermissoesPadrao()
+    {
+        PermissoesTela = new()
+        {
+            new("Dashboard", "DASHBOARD_VISUALIZAR", "Visualizar dashboard", "Permite acessar o dashboard principal do sistema."),
+            new("Comercial", "COMERCIAL_ACESSAR", "Acessar comercial", "Permite acessar o menu comercial."),
+
+            new("CRM", "CRM_CLIENTES_VISUALIZAR", "Visualizar clientes", "Permite acessar dados de clientes no CRM."),
+            new("CRM", "CRM_CLIENTES_EDITAR", "Editar clientes", "Permite alterar informações cadastrais dos clientes."),
+            new("CRM", "CRM_RELATORIOS", "Relatórios do CRM", "Permite acessar relatórios administrativos."),
+
+            new("Cadastros", "CADASTROS_ACESSAR", "Acessar cadastros", "Permite visualizar o grupo Cadastros no menu lateral."),
+            new("Cadastros", "CADASTROS_CLIENTES_VISUALIZAR", "Visualizar clientes", "Permite acessar a tela de cadastro de clientes."),
+            new("Cadastros", "CADASTROS_CLIENTES_EDITAR", "Editar clientes", "Permite incluir, alterar e excluir clientes."),
+            new("Cadastros", "CADASTROS_PARAMETROS_VISUALIZAR", "Visualizar parâmetros", "Permite acessar a tela de parâmetros dinâmicos."),
+            new("Cadastros", "CADASTROS_PARAMETROS_EDITAR", "Editar parâmetros", "Permite alterar valores dos parâmetros dinâmicos da empresa."),
+            new("Cadastros", "CADASTROS_TICKET_SETORES_VISUALIZAR", "Visualizar setores do ticket", "Permite acessar o cadastro de setores do ticket."),
+            new("Cadastros", "CADASTROS_TICKET_SETORES_EDITAR", "Editar setores do ticket", "Permite incluir, alterar, ativar e inativar setores do ticket."),
+            new("Cadastros", "CADASTROS_TICKET_SITUACOES_VISUALIZAR", "Visualizar situações do ticket", "Permite acessar o cadastro de situações do ticket."),
+            new("Cadastros", "CADASTROS_TICKET_SITUACOES_EDITAR", "Editar situações do ticket", "Permite incluir, alterar, ativar e inativar situações do ticket."),
+            new("Cadastros", "CADASTROS_TICKET_TIPOS_VISUALIZAR", "Visualizar tipos do ticket", "Permite acessar o cadastro de tipos do ticket."),
+            new("Cadastros", "CADASTROS_TICKET_TIPOS_EDITAR", "Editar tipos do ticket", "Permite incluir, alterar, ativar e inativar tipos do ticket."),
+
+            new("Tickets", "TICKETS_VISUALIZAR", "Visualizar tickets", "Permite acessar a central de tickets."),
+            new("Tickets", "TICKETS_RESPONDER", "Responder tickets", "Permite responder chamados de clientes."),
+            new("Tickets", "TICKETS_ALTERAR_STATUS", "Alterar status", "Permite alterar situação dos chamados."),
+            new("Tickets", "TICKETS_VER_TODOS", "Ver todos os tickets", "Permite visualizar tickets de todos os usuários."),
+
+            new("Agendas", "AGENDAS_VISUALIZAR", "Visualizar agendas", "Permite acessar compromissos e pendências."),
+            new("Agendas", "AGENDAS_CRIAR", "Criar agendas", "Permite criar novos agendamentos."),
+            new("Agendas", "AGENDAS_FINALIZAR", "Finalizar agendas", "Permite marcar agendas como resolvidas."),
+            new("Agendas", "AGENDAS_VER_TODAS", "Ver todas as agendas", "Permite visualizar agendas de todos os usuários."),
+
+            new("Administração", "ADMIN_ACESSAR", "Acessar administração", "Permite acessar este painel administrativo."),
+            new("Administração", "ADMIN_PERMISSOES", "Gerenciar permissões", "Permite alterar permissões de outros usuários."),
+            new("Administração", "ADMIN_TAREFAS_VISUALIZAR", "Visualizar tarefas", "Permite acessar a tela de tarefas."),
+            new("Administração", "ADMIN_COMISSOES_VISUALIZAR", "Visualizar comissões", "Permite acessar a tela de comissões liberadas."),
+            new("Administração", "ADMIN_ADMINISTRAR_CLIENTES", "Administrar clientes", "Permite acessar administração de clientes, baixa e desativação de computadores."),
+            new("Administração", "ADMIN_ACESSO_REMOTO", "Acesso remoto", "Permite acessar a tela de acesso remoto."),
+            new("Administração", "ADMIN_CHANGELOG_VISUALIZAR", "Gerenciar logs do sistema", "Permite acessar e gerenciar o changelog de novidades do sistema."),
+
+            new("WhatsApp", "WHATSAPP_CONEXOES", "Gerenciar conexões WhatsApp", "Permite acessar a tela de conexões do WhatsApp/Baileys."),
+
+            new("Navegação", "BANCO_TALENTOS_ACESSAR", "Acessar Banco de Talentos", "Permite visualizar o banco de talentos no menu lateral."),
+        };
+    }
+
+    private class PermissaoTelaDto
+    {
+        public string Modulo { get; set; }
+        public string Permissao { get; set; }
+        public string Titulo { get; set; }
+        public string Descricao { get; set; }
+        public bool Ativo { get; set; }
+
+        public PermissaoTelaDto(string modulo, string permissao, string titulo, string descricao)
+        {
+            Modulo = modulo;
+            Permissao = permissao;
+            Titulo = titulo;
+            Descricao = descricao;
+        }
+    }
+}

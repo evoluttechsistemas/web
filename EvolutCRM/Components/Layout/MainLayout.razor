@@ -1,0 +1,1553 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject IJSRuntime JS
+@inject EvolutCRM.Services.UserState UserState
+@inject EvolutCRM.Services.TicketService TicketService
+@inject TicketNotificationState TicketNotify
+@inject EvolutCRM.Services.CardService CardService
+@inject NavigationManager Nav
+@inject EvolutCRM.Services.ChatInternoService ChatInternoService
+@inject EvolutCRM.Services.ChatInternoNotificationState ChatNotify
+@inject EvolutCRM.Services.ChangelogService ChangelogService
+@using EvolutCRM.Pages
+@using EvolutCRM.Abas
+@inject AbaService Abas
+@using EvolutCRM.Models
+@using Microsoft.JSInterop
+@inject EvolutCRM.Services.MonitorBackupService MonitorBackupService
+
+<MainMenu Notificacoes="_notificacoesPainel"
+          OnAbrirNotificacao="AbrirNotificacaoPainel"
+          OnLimparNotificacoes="LimparTodasNotificacoesPainel"
+          OnRemoverItem="RemoverItemPorNotificacaoAsync">
+    <BodyContent>
+        <div class="aba-wrapper">
+
+            <div class="aba-strip">
+                @foreach (var aba in Abas.Abas)
+                {
+                    var ativa = aba.Rota == Abas.RotaAtiva;
+                    <div class="aba-item @(ativa ? "ativa" : "")"
+                         @key="aba.Rota"
+                         @onclick="() => AtivarAba(aba)">
+                        <i class="@aba.Icone"></i>
+                        <span class="aba-titulo">@aba.Titulo</span>
+                        @if (!aba.Fixa)
+                        {
+                            <button class="aba-fechar"
+                                    @onclick="() => FecharAba(aba)"
+                                    @onclick:stopPropagation="true"
+                                    title="Fechar">
+                                &times;
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="aba-conteudo">
+                @foreach (var aba in Abas.Abas)
+                {
+                    var ativa = aba.Rota == Abas.RotaAtiva;
+                    <div class="aba-painel @(ativa ? "" : "oculta")" @key="aba.Rota">
+                        <DynamicComponent Type="aba.ComponenteTipo"
+                                          Parameters="GetParametros(aba, ativa)" />
+                    </div>
+                }
+            </div>
+
+        </div>
+    </BodyContent>
+</MainMenu>
+<ChangelogModal @ref="_changelogModal" />
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+
+<script>
+    window.crmLog = window.crmLog || function(msg) {
+        console.log(msg);
+    };
+
+    // ← ADICIONAR:
+    window.registrarOfflineAoFechar = (usuario) => {
+        if (!usuario) return;
+
+        // Remove listener anterior se houver (evita duplicar em re-renders)
+        if (window._offlineHandler) {
+            window.removeEventListener('beforeunload', window._offlineHandler);
+            window.removeEventListener('visibilitychange', window._visibilityHandler);
+        }
+
+        window._offlineHandler = () => {
+            // sendBeacon é o único método confiável ao fechar janela
+            // funciona mesmo em WebView/apps embarcados
+            navigator.sendBeacon(
+                '/api/usuario/marcar-offline',
+                new Blob(
+                    [JSON.stringify({ usuario: usuario })],
+                    { type: 'application/json' }
+                )
+            );
+        };
+
+        window._visibilityHandler = () => {
+            // visibilitychange cobre minimizar, trocar de aba, etc.
+            if (document.visibilityState === 'hidden') {
+                navigator.sendBeacon(
+                    '/api/usuario/marcar-offline',
+                    new Blob(
+                        [JSON.stringify({ usuario: usuario })],
+                        { type: 'application/json' }
+                    )
+                );
+            }
+        };
+
+        window.addEventListener('beforeunload', window._offlineHandler);
+        window.addEventListener('visibilitychange', window._visibilityHandler);
+    };
+
+</script>
+
+@code {
+    private Dictionary<int, (DateTime UltimaNotificacao, int Contagem)> _mensagensFailedNotificadas = new();
+    private int _ultimaQtdNovosTickets = -1;
+    private bool _changelogVerificado = false;
+    private ChangelogModal? _changelogModal;
+    private Dictionary<int, DateTime> _chatNotificadoLayout = new();
+    private Dictionary<int, (DateTime UltimaNotificacao, DateTime UltimaGravacao)> _ultimaNotificacaoTicketSemResponsavel = new();
+    private DateTime _ultimoAlertaAgendaTicket = DateTime.MinValue;
+    private HashSet<int> _cardsConhecidos = new();
+    private DateTime _ultimoAlertaNovoCard = DateTime.MinValue;
+    private Dictionary<int, DateTime> _cardsMensagensNotificadas = new();
+
+    private Dictionary<int, DateTime> _ticketsNotificadosLayout = new();
+
+    private PeriodicTimer? _timerTickets;
+    private PeriodicTimer? _timerOutros;
+    private CancellationTokenSource? _cts;
+    private bool _disposed;
+    private bool _atualizandoTickets;
+    private bool _atualizandoOutros;
+    private PeriodicTimer? _timerCards;
+    private bool _atualizandoCards;
+
+    private List<NotificacaoPainelModel> _notificacoesPainel = new();
+
+    // REMOVER o método atual e criar este:
+    private async Task AdicionarItemAoGrupo(
+        string chaveGrupo,       // ex: "GRUPO_TICKET"
+        string tipoOrigem,       // ex: "TICKET"
+        string tituloGrupo,      // ex: "💬 Tickets com nova mensagem"
+        string tipo,             // "danger" | "warning" | "info"
+        string urlGrupo,         // url ao clicar no card grupo
+        NotificacaoItemModel item)
+    {
+        var novaLista = _notificacoesPainel.ToList();
+        var existente = novaLista.FirstOrDefault(x => x.Chave == chaveGrupo);
+
+        if (existente != null)
+        {
+            // Remove item antigo com mesmo código se já existia
+            existente.Itens.RemoveAll(i => i.Codigo == item.Codigo);
+            existente.Itens.Insert(0, item);
+            existente.DataHora = DateTime.Now;
+            existente.Mensagem = FormatarMensagemGrupo(existente.Itens, tipoOrigem);
+            // Sobe o card para o topo
+            novaLista.Remove(existente);
+            novaLista.Insert(0, existente);
+        }
+        else
+        {
+            novaLista.Insert(0, new NotificacaoPainelModel
+            {
+                Chave = chaveGrupo,
+                TipoOrigem = tipoOrigem,
+                Titulo = tituloGrupo,
+                Mensagem = item.Descricao,
+                Tipo = tipo,
+                Url = urlGrupo,
+                DataHora = DateTime.Now,
+                Itens = new List<NotificacaoItemModel> { item }
+            });
+        }
+
+        _notificacoesPainel = novaLista.Take(20).ToList();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatarMensagemGrupo(List<NotificacaoItemModel> itens, string tipo)
+    {
+        // Exibe até 3 itens no card, com contagem total
+        var visiveis = itens.Take(3).Select(i => i.Descricao);
+        var texto = string.Join(" • ", visiveis);
+        if (itens.Count > 3)
+            texto += $" (+{itens.Count - 3} mais)";
+        return texto;
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var rotaNova = new Uri(e.Location).AbsolutePath
+            .TrimStart('/').ToLowerInvariant();
+        await RemoverNotificacaoPorRotaAtualAsync(rotaNova);
+    }
+
+    private async Task AbrirNotificacaoPainel(NotificacaoPainelModel n)
+    {
+        await RemoverNotificacaoPainel(n.Chave);
+    }
+
+    private async Task RemoverNotificacaoPainel(string chave)
+    {
+        _notificacoesPainel = _notificacoesPainel
+            .Where(x => x.Chave != chave)
+            .ToList();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await SafeJs("crmLog",
+            $"[Layout] Render | firstRender={firstRender} | IsReady={UserState.IsReady}");
+
+        if (!firstRender && _timerTickets != null)
+            return;
+        
+        if (string.IsNullOrWhiteSpace(UserState.CurrentUser))
+        {
+            var usuario = await SafeJsReturn<string>("localStorage.getItem", "crm_user");
+            var empresaIdStr = await SafeJsReturn<string>("localStorage.getItem", "crm_company");
+            var empresaNome = await SafeJsReturn<string>("localStorage.getItem", "crm_company_name");
+
+            if (!string.IsNullOrWhiteSpace(usuario) &&
+                int.TryParse(empresaIdStr, out var empresaId))
+            {
+                UserState.SetUser(usuario, empresaId, empresaNome ?? "");
+            }
+        }
+
+        if (UserState.IsReady)
+        {
+            // Changelog dispara primeiro, sem bloquear o resto
+            if (_changelogModal != null && !string.IsNullOrWhiteSpace(UserState.CurrentUser) && !_changelogVerificado)
+            {
+                _changelogVerificado = true;
+                _ = _changelogModal.VerificarChangelog(UserState.CurrentUser.Trim());
+            }
+
+            await AtualizarTickets();
+            await AtualizarChatInterno();
+            await AtualizarNotificacoesAgendas();
+            await AtualizarNotificacoesAgendasTicket();
+            await AtualizarNotificacoesCards();
+            await AtualizarNotificacoesTicketsSemResponsavel();
+            await AtualizarNotificacoesBackupAsync();
+
+            await JS.InvokeVoidAsync("registrarOfflineAoFechar",
+                UserState.CurrentUser?.Trim() ?? "");
+
+            IniciarPolling();
+        }
+    }
+
+    private void IniciarPolling()
+    {
+        if (_timerTickets != null || _timerOutros != null || _timerCards != null)
+            return;
+
+        _cts = new CancellationTokenSource();
+
+        _timerTickets = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _timerOutros = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _timerCards = new PeriodicTimer(TimeSpan.FromSeconds(5));
+
+        // Loop de tickets (a cada 5s)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_disposed && await _timerTickets.WaitForNextTickAsync(_cts.Token))
+                {
+                    if (_disposed) break;
+                    if (_atualizandoTickets) continue;
+
+                    _atualizandoTickets = true;
+                    try
+                    {
+                        await InvokeAsync(async () =>
+{
+    if (!_disposed)
+    {
+        await AtualizarTickets();
+        await AtualizarChatInterno();
+        await AtualizarNotificacoesTicketsSemResponsavel();
+        await AtualizarNotificacoesMensagensPresasAsync();
+    }
+});
+                    }
+                    finally
+                    {
+                        _atualizandoTickets = false;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                    SafeJs("crmLog", $"[TimerTickets] Erro: {ex.Message}"));
+            }
+        });
+
+        // Loop de CRM/Card (a cada 5s)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_disposed && await _timerCards.WaitForNextTickAsync(_cts.Token))
+                {
+                    if (_disposed) break;
+                    if (_atualizandoCards) continue;
+
+                    _atualizandoCards = true;
+
+                    try
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            if (!_disposed)
+                            {
+                                await AtualizarNotificacoesCards();
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        _atualizandoCards = false;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                    SafeJs("crmLog", $"[TimerCards] Erro: {ex.Message}"));
+            }
+        });
+
+        // Loop de agendas/outros (a cada 30s)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_disposed && await _timerOutros.WaitForNextTickAsync(_cts.Token))
+                {
+                    if (_disposed) break;
+                    if (_atualizandoOutros) continue;
+
+                    _atualizandoOutros = true;
+                    try
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            if (_disposed) return;
+
+                            await AtualizarNotificacoesAgendas();
+                            await AtualizarNotificacoesAgendasTicket();
+                            await AtualizarNotificacoesBackupAsync();
+                        });
+                    }
+                    finally
+                    {
+                        _atualizandoOutros = false;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (Exception ex)
+            {
+                await InvokeAsync(() =>
+                    SafeJs("crmLog", $"[TimerOutros] Erro: {ex.Message}"));
+            }
+        });
+    }
+
+    private async Task AtualizarTickets()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var usuario = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            var qtdNovos = await TicketService.GetQuantidadeTicketsNovosAsync(usuario);
+
+            // Só dispara badge/JS se o número realmente mudou — evita render desnecessário a cada 5s
+            if (qtdNovos != _ultimaQtdNovosTickets)
+            {
+                _ultimaQtdNovosTickets = qtdNovos;
+                TicketNotify.SetNovos(qtdNovos);
+                await SafeJs("crmSetBadge", qtdNovos);
+            }
+
+            var tickets = await TicketService.ListarChamadosAsync();
+
+            var rotaAtiva = Abas.RotaAtiva ?? "";
+            var estaDentroDoTicketAtivo = rotaAtiva.StartsWith("ticket/");
+            var idTicketAberto = 0;
+
+            if (estaDentroDoTicketAtivo)
+            {
+                var partes = rotaAtiva.Split('/');
+                if (partes.Length >= 2)
+                    int.TryParse(partes[1], out idTicketAberto);
+            }
+
+            var novosParaNotificar = tickets
+                .Where(t =>
+                {
+                    var usuarioTicket = (t.Usuario ?? "").Trim().ToUpperInvariant();
+
+                    var ehNovo =
+                        !string.IsNullOrWhiteSpace(t.Novo) &&
+                        t.Novo.Trim().Equals("S", StringComparison.OrdinalIgnoreCase);
+
+                    var ehMeuTicket = usuarioTicket == usuario;
+
+                    var ehTicketSemResponsavel =
+                        string.IsNullOrWhiteSpace(usuarioTicket) ||
+                        usuarioTicket == "WHATSAPP" ||
+                        usuarioTicket == "NOVO" ||
+                        usuarioTicket == "CLIENTE";
+
+                    return ehNovo
+                        && (ehMeuTicket || ehTicketSemResponsavel)
+                        && (!estaDentroDoTicketAtivo || t.Codigo != idTicketAberto)
+                        && (
+                            !_ticketsNotificadosLayout.ContainsKey(t.Codigo) ||
+                            _ticketsNotificadosLayout[t.Codigo] < t.DataHoraUltimaGravacao
+                        );
+                })
+                .ToList();
+
+            _ticketsNotificadosLayout
+                .Where(x =>
+                    !tickets.Any(t =>
+                        t.Codigo == x.Key &&
+                        !string.IsNullOrWhiteSpace(t.Novo) &&
+                        t.Novo.Trim().Equals("S", StringComparison.OrdinalIgnoreCase)))
+                .Select(x => x.Key)
+                .ToList()
+                .ForEach(id => _ticketsNotificadosLayout.Remove(id));
+
+            if (!novosParaNotificar.Any())
+                return;
+
+            var ultimasAnotacoes = new Dictionary<int, string>();
+            foreach (var cod in novosParaNotificar.Select(t => t.Codigo))
+                ultimasAnotacoes[cod] = await TicketService.BuscarUltimaAnotacaoClienteAsync(cod);
+
+            foreach (var t in novosParaNotificar)
+            {
+                _ticketsNotificadosLayout[t.Codigo] = t.DataHoraUltimaGravacao;
+
+                var nomeCliente = !string.IsNullOrWhiteSpace(t.ApelidoCliente)
+                    ? t.ApelidoCliente
+                    : !string.IsNullOrWhiteSpace(t.NomeCliente)
+                        ? t.NomeCliente
+                        : $"Ticket #{t.Codigo}";
+
+                var ultimaAnotacao = ultimasAnotacoes.GetValueOrDefault(t.Codigo, "");
+
+                if (t.CodSituacao == 6)
+                    ultimaAnotacao = $"Aguardando aprovação: {t.Assunto}";
+                else if (string.IsNullOrWhiteSpace(ultimaAnotacao))
+                    ultimaAnotacao = t.Assunto ?? "Nova mensagem recebida.";
+
+                if (ultimaAnotacao.Length > 80)
+                    ultimaAnotacao = ultimaAnotacao.Substring(0, 80) + "...";
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_TICKET",
+    tipoOrigem: "TICKET",
+    tituloGrupo: "💬 Tickets com nova mensagem",
+    tipo: "danger",
+    urlGrupo: "/tickets",
+    item: new NotificacaoItemModel
+    {
+        Codigo = t.Codigo,
+        Descricao = $"{nomeCliente}: {ultimaAnotacao}",
+        Url = $"/ticket/{t.Codigo}",
+        DataHora = DateTime.Now
+    });
+            }
+
+            var primeiroTicket = novosParaNotificar.First();
+
+            var primeiroNomeCliente = !string.IsNullOrWhiteSpace(primeiroTicket.ApelidoCliente)
+                ? primeiroTicket.ApelidoCliente
+                : !string.IsNullOrWhiteSpace(primeiroTicket.NomeCliente)
+                    ? primeiroTicket.NomeCliente
+                    : $"Ticket #{primeiroTicket.Codigo}";
+
+            var primeiraUltimaAnotacao = ultimasAnotacoes.GetValueOrDefault(primeiroTicket.Codigo, "");
+
+            if (primeiroTicket.CodSituacao == 6)
+                primeiraUltimaAnotacao = $"Aguardando aprovação: {primeiroTicket.Assunto}";
+            else if (string.IsNullOrWhiteSpace(primeiraUltimaAnotacao))
+                primeiraUltimaAnotacao = primeiroTicket.Assunto ?? "Nova mensagem recebida.";
+
+            if (primeiraUltimaAnotacao.Length > 80)
+                primeiraUltimaAnotacao = primeiraUltimaAnotacao.Substring(0, 80) + "...";
+
+            if (primeiroTicket.CodSituacao == 6)
+            {
+                await SafeJs("crmToast", $"⏳ {primeiroNomeCliente}: aguardando aprovação", "warning");
+                await SafeJs("crmBlinkStart", $"⏳ Aguardando aprovação", 10);
+            }
+            else
+            {
+                await SafeJs("crmToast", $"💬 {primeiroNomeCliente}: {primeiraUltimaAnotacao}", "danger");
+                await SafeJs("crmBlinkStart", $"💬 {primeiroNomeCliente}", 10);
+            }
+
+            await SafeJs(
+                "crmNotifyPopup",
+                primeiroNomeCliente,
+                primeiraUltimaAnotacao,
+                "/images/logo-evoluttech.png"
+            );
+
+            await SafeJs("crmBeep", 300);
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[TicketsNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private async Task AtualizarNotificacoesTicketsSemResponsavel()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var tickets = await TicketService.ListarChamadosAsync();
+            var agora = DateTime.Now;
+
+            var usuariosAutomaticos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "", "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA"
+    };
+
+            var ticketsSemResponsavel = tickets
+    .Where(t =>
+        t.CodSituacao == 1 &&
+        usuariosAutomaticos.Contains((t.Usuario ?? "").Trim()) &&
+        (agora - t.DataHoraUltimaGravacao).TotalMinutes >= 5)
+    .ToList();
+
+            // Remove do controle os tickets que já têm responsável ou saíram do suporte
+            _ultimaNotificacaoTicketSemResponsavel
+                .Where(x => !ticketsSemResponsavel.Any(t => t.Codigo == x.Key))
+                .Select(x => x.Key)
+                .ToList()
+                .ForEach(id => _ultimaNotificacaoTicketSemResponsavel.Remove(id));
+
+            if (!ticketsSemResponsavel.Any())
+                return;
+
+            foreach (var t in ticketsSemResponsavel)
+            {
+                var minutosAberto = (int)(agora - t.DataHoraUltimaGravacao).TotalMinutes;
+
+                var jaNotificou = _ultimaNotificacaoTicketSemResponsavel.TryGetValue(t.Codigo, out var controle);
+
+                // Reseta se a última gravação mudou (ticket reaberto ou nova mensagem)
+                if (jaNotificou && controle.UltimaGravacao < t.DataHoraUltimaGravacao)
+                {
+                    _ultimaNotificacaoTicketSemResponsavel.Remove(t.Codigo);
+                    jaNotificou = false;
+                }
+
+                var deveNotificar = !jaNotificou || (agora - controle.UltimaNotificacao).TotalMinutes >= 1;
+
+                if (!deveNotificar)
+                    continue;
+
+                _ultimaNotificacaoTicketSemResponsavel[t.Codigo] = (agora, t.DataHoraUltimaGravacao);
+
+                var nomeCliente = !string.IsNullOrWhiteSpace(t.ApelidoCliente)
+                    ? t.ApelidoCliente
+                    : !string.IsNullOrWhiteSpace(t.NomeCliente)
+                        ? t.NomeCliente
+                        : $"Ticket #{t.Codigo}";
+
+                var mensagem = $"{nomeCliente} aguarda atendimento há {minutosAberto} min. Assunto: {t.Assunto}";
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_TICKET_SEM_RESP",
+    tipoOrigem: "TICKET_SEM_RESPONSAVEL",
+    tituloGrupo: "🆘 Tickets sem atendimento",
+    tipo: "danger",
+    urlGrupo: "/tickets",
+    item: new NotificacaoItemModel { Codigo = t.Codigo, Descricao = mensagem, Url = $"/ticket/{t.Codigo}", DataHora = DateTime.Now });
+
+                await SafeJs("crmToast", $"🆘 {mensagem}", "danger");
+                await SafeJs("crmBlinkStart", $"🆘 TICKET SEM ATENDIMENTO!", 8);
+
+                await SafeJs(
+                    "crmNotifyPopup",
+                    "🆘 Ticket sem atendimento",
+                    mensagem,
+                    "/images/logo-evoluttech.png"
+                );
+
+                await SafeJs("crmBeep", 400);
+            }
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[TicketSemRespNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private async Task AtualizarNotificacoesAgendas()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var usuario = UserState.CurrentUser.Trim();
+
+            var agendasBanco = await CardService.GetAgendasEmpresaAsync(UserState.CurrentCompanyId);
+
+            var agendasUsuario = ExpandirAgendasRepetitivasLayout(agendasBanco)
+                .Where(a =>
+                    a.Status != "RESOLVIDO" &&
+                    a.DataAgendamento.Date >= DateTime.Today &&
+                    !string.IsNullOrWhiteSpace(a.Usuario) &&
+                    a.Usuario.Trim().Equals(usuario, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var ag in agendasUsuario)
+            {
+                var dataHoraAgenda = ag.DataAgendamento.Date.Add(ag.HoraAgendamento);
+                var minutos = (dataHoraAgenda - DateTime.Now).TotalMinutes;
+
+                if (minutos < 0)
+                {
+                    if (!await JaFoiNotificadaAgendaRecentemente(ag, "vencida", TimeSpan.FromMinutes(5)))
+                    {
+                        await EnviarNotificacaoAgenda(ag, "vencida");
+                        await MarcarNotificacaoAgendaEnviada(ag, "vencida");
+                    }
+
+                    continue;
+                }
+
+                if (minutos <= 5)
+                {
+                    if (!await JaFoiNotificadaAgenda(ag, "5min"))
+                    {
+                        await EnviarNotificacaoAgenda(ag, "5min");
+                        await MarcarNotificacaoAgendaEnviada(ag, "5min");
+                    }
+
+                    continue;
+                }
+
+                if (minutos <= 30)
+                {
+                    if (!await JaFoiNotificadaAgenda(ag, "30min"))
+                    {
+                        await EnviarNotificacaoAgenda(ag, "30min");
+                        await MarcarNotificacaoAgendaEnviada(ag, "30min");
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[AgendaNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private async Task<bool> JaFoiNotificadaAgendaRecentemente(AgendaModel ag, string tipo, TimeSpan intervalo)
+    {
+        var chave = GerarChaveNotificacaoAgenda(ag, tipo);
+        var result = await SafeJsReturn<string>("localStorage.getItem", chave);
+
+        if (string.IsNullOrWhiteSpace(result))
+            return false;
+
+        if (!DateTime.TryParse(result, out var ultima))
+            return false;
+
+        return DateTime.Now - ultima < intervalo;
+    }
+
+    private async Task AtualizarNotificacoesCards()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var cards = await CardService.GetCardsComUltimaMensagemAsync();
+            var idsAtuais = cards.Select(c => c.Codigo).ToHashSet();
+
+            var rotaAtiva = Abas.RotaAtiva ?? "";
+            var estaDentroDoCard = rotaAtiva.StartsWith("card/");
+            var idCardAberto = 0;
+
+            if (estaDentroDoCard)
+            {
+                var partes = rotaAtiva.Split('/');
+                if (partes.Length >= 2)
+                    int.TryParse(partes[1], out idCardAberto);
+            }
+
+            var usuarioAtual = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+
+            if (_cardsConhecidos.Count == 0)
+            {
+                _cardsConhecidos = idsAtuais;
+
+                // Primeira carga: busca TODAS as últimas mensagens numa query só
+                var todasUltimas = await CardService.GetUltimasMensagensClienteAsync(
+                    cards.Select(c => c.Codigo).ToList());
+
+                foreach (var kv in todasUltimas)
+                    _cardsMensagensNotificadas[kv.Key] = kv.Value.DataHora;
+
+                await SafeJs("crmLog", $"[CardNotify] Primeira carga: {_cardsConhecidos.Count} card(s).");
+                return;
+            }
+
+            // Só notifica novos cards cujo responsável é o usuário logado (ou sem responsável)
+            var novosCards = cards
+                .Where(c => !_cardsConhecidos.Contains(c.Codigo)
+                    && (string.IsNullOrWhiteSpace(c.Usuario)
+                        || c.Usuario.Trim().ToUpperInvariant() == usuarioAtual
+                        || c.Usuario.Trim().ToUpperInvariant() == "NOVO"))
+                .ToList();
+
+            foreach (var card in novosCards)
+            {
+                var nome = !string.IsNullOrWhiteSpace(card.NomeCliente)
+                    ? card.NomeCliente
+                    : !string.IsNullOrWhiteSpace(card.Descricao)
+                        ? card.Descricao
+                        : $"Card #{card.Codigo}";
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_CRM_NOVO",
+    tipoOrigem: "CRM",
+    tituloGrupo: "🆕 Novos contatos no CRM",
+    tipo: "warning",
+    urlGrupo: "/menu",
+    item: new NotificacaoItemModel
+    {
+        Codigo = card.Codigo,
+        Descricao = $"{nome} entrou no CRM.",
+        Url = $"/card/{card.Codigo}",
+        DataHora = DateTime.Now
+    });
+            }
+
+            if (novosCards.Any() && DateTime.Now - _ultimoAlertaNovoCard > TimeSpan.FromSeconds(10))
+            {
+                _ultimoAlertaNovoCard = DateTime.Now;
+
+                var qtd = novosCards.Count;
+                var primeiro = novosCards.FirstOrDefault();
+
+                var nome = primeiro?.NomeCliente
+                    ?? primeiro?.Descricao
+                    ?? "Novo contato";
+
+                var mensagemPainel = qtd == 1
+                    ? $"{nome} entrou no CRM."
+                    : $"Entraram {qtd} novos contatos no CRM.";
+
+                await SafeJs("crmToast", $"🆕 Novo contato no CRM! {qtd} novo(s).", "warning");
+                await SafeJs("crmBlinkStart", "🆕 NOVO CONTATO!", 8);
+
+                await SafeJs(
+                    "crmNotifyPopup",
+                    "🆕 Novo contato no CRM",
+                    mensagemPainel,
+                    "/images/logo-evoluttech.png"
+                );
+
+                await SafeJs("crmBeep", 280);
+            }
+
+            // Busca todas as últimas mensagens de uma vez — elimina o N+1
+            var ultimasMensagens = await CardService.GetUltimasMensagensClienteAsync(
+                cards.Select(c => c.Codigo).ToList());
+
+            foreach (var card in cards)
+            {
+                if (estaDentroDoCard && card.Codigo == idCardAberto)
+                    continue;
+
+                // Só notifica o responsável pelo card
+                var responsavel = (card.Usuario ?? "").Trim().ToUpperInvariant();
+                if (!string.IsNullOrWhiteSpace(responsavel)
+                    && responsavel != "NOVO"
+                    && responsavel != usuarioAtual)
+                    continue;
+
+                if (!ultimasMensagens.TryGetValue(card.Codigo, out var ultima))
+                    continue;
+
+                if (!_cardsMensagensNotificadas.TryGetValue(card.Codigo, out var ultimaNotificada))
+                {
+                    _cardsMensagensNotificadas[card.Codigo] = ultima.DataHora;
+                    continue;
+                }
+
+                if (ultima.DataHora <= ultimaNotificada)
+                    continue;
+
+                _cardsMensagensNotificadas[card.Codigo] = ultima.DataHora;
+
+                var nome = !string.IsNullOrWhiteSpace(card.NomeCliente)
+                    ? card.NomeCliente
+                    : !string.IsNullOrWhiteSpace(card.Descricao)
+                        ? card.Descricao
+                        : $"Card #{card.Codigo}";
+
+                var texto = ultima.Texto ?? "Nova mensagem recebida.";
+
+                if (texto.Length > 80)
+                    texto = texto.Substring(0, 80) + "...";
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_CRM_MSG",
+    tipoOrigem: "CRM",
+    tituloGrupo: "💬 Mensagens CRM",
+    tipo: "warning",
+    urlGrupo: "/menu",
+    item: new NotificacaoItemModel
+    {
+        Codigo = card.Codigo,
+        Descricao = $"{nome}: {texto}",
+        Url = $"/card/{card.Codigo}",
+        DataHora = DateTime.Now
+    });
+
+                await SafeJs("crmToast", $"💬 {nome}: {texto}", "warning");
+                await SafeJs("crmBlinkStart", $"💬 {nome}", 8);
+
+                await SafeJs(
+                    "crmNotifyPopup",
+                    "💬 Nova mensagem no CRM",
+                    $"{nome}: {texto}",
+                    "/images/logo-evoluttech.png"
+                );
+
+                await SafeJs("crmBeep", 280);
+            }
+
+            _cardsConhecidos = idsAtuais;
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[CardNotify] Erro: {ex.Message}");
+        }
+    }
+
+
+    private string GerarChaveNotificacaoAgenda(AgendaModel ag, string tipo)
+    {
+        var codigoBase = ag.AgendaPaiCodigo ?? ag.Codigo;
+        var data = ag.DataAgendamento.ToString("yyyyMMdd");
+        var hora = $"{ag.HoraAgendamento.Hours:00}{ag.HoraAgendamento.Minutes:00}";
+
+        return $"agenda_notif_{codigoBase}_{data}_{hora}_{tipo}";
+    }
+
+    private async Task<bool> JaFoiNotificadaAgenda(AgendaModel ag, string tipo)
+    {
+        var chave = GerarChaveNotificacaoAgenda(ag, tipo);
+        var result = await SafeJsReturn<string>("localStorage.getItem", chave);
+        return !string.IsNullOrWhiteSpace(result);
+    }
+
+    private async Task MarcarNotificacaoAgendaEnviada(AgendaModel ag, string tipo)
+    {
+        var chave = GerarChaveNotificacaoAgenda(ag, tipo);
+        await JS.InvokeVoidAsync("localStorage.setItem", chave, DateTime.Now.ToString("o"));
+    }
+
+    private async Task EnviarNotificacaoAgenda(AgendaModel ag, string tipo)
+    {
+        var dataTexto = ag.DataAgendamento.ToString("dd/MM/yyyy");
+        var horaTexto = $"{ag.HoraAgendamento.Hours:00}:{ag.HoraAgendamento.Minutes:00}";
+        var descricao = string.IsNullOrWhiteSpace(ag.Descricao) ? "Agendamento" : ag.Descricao;
+
+        var codigoAgenda = ag.Codigo;
+
+        var titulo = "";
+        var mensagem = "";
+        var tipoPainel = "warning";
+
+        if (tipo == "30min")
+        {
+            titulo = "⏰ Agendamento próximo";
+            mensagem = $"{descricao} às {horaTexto} ({dataTexto}) - falta cerca de 30 minutos.";
+            tipoPainel = "warning";
+
+            await SafeJs("crmToast", mensagem, "warning");
+            await SafeJs("crmBeep", 250);
+        }
+        else if (tipo == "5min")
+        {
+            titulo = "🚨 Agendamento iminente";
+            mensagem = $"{descricao} às {horaTexto} ({dataTexto}) - falta cerca de 5 minutos.";
+            tipoPainel = "danger";
+
+            await SafeJs("crmToast", mensagem, "danger");
+            await SafeJs("crmBeep", 400);
+            await SafeJs("crmBlinkStart", "📅 AGENDAMENTO!", 8);
+        }
+        else if (tipo == "vencida")
+        {
+            titulo = "📅 Agenda atrasada";
+            mensagem = $"{descricao} estava marcada para {horaTexto} ({dataTexto}) e ainda está pendente.";
+            tipoPainel = "danger";
+
+            await SafeJs("crmToast", mensagem, "danger");
+            await SafeJs("crmBeep", 450);
+            await SafeJs("crmBlinkStart", "📅 AGENDA ATRASADA!", 8);
+        }
+        else
+        {
+            return;
+        }
+
+        await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_AGENDA",
+    tipoOrigem: "AGENDA",
+    tituloGrupo: "📅 Agendas",
+    tipo: tipoPainel,
+    urlGrupo: "/agendas",
+    item: new NotificacaoItemModel
+    {
+        Codigo = codigoAgenda,
+        Descricao = mensagem,
+        Url = "/agendas",
+        DataHora = DateTime.Now
+    });
+
+        await SafeJs(
+            "crmNotifyPopup",
+            titulo,
+            mensagem,
+            "/images/logo-evoluttech.png"
+        );
+    }
+
+    private HashSet<string> _backupsNotificadosHoje = new();
+
+    private async Task AtualizarNotificacoesBackupAsync()
+    {
+        if (!UserState.IsReady) return;
+
+        try
+        {
+            var criticos = await MonitorBackupService.ObterClientesParaAlertaAsync();
+            var hoje = DateTime.Today.ToString("yyyyMMdd");
+
+            foreach (var cliente in criticos)
+            {
+                var chave = $"BACKUP_{cliente.CodCliente}_{cliente.Cnpj}_{hoje}";
+
+                // Notifica no máximo 1x por dia por cliente por sessão
+                if (_backupsNotificadosHoje.Contains(chave))
+                    continue;
+
+                _backupsNotificadosHoje.Add(chave);
+
+                var dias = cliente.DataHoraUltimaSincronizacao.HasValue
+                    ? (int)(DateTime.Now - cliente.DataHoraUltimaSincronizacao.Value).TotalDays
+                    : -1;
+
+                var mensagem = dias >= 0
+                    ? $"{dias} dia(s) sem backup. Último: {cliente.DataHoraUltimaSincronizacao:dd/MM/yyyy HH:mm} ({cliente.Computador})"
+                    : "Nenhum backup registrado para este cliente.";
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_BACKUP",
+    tipoOrigem: "BACKUP",
+    tituloGrupo: "💾 Backups críticos",
+    tipo: "warning",
+    urlGrupo: "/admin/monitor-backups",
+    item: new NotificacaoItemModel
+    {
+        Codigo = cliente.CodCliente,
+        Descricao = $"{cliente.NomeCliente}: {mensagem}",
+        Url = "/admin/monitor-backups",
+        DataHora = DateTime.Now
+    });
+            }
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[BackupNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private List<AgendaModel> ExpandirAgendasRepetitivasLayout(List<AgendaModel> agendasOriginais)
+    {
+        var agendasSemDuplicatas = agendasOriginais
+            .GroupBy(a => new { a.Codigo, a.DataAgendamento.Date, a.Usuario })
+            .Select(g => g.First())
+            .ToList();
+
+        var resultado = new List<AgendaModel>();
+
+        var dataInicio = DateTime.Today;
+        var dataFim = DateTime.Today.AddDays(364);
+
+        var agendasMestras = agendasSemDuplicatas
+            .Where(a => !a.AgendaPaiCodigo.HasValue)
+            .ToList();
+
+        var ocorrenciasMaterializadas = agendasSemDuplicatas
+            .Where(a => a.AgendaPaiCodigo.HasValue && a.AgendaPaiCodigo > 0)
+            .ToList();
+
+        foreach (var agenda in agendasMestras.Where(a => string.IsNullOrEmpty(a.TipoRepeticao) || a.TipoRepeticao == "UmaVez"))
+        {
+            resultado.Add(agenda);
+        }
+
+        foreach (var agendaMestre in agendasMestras.Where(a => !string.IsNullOrEmpty(a.TipoRepeticao) && a.TipoRepeticao != "UmaVez"))
+        {
+            var datasJaMaterializadas = ocorrenciasMaterializadas
+                .Where(a => a.AgendaPaiCodigo == agendaMestre.Codigo)
+                .Select(a => a.DataAgendamento.Date)
+                .ToHashSet();
+
+            var datasGerar = new List<DateTime>();
+
+            DateTime dataLimite = dataFim;
+
+            if (agendaMestre.TipoRepeticao == "PorTempo" && agendaMestre.DataFimRepeticao.HasValue)
+            {
+                dataLimite = agendaMestre.DataFimRepeticao.Value < dataFim
+                    ? agendaMestre.DataFimRepeticao.Value
+                    : dataFim;
+            }
+
+            switch (agendaMestre.FrequenciaRepeticao ?? "")
+            {
+                case "DIARIO":
+                    for (var data = dataInicio; data <= dataLimite; data = data.AddDays(1))
+                    {
+                        if (!datasJaMaterializadas.Contains(data.Date))
+                            datasGerar.Add(data);
+                    }
+                    break;
+
+                case "SEMANAL":
+                    var diasSelecionados = ParseDiasSemanaLayout(agendaMestre.DiasRepeticao);
+
+                    for (var data = dataInicio; data <= dataLimite; data = data.AddDays(1))
+                    {
+                        if (diasSelecionados.Contains((int)data.DayOfWeek) &&
+                            !datasJaMaterializadas.Contains(data.Date))
+                        {
+                            datasGerar.Add(data);
+                        }
+                    }
+                    break;
+
+                case "MENSAL":
+                    var diaDoMes = agendaMestre.DataAgendamento.Day;
+                    var dataMensal = new DateTime(dataInicio.Year, dataInicio.Month, 1);
+
+                    while (dataMensal <= dataLimite)
+                    {
+                        var diaMax = DateTime.DaysInMonth(dataMensal.Year, dataMensal.Month);
+                        var dataOcorrencia = new DateTime(
+                            dataMensal.Year,
+                            dataMensal.Month,
+                            Math.Min(diaDoMes, diaMax)
+                        );
+
+                        if (dataOcorrencia >= dataInicio &&
+                            dataOcorrencia <= dataLimite &&
+                            !datasJaMaterializadas.Contains(dataOcorrencia.Date))
+                        {
+                            datasGerar.Add(dataOcorrencia);
+                        }
+
+                        dataMensal = dataMensal.AddMonths(1);
+                    }
+                    break;
+            }
+
+            resultado.Add(agendaMestre);
+
+            foreach (var data in datasGerar)
+            {
+                resultado.Add(new AgendaModel
+                {
+                    Codigo = agendaMestre.Codigo,
+                    Origem = agendaMestre.Origem,
+                    CodCRMC = agendaMestre.CodCRMC,
+                    Descricao = agendaMestre.Descricao,
+                    DataAgendamento = data,
+                    HoraAgendamento = agendaMestre.HoraAgendamento,
+                    CodCliente = agendaMestre.CodCliente,
+                    NomeCliente = agendaMestre.NomeCliente,
+                    ApelidoCliente = agendaMestre.ApelidoCliente,
+                    EmailCliente = agendaMestre.EmailCliente,
+                    Usuario = agendaMestre.Usuario,
+                    Status = agendaMestre.Status,
+                    CodEmp = agendaMestre.CodEmp,
+                    TipoRepeticao = agendaMestre.TipoRepeticao,
+                    FrequenciaRepeticao = agendaMestre.FrequenciaRepeticao,
+                    DataFimRepeticao = agendaMestre.DataFimRepeticao,
+                    DiasRepeticao = agendaMestre.DiasRepeticao,
+                    EhOcorrenciaGerada = true,
+                    NumeroTelefone = agendaMestre.NumeroTelefone,
+                    AgendaPaiCodigo = agendaMestre.Codigo
+                });
+            }
+        }
+
+        resultado.AddRange(ocorrenciasMaterializadas);
+
+        return resultado
+            .OrderBy(a => a.DataAgendamento)
+            .ThenBy(a => a.HoraAgendamento)
+            .ToList();
+    }
+
+    private List<int> ParseDiasSemanaLayout(string diasRepeticao)
+    {
+        if (string.IsNullOrWhiteSpace(diasRepeticao))
+            return new List<int>();
+
+        return diasRepeticao
+            .Split(',')
+            .Where(d => int.TryParse(d, out _))
+            .Select(int.Parse)
+            .ToList();
+    }
+
+    private async Task SafeJs(string identifier, params object[] args)
+    {
+        if (_disposed)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync(identifier, args);
+        }
+        catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private async Task<T?> SafeJsReturn<T>(string identifier, params object[] args)
+    {
+        if (_disposed)
+            return default;
+
+        try
+        {
+            return await JS.InvokeAsync<T>(identifier, args);
+        }
+        catch (JSDisconnectedException) { return default; }
+        catch (ObjectDisposedException) { return default; }
+        catch (InvalidOperationException) { return default; }
+    }
+
+    // DEPOIS:
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        Nav.LocationChanged += AoNavegar;
+        Abas.OnMudanca += AoMudar;
+        RegistrarRotaAtual(Nav.Uri);
+    }
+
+    private void AoNavegar(object? sender, LocationChangedEventArgs e)
+        => RegistrarRotaAtual(e.Location);
+
+    private void RegistrarRotaAtual(string uri)
+    {
+        var rota = Nav.ToBaseRelativePath(uri).Split('?')[0];
+        Abas.AbrirOuAtivarPorRota(rota);
+    }
+
+    // SUBSTITUIR o método inteiro por:
+    private async Task RemoverNotificacaoPorRotaAtualAsync(string rotaAtual)
+    {
+        if (rotaAtual.StartsWith("ticket/"))
+        {
+            var partes = rotaAtual.Split('/');
+            if (partes.Length >= 2 && int.TryParse(partes[1], out var codigo))
+                await RemoverItemDoGrupo("GRUPO_TICKET", codigo);
+        }
+        else if (rotaAtual == "tickets")
+        {
+            _notificacoesPainel = _notificacoesPainel
+                .Where(x => x.Chave != "GRUPO_TICKET" && x.Chave != "GRUPO_TICKET_SEM_RESP")
+                .ToList();
+        }
+        else if (rotaAtual.StartsWith("card/"))
+        {
+            var partes = rotaAtual.Split('/');
+            if (partes.Length >= 2 && int.TryParse(partes[1], out var codigo))
+            {
+                await RemoverItemDoGrupo("GRUPO_CRM_NOVO", codigo);
+                await RemoverItemDoGrupo("GRUPO_CRM_MSG", codigo);
+            }
+        }
+        else if (rotaAtual.StartsWith("chat-interno"))
+        {
+            _notificacoesPainel = _notificacoesPainel
+                .Where(x => x.Chave != "GRUPO_CHAT")
+                .ToList();
+        }
+        else if (rotaAtual.StartsWith("agendas"))
+        {
+            _notificacoesPainel = _notificacoesPainel
+                .Where(x => x.Chave != "GRUPO_AGENDA")
+                .ToList();
+        }
+        else if (rotaAtual.StartsWith("admin/monitor-backups"))
+        {
+            _notificacoesPainel = _notificacoesPainel
+                .Where(x => x.Chave != "GRUPO_BACKUP")
+                .ToList();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ADICIONAR este método auxiliar junto:
+    private async Task RemoverItemDoGrupo(string chaveGrupo, int codigo)
+    {
+        var grupo = _notificacoesPainel.FirstOrDefault(x => x.Chave == chaveGrupo);
+        if (grupo == null) return;
+
+        grupo.Itens.RemoveAll(i => i.Codigo == codigo);
+
+        if (!grupo.Itens.Any())
+            _notificacoesPainel = _notificacoesPainel
+                .Where(x => x.Chave != chaveGrupo)
+                .ToList();
+        else
+            grupo.Mensagem = FormatarMensagemGrupo(grupo.Itens, grupo.TipoOrigem);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+
+        // Marca offline no Dispose normal (Sair, reload, navegação)
+        try
+        {
+            var usuario = UserState.CurrentUser?.Trim() ?? "";
+            if (!string.IsNullOrWhiteSpace(usuario))
+                _ = ChatInternoService.MarcarOfflineAsync(usuario, CodEmp);
+        }
+        catch { }
+
+        try { _cts?.Cancel(); } catch { }
+        try { _timerTickets?.Dispose(); } catch { }
+        try { _timerOutros?.Dispose(); } catch { }
+        try { _cts?.Dispose(); } catch { }
+        try { _timerCards?.Dispose(); } catch { }
+
+        Nav.LocationChanged -= AoNavegar;
+        Nav.LocationChanged -= OnLocationChanged;
+        Abas.OnMudanca -= AoMudar;
+    }
+
+
+    private async Task AtualizarNotificacoesAgendasTicket()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var usuario = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            var agendas = await TicketService.BuscarAgendasVencidasAsync(usuario);
+
+            agendas = agendas
+                .Where(a =>
+                    !string.IsNullOrWhiteSpace(a.Usuario) &&
+                    a.Usuario.Trim().Equals(usuario, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToList();
+
+            if (!agendas.Any())
+                return;
+
+            if (DateTime.Now - _ultimoAlertaAgendaTicket <= TimeSpan.FromSeconds(10))
+                return;
+
+            _ultimoAlertaAgendaTicket = DateTime.Now;
+
+            foreach (var agenda in agendas)
+            {
+                var prazo = agenda.DataHoraAgenda?.ToString("dd/MM/yyyy HH:mm") ?? "Sem data";
+
+                var texto = string.IsNullOrWhiteSpace(agenda.Anotacao)
+                    ? "Agenda vencida do ticket."
+                    : agenda.Anotacao;
+
+                var mensagemPainel =
+                    $"Ticket #{agenda.CodTicketChamadoC} venceu em {prazo}. {texto}";
+
+                await SafeJs(
+                    "crmToast",
+                    $"⏰ Agenda vencida no Ticket #{agenda.CodTicketChamadoC}",
+                    "danger"
+                );
+
+                await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_AGENDA",
+    tipoOrigem: "AGENDA",
+    tituloGrupo: "📅 Agendas",
+    tipo: "danger",
+    urlGrupo: "/agendas",
+    item: new NotificacaoItemModel
+    {
+        Codigo = agenda.Codigo,
+        Descricao = mensagemPainel,
+        Url = $"/ticket/{agenda.CodTicketChamadoC}",
+        DataHora = DateTime.Now
+    });
+
+                await SafeJs(
+                    "crmNotifyPopup",
+                    "⏰ Agenda vencida",
+                    mensagemPainel,
+                    "/images/logo-evoluttech.png"
+                );
+
+                await SafeJs(
+                    "crmBlinkStart",
+                    $"⏰ AGENDA TICKET #{agenda.CodTicketChamadoC}",
+                    10
+                );
+
+                await SafeJs("crmBeep", 450);
+
+                await TicketService.AtualizarUltimaNotificacaoAgendaAsync(agenda.Codigo);
+            }
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[AgendaTicketNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private async Task LimparTodasNotificacoesPainel()
+    {
+        _notificacoesPainel = new List<NotificacaoPainelModel>();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoverItemPorNotificacaoAsync(NotificacaoItemModel item)
+    {
+        var grupo = _notificacoesPainel
+            .FirstOrDefault(g => g.Itens.Any(i => i.Codigo == item.Codigo && i.Url == item.Url));
+
+        if (grupo == null) return;
+
+        await RemoverItemDoGrupo(grupo.Chave, item.Codigo);
+    }
+
+    private async Task AtualizarChatInterno()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var usuario = UserState.CurrentUser.Trim();
+
+            await ChatInternoService.AtualizarPresencaAsync(usuario, CodEmp);
+
+            // DEPOIS:
+            var qtdNovas = await ChatInternoService
+                .ObterQuantidadeMensagensNaoLidasAsync(usuario, CodEmp);
+
+            ChatNotify.SetNovas(qtdNovas);
+
+            if (qtdNovas <= 0)
+                return;
+
+            var ultima = await ChatInternoService
+                .ObterUltimaMensagemNaoLidaAsync(usuario, CodEmp);
+
+            // Garante que a mensagem não foi enviada pelo próprio usuário logado
+            if (ultima == null)
+                return;
+
+            if (ultima.Usuario.Trim().Equals(usuario, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if ((Abas.RotaAtiva ?? "") == "chat-interno")
+                return;
+
+            if (_chatNotificadoLayout.ContainsKey(ultima.Codigo))
+                return;
+
+            _chatNotificadoLayout[ultima.Codigo] = ultima.DataHora;
+
+            var texto = ultima.Texto ?? "";
+
+            if (texto.Length > 80)
+                texto = texto.Substring(0, 80) + "...";
+
+            var usuarioOrigem = string.IsNullOrWhiteSpace(ultima.Usuario)
+                ? "Usuário"
+                : ultima.Usuario.Trim();
+
+            await SafeJs(
+                "crmToast",
+                $"💬 {usuarioOrigem}: {texto}",
+                "warning"
+            );
+
+            await AdicionarItemAoGrupo(
+    chaveGrupo: "GRUPO_CHAT",
+    tipoOrigem: "CHAT",
+    tituloGrupo: "💬 Chat interno",
+    tipo: "warning",
+    urlGrupo: "/chat-interno",
+    item: new NotificacaoItemModel
+    {
+        Codigo = ultima.Codigo,
+        Descricao = $"{usuarioOrigem}: {texto}",
+        Url = "/chat-interno",
+        DataHora = ultima.DataHora
+    });
+
+            await SafeJs(
+                "crmNotifyPopup",
+                $"💬 Nova mensagem de {usuarioOrigem}",
+                texto,
+                "/images/logo-evoluttech.png"
+            );
+
+            await SafeJs("crmBlinkStart", $"💬 Chat interno", 8);
+            await SafeJs("crmBeep", 320);
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[ChatInternoNotify] Erro: {ex.Message}");
+        }
+    }
+
+    private void AoMudar() => InvokeAsync(StateHasChanged);
+
+    private void AtivarAba(AbaItem aba)
+    {
+        Abas.AbrirOuAtivar(aba.ComponenteTipo, aba.Parametros, aba.Rota);
+    }
+
+    private void FecharAba(AbaItem aba)
+    {
+        var proxima = Abas.Fechar(aba.Rota);
+        if (proxima is not null) Nav.NavigateTo(proxima.Rota);
+        else if (Abas.RotaAtiva is null) Nav.NavigateTo("");
+    }
+
+    private async Task AtualizarNotificacoesMensagensPresasAsync()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var usuario = UserState.CurrentUser.Trim().ToUpperInvariant();
+            var mensagens = await TicketService.BuscarMensagensPresasAsync(usuario);
+
+            var idsPresos = mensagens.Select(m => m.Codigo).ToHashSet();
+
+            foreach (var msg in mensagens)
+            {
+                if (!_mensagensFailedNotificadas.TryGetValue(msg.Codigo, out var ultimaNotif))
+                {
+                    // ← usa a tupla corretamente
+                    _mensagensFailedNotificadas[msg.Codigo] = (DateTime.Now, 1);
+                    continue;
+                }
+
+                // ← acessa o campo da tupla
+                if (DateTime.Now - ultimaNotif.UltimaNotificacao < TimeSpan.FromMinutes(2))
+                    continue;
+
+                // ← incrementa contagem e atualiza timestamp
+                _mensagensFailedNotificadas[msg.Codigo] = (DateTime.Now, ultimaNotif.Contagem + 1);
+
+            }
+
+            var resolvidas = _mensagensFailedNotificadas.Keys
+                .Where(id => !idsPresos.Contains(id))
+                .ToList();
+
+            foreach (var id in resolvidas)
+            {
+                _mensagensFailedNotificadas.Remove(id);
+                await RemoverNotificacaoPainel($"MSG_PRESA_{id}");
+            }
+
+            var expiradas = _mensagensFailedNotificadas
+                .Where(x => DateTime.Now - x.Value.UltimaNotificacao > TimeSpan.FromHours(24))
+                .Select(x => x.Key)
+                .ToList();
+
+            foreach (var key in expiradas)
+                _mensagensFailedNotificadas.Remove(key);
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[MsgPresaNotify] Erro: {ex.Message}");
+        }
+    }
+
+    // DEPOIS
+private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
+{
+    // Só injeta IsVisible em componentes que declaram esse parâmetro
+    if (aba.ComponenteTipo == typeof(EvolutCRM.Components.Pages.ChatInterno))
+    {
+        var p = new Dictionary<string, object?>(aba.Parametros)
+        {
+            ["IsVisible"] = (object?)ativa
+        };
+        return p;
+    }
+
+    return aba.Parametros;
+}
+
+}

@@ -1,0 +1,1050 @@
+﻿@page "/whatsapp-conexoes"
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject EvolutCRM.Services.UserState UserState
+@using System.Net.Http.Json
+@using System.Text.Json
+
+
+<style>
+    .wa-page {
+        max-width: 1100px;
+        margin: 30px auto;
+        padding: 0 16px;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    .wa-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .wa-title {
+        font-size: 1.6rem;
+        font-weight: 950;
+        color: #0d47a1;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .btn-nova {
+        background: linear-gradient(135deg, #16a34a, #059669);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 18px;
+        font-size: .88rem;
+        font-weight: 900;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        box-shadow: 0 6px 16px rgba(22,163,74,.28);
+        transition: .15s ease;
+    }
+
+        .btn-nova:hover {
+            transform: translateY(-1px);
+            filter: brightness(1.05);
+        }
+
+    .wa-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+    }
+
+    .wa-card {
+        background: #ffffff;
+        border: 1.5px solid #dbeafe;
+        border-radius: 16px;
+        padding: 18px;
+        box-shadow: 0 4px 14px rgba(15,23,42,.06);
+        transition: .15s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+        .wa-card:hover {
+            box-shadow: 0 8px 22px rgba(15,23,42,.10);
+            transform: translateY(-1px);
+        }
+
+    .wa-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .wa-card-nome {
+        font-size: 1rem;
+        font-weight: 950;
+        color: #0d47a1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .wa-status-pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: .68rem;
+        font-weight: 900;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .pill-conectado {
+        background: #dcfce7;
+        color: #15803d;
+        border: 1px solid #86efac;
+    }
+
+    .pill-aguardando {
+        background: #fef9c3;
+        color: #854d0e;
+        border: 1px solid #fde047;
+    }
+
+    .pill-desconectado {
+        background: #f1f5f9;
+        color: #64748b;
+        border: 1px solid #cbd5e1;
+    }
+
+    .pill-erro {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fca5a5;
+    }
+
+    .wa-card-info {
+        font-size: .78rem;
+        color: #475569;
+        font-weight: 700;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+        .wa-card-info span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+    .wa-qr-area {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        background: #f8fbff;
+        border: 1.5px dashed #93c5fd;
+        border-radius: 12px;
+    }
+
+        .wa-qr-area img {
+            width: 200px;
+            height: 200px;
+            border-radius: 8px;
+            border: 2px solid #dbeafe;
+        }
+
+    .wa-qr-hint {
+        font-size: .72rem;
+        color: #64748b;
+        font-weight: 700;
+        text-align: center;
+    }
+
+    .wa-qr-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 16px;
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+
+    .wa-spinner {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 3px solid #dbeafe;
+        border-top: 3px solid #2563eb;
+        animation: spin .8s linear infinite;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .wa-card-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .btn-conectar {
+        flex: 1;
+        background: linear-gradient(135deg, #0d47a1, #1565c0);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: .78rem;
+        font-weight: 900;
+        cursor: pointer;
+        transition: .15s ease;
+    }
+
+        .btn-conectar:hover {
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+
+    .btn-desconectar {
+        flex: 1;
+        background: #fff7ed;
+        color: #c2410c;
+        border: 1.5px solid #fed7aa;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: .78rem;
+        font-weight: 900;
+        cursor: pointer;
+        transition: .15s ease;
+    }
+
+        .btn-desconectar:hover {
+            background: #ffedd5;
+            transform: translateY(-1px);
+        }
+
+    .btn-excluir {
+        background: #fff;
+        color: #dc2626;
+        border: 1.5px solid #fecaca;
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: .78rem;
+        font-weight: 900;
+        cursor: pointer;
+        transition: .15s ease;
+        width: 36px;
+        display: grid;
+        place-items: center;
+    }
+
+        .btn-excluir:hover {
+            background: #fee2e2;
+            transform: translateY(-1px);
+        }
+
+    .wa-ping-info {
+        font-size: .66rem;
+        color: #94a3b8;
+        font-weight: 700;
+        text-align: right;
+    }
+
+    .ping-ok {
+        color: #16a34a;
+    }
+
+    .ping-off {
+        color: #ef4444;
+    }
+
+    /* Modal nova conexão */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .modal-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        width: 400px;
+        max-width: 95vw;
+        box-shadow: 0 24px 60px rgba(0,0,0,.22);
+        border: 1.5px solid #dbeafe;
+    }
+
+    .modal-title {
+        font-size: 1.1rem;
+        font-weight: 950;
+        color: #0d47a1;
+        margin-bottom: 16px;
+    }
+
+    .modal-label {
+        font-size: .78rem;
+        font-weight: 900;
+        color: #0d47a1;
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    .modal-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 1.5px solid #bfdbfe;
+        border-radius: 9px;
+        font-size: .88rem;
+        outline: none;
+        margin-bottom: 16px;
+    }
+
+        .modal-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+
+    .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+
+    .btn-modal-cancelar {
+        background: #f1f5f9;
+        color: #64748b;
+        border: 1.5px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 9px 16px;
+        font-weight: 900;
+        font-size: .82rem;
+        cursor: pointer;
+    }
+
+    .btn-modal-criar {
+        background: linear-gradient(135deg, #0d47a1, #1565c0);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 9px 16px;
+        font-weight: 900;
+        font-size: .82rem;
+        cursor: pointer;
+    }
+
+    .wa-vazio {
+        text-align: center;
+        padding: 48px 24px;
+        color: #94a3b8;
+        font-size: .9rem;
+        font-weight: 700;
+    }
+
+    .msg-erro {
+        background: #fee2e2;
+        color: #7f1d1d;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 800;
+        font-size: .82rem;
+    }
+
+    .msg-ok {
+        background: #dcfce7;
+        color: #14532d;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 800;
+        font-size: .82rem;
+    }
+</style>
+
+<div class="wa-page">
+    <div style="background:#fff; border:1.5px solid #dbeafe; border-radius:12px; padding:14px 18px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:10px; height:10px; border-radius:50%; background:@(ServicoRodando ? "#22c55e" : "#94a3b8"); box-shadow:@(ServicoRodando ? "0 0 8px #22c55e" : "none");"></div>
+            <div>
+                <div style="font-size:.82rem; font-weight:900; color:#0d47a1;">Serviço Node (Baileys)</div>
+                <div style="font-size:.72rem; color:#64748b;">@(ServicoRodando ? "● Rodando" : "○ Parado")</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+            @if (!ServicoRodando)
+            {
+                <button class="btn-conectar" @onclick="IniciarServico" disabled="@ProcessandoServico">
+                    @(ProcessandoServico ? "Iniciando..." : "▶ Iniciar Serviço")
+                </button>
+            }
+            else
+            {
+                <button class="btn-desconectar" @onclick="PararServico" disabled="@ProcessandoServico">
+                    @(ProcessandoServico ? "Parando..." : "⏹ Parar Serviço")
+                </button>
+            }
+        </div>
+    </div>
+    <div class="wa-header">
+        <div class="wa-title">
+            📱 Conexões WhatsApp
+        </div>
+        @* <button class="btn-nova" @onclick="AbrirModalNova">
+            ➕ Nova Conexão
+        </button> *@
+    </div>
+
+    @if (!string.IsNullOrEmpty(Mensagem))
+    {
+        <div class="@(Sucesso ? "msg-ok" : "msg-erro")" style="margin-bottom:16px;">
+            @Mensagem
+        </div>
+    }
+
+    @if (Carregando)
+    {
+        <div class="wa-qr-loading">
+            <div class="wa-spinner"></div>
+            Carregando conexões...
+        </div>
+    }
+    else if (!Instancias.Any())
+    {
+        <div class="wa-vazio">
+            Preparando conexões padrão da empresa.<br />
+            Aguarde alguns segundos e atualize a tela se necessário.
+        </div>
+    }
+    else
+    {
+        <div class="wa-grid">
+            @foreach (var inst in Instancias)
+            {
+                <div class="wa-card">
+
+                    <div class="wa-card-header">
+                        <div class="wa-card-nome">@inst.Nome</div>
+                        <span class="wa-status-pill @PillClass(inst.Status)">
+                            @TextoStatus(inst.Status)
+                        </span>
+                    </div>
+
+                    <div class="wa-card-info">
+                        @if (!string.IsNullOrWhiteSpace(inst.Numero))
+                        {
+                            <span>📞 @inst.Numero</span>
+                        }
+                        @if (inst.DataConexao.HasValue)
+                        {
+                            <span>🔗 Conectado em @inst.DataConexao.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                        }
+                    </div>
+
+                    @if (inst.Status == "aguardando_qr")
+                    {
+                        <div class="wa-qr-area">
+                            @if (!string.IsNullOrWhiteSpace(inst.QrCodeBase64))
+                            {
+                                <img src="@inst.QrCodeBase64" alt="QR Code WhatsApp" />
+                                <div class="wa-qr-hint">
+                                    Abra o WhatsApp → Dispositivos Vinculados → Vincular dispositivo
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="wa-qr-loading">
+                                    <div class="wa-spinner"></div>
+                                    Gerando QR Code...
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (inst.Status == "conectado" && inst.DataUltimoPing.HasValue)
+                    {
+                        var segsDesdeUltimoPing = (DateTime.Now - inst.DataUltimoPing.Value).TotalSeconds;
+                        var pingOk = segsDesdeUltimoPing < 90;
+                        <div class="wa-ping-info @(pingOk ? "ping-ok" : "ping-off")">
+                            @(pingOk ? "● Node ativo" : "⚠ Node pode estar offline")
+                            · último ping @((int)segsDesdeUltimoPing)s atrás
+                        </div>
+                    }
+
+                    <div class="wa-card-actions">
+                        @if (inst.Status == "desconectado" || inst.Status == "erro")
+                        {
+                            <button class="btn-conectar"
+                                    @onclick="() => Conectar(inst.Codigo)"
+                                    disabled="@Processando">
+                                🔌 Conectar
+                            </button>
+                        }
+                        else if (inst.Status == "aguardando_qr")
+                        {
+                            <button class="btn-conectar"
+                                    @onclick="() => Conectar(inst.Codigo)"
+                                    disabled="@Processando">
+                                🔄 Gerar novo QR
+                            </button>
+                            <button class="btn-desconectar"
+                                    @onclick="() => Desconectar(inst.Codigo)"
+                                    disabled="@Processando">
+                                Cancelar
+                            </button>
+                        }
+                        else if (inst.Status == "conectado")
+                        {
+                            <button class="btn-desconectar"
+                                    @onclick="() => Desconectar(inst.Codigo)"
+                                    disabled="@Processando">
+                                ⏹ Desconectar
+                            </button>
+                        }
+
+                        @* Botão Novo QR — sempre visível *@
+                        <button class="btn-excluir"
+                                title="Forçar novo QR (mantém o mesmo número)"
+                                style="width:auto; padding:9px 12px; font-size:.72rem;"
+                                @onclick="() => ForcarNovoQr(inst.Codigo, inst.Nome)"
+                                disabled="@Processando">
+                            📷 Novo QR
+                        </button>
+
+                        @* Excluir — só aparece quando desconectado *@
+                        @if (inst.Status == "desconectado")
+                        {
+                            <button class="btn-excluir"
+                                    title="Excluir conexão permanentemente"
+                                    @onclick="() => Excluir(inst.Codigo, inst.Nome)"
+                                    disabled="@Processando">
+                                🗑
+                            </button>
+                        }
+                    </div>
+
+                </div>
+            }
+        </div>
+    }
+
+</div>
+
+@if (MostrarModal)
+{
+    <div class="modal-backdrop">
+        <div class="modal-card">
+            <div class="modal-title">➕ Nova Conexão WhatsApp</div>
+
+            <label class="modal-label">Nome da conexão</label>
+            <input class="modal-input"
+                   @bind="NomeNova"
+                   placeholder="Ex.: Suporte, Comercial, Financeiro..." />
+
+            <small style="font-size:.72rem; color:#64748b; font-weight:700; display:block; margin-top:-10px; margin-bottom:14px;">
+                Identifica qual número está sendo usado nesta conexão.
+            </small>
+
+            @if (!string.IsNullOrEmpty(ErroModal))
+            {
+                <div class="msg-erro" style="margin-bottom:12px;">@ErroModal</div>
+            }
+
+            <div class="modal-actions">
+                <button class="btn-modal-cancelar" @onclick="FecharModal">Cancelar</button>
+                <button class="btn-modal-criar"
+                        @onclick="CriarInstancia"
+                        disabled="@Processando">
+                    @(Processando ? "Criando..." : "Criar e Conectar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    // ── Estado ─────────────────────────────────────────────
+    private List<InstanciaVm> Instancias = new();
+    private bool Carregando = true;
+    private bool Processando = false;
+    private bool MostrarModal = false;
+    private bool Sucesso = false;
+    private string Mensagem = "";
+    private string NomeNova = "";
+    private string ErroModal = "";
+    private bool ServicoRodando = false;
+    private bool ProcessandoServico = false;
+    private int CodEmpAtual => UserState.CurrentCompanyId > 0 ? UserState.CurrentCompanyId : 2;
+
+    // No WhatsAppConexoes.razor — linha do Http:
+    private HttpClient Http => new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
+
+    private System.Threading.Timer? _timerPolling;
+
+    // ── Ciclo de vida ──────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarInstancias();
+        await VerificarStatusServico(); // verifica imediatamente ao abrir a página
+
+        // Polling a cada 3s para atualizar QR e status em tempo real
+        _timerPolling = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await AtualizarInstanciasComQr();
+                await VerificarStatusServico(); // dentro do InvokeAsync para atualizar a UI
+                StateHasChanged();
+            });
+        }, null, 3000, 3000);
+    }
+
+    // ── Carrega lista completa ─────────────────────────────
+    private async Task CarregarInstancias()
+    {
+        try
+        {
+            Carregando = true;
+            var lista = await Http.GetFromJsonAsync<List<InstanciaVm>>(
+    $"/api/whatsapp-instancia/listar?codEmp={CodEmpAtual}",
+    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            Instancias = (lista ?? new())
+                .Where(x => x.CodEmp == CodEmpAtual)
+                .ToList();
+
+            if (!Instancias.Any())
+            {
+                await CriarInstanciasPadraoEmpresaAsync();
+
+                lista = await Http.GetFromJsonAsync<List<InstanciaVm>>(
+                    $"/api/whatsapp-instancia/listar?codEmp={CodEmpAtual}",
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                Instancias = (lista ?? new())
+                    .Where(x => x.CodEmp == CodEmpAtual)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            Mensagem = "Erro ao carregar conexões. Verifique se a API está rodando.";
+            Sucesso = false;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task CriarInstanciasPadraoEmpresaAsync()
+    {
+        var nomesPadrao = new[]
+        {
+            $"Suporte{CodEmpAtual:00}",
+            $"Comercial{CodEmpAtual:00}"
+        };
+
+        foreach (var nome in nomesPadrao)
+        {
+            try
+            {
+                var resp = await Http.PostAsJsonAsync(
+                    "/api/whatsapp-instancia/criar",
+                    new { Nome = nome, CodEmp = CodEmpAtual });
+
+                if (!resp.IsSuccessStatusCode)
+                {
+                    var err = await resp.Content.ReadFromJsonAsync<ErroResponse>(
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    var erro = err?.Erro ?? await resp.Content.ReadAsStringAsync();
+
+                    if (!erro.Contains("existe", StringComparison.OrdinalIgnoreCase) &&
+                        !erro.Contains("duplic", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Mensagem = $"Não foi possível criar a conexão padrão {nome}: {erro}";
+                        Sucesso = false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Mensagem = $"Erro ao criar conexão padrão {nome}: {ex.Message}";
+                Sucesso = false;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(Mensagem))
+        {
+            Mensagem = $"Conexões padrão da empresa {CodEmpAtual} preparadas.";
+            Sucesso = true;
+        }
+    }
+
+    // ── Polling leve: atualiza QR e status de cada instância ──
+    private async Task AtualizarInstanciasComQr()
+    {
+        foreach (var inst in Instancias)
+        {
+            try
+            {
+                var resp = await Http.GetFromJsonAsync<QrResponse>(
+                    $"/api/whatsapp-instancia/qr/{inst.Codigo}?codEmp={CodEmpAtual}",
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (resp != null)
+                {
+                    inst.Status = resp.Status;
+                    inst.QrCodeBase64 = resp.QrCodeBase64;
+                    inst.Numero = resp.Numero ?? inst.Numero;
+                }
+            }
+            catch { }
+        }
+    }
+
+    // ── Criar nova instância ───────────────────────────────
+    private void AbrirModalNova()
+    {
+        NomeNova = "";
+        ErroModal = "";
+        MostrarModal = true;
+    }
+
+    private void FecharModal() => MostrarModal = false;
+
+    private async Task CriarInstancia()
+    {
+        if (string.IsNullOrWhiteSpace(NomeNova))
+        {
+            ErroModal = "Informe um nome para a conexão.";
+            return;
+        }
+
+        try
+        {
+            Processando = true;
+            ErroModal = "";
+
+            var resp = await Http.PostAsJsonAsync(
+                "/api/whatsapp-instancia/criar",
+                new { Nome = NomeNova.Trim(), CodEmp = CodEmpAtual });
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await resp.Content.ReadFromJsonAsync<ErroResponse>();
+                ErroModal = err?.Erro ?? "Erro ao criar conexão.";
+                return;
+            }
+
+            MostrarModal = false;
+
+            // Recarrega lista e já manda conectar
+            await CarregarInstancias();
+
+            var nova = Instancias.FirstOrDefault(x =>
+                x.Nome.Equals(NomeNova.Trim(), StringComparison.OrdinalIgnoreCase));
+
+            if (nova != null)
+                await Conectar(nova.Codigo);
+
+            Mensagem = $"Conexão '{NomeNova}' criada! Escaneie o QR Code.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            ErroModal = "Erro: " + ex.Message;
+        }
+        finally
+        {
+            Processando = false;
+        }
+    }
+
+    // ── Conectar ───────────────────────────────────────────
+    private async Task Conectar(int codigo)
+    {
+        try
+        {
+            Processando = true;
+            Mensagem = "";
+
+            var resp = await Http.PostAsJsonAsync(
+                "/api/whatsapp-instancia/conectar",
+                new { Codigo = codigo, CodEmp = CodEmpAtual });
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await resp.Content.ReadFromJsonAsync<ErroResponse>();
+                Mensagem = err?.Erro ?? "Erro ao conectar.";
+                Sucesso = false;
+                return;
+            }
+
+            // Atualiza o status local imediatamente
+            var inst = Instancias.FirstOrDefault(x => x.Codigo == codigo);
+            if (inst != null)
+            {
+                inst.Status = "aguardando_qr";
+                inst.QrCodeBase64 = null;
+            }
+
+            Mensagem = "Aguardando QR Code...";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            Processando = false;
+        }
+    }
+
+    private async Task ForcarNovoQr(int codigo, string nome)
+    {
+        var confirmar = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Isso vai apagar a sessão atual de '{nome}' e gerar um novo QR Code.\n" +
+            $"O número {codigo} continuará sendo o mesmo no sistema.\n\n" +
+            $"Confirmar?");
+
+        if (!confirmar) return;
+
+        try
+        {
+            Processando = true;
+            Mensagem = "";
+
+            // Chama endpoint novo que apaga auth e reconecta
+            var resp = await Http.PostAsJsonAsync(
+                "/api/whatsapp-instancia/forcar-novo-qr",
+                new { Codigo = codigo, CodEmp = CodEmpAtual });
+
+            if (!resp.IsSuccessStatusCode)
+            {
+                var err = await resp.Content.ReadFromJsonAsync<ErroResponse>();
+                Mensagem = err?.Erro ?? "Erro ao forçar novo QR.";
+                Sucesso = false;
+                return;
+            }
+
+            var inst = Instancias.FirstOrDefault(x => x.Codigo == codigo);
+            if (inst != null)
+            {
+                inst.Status = "aguardando_qr";
+                inst.QrCodeBase64 = null;
+            }
+
+            Mensagem = $"✅ Novo QR gerado para '{nome}'. Escaneie com o WhatsApp.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            Processando = false;
+        }
+    }
+
+    // ── Desconectar ────────────────────────────────────────
+    private async Task Desconectar(int codigo)
+    {
+        try
+        {
+            Processando = true;
+
+            await Http.PostAsJsonAsync(
+                "/api/whatsapp-instancia/desconectar",
+                new { Codigo = codigo, CodEmp = CodEmpAtual });
+
+            var inst = Instancias.FirstOrDefault(x => x.Codigo == codigo);
+            if (inst != null)
+            {
+                inst.Status = "desconectado";
+                inst.QrCodeBase64 = null;
+            }
+
+            Mensagem = "Conexão desconectada.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            Processando = false;
+        }
+    }
+
+    // ── Excluir ────────────────────────────────────────────
+    private async Task Excluir(int codigo, string nome)
+    {
+        var confirmar = await JS.InvokeAsync<bool>(
+            "confirm", $"Deseja excluir a conexão '{nome}'? Esta ação não pode ser desfeita.");
+
+        if (!confirmar) return;
+
+        try
+        {
+            Processando = true;
+
+            await Http.PostAsJsonAsync(
+                "/api/whatsapp-instancia/excluir",
+                new { Codigo = codigo, CodEmp = CodEmpAtual });
+
+            Instancias.RemoveAll(x => x.Codigo == codigo);
+
+            Mensagem = $"Conexão '{nome}' excluída.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            Processando = false;
+        }
+    }
+
+    // ── Helpers de UI ──────────────────────────────────────
+    private string PillClass(string status) => status switch
+    {
+        "conectado" => "pill-conectado",
+        "aguardando_qr" => "pill-aguardando",
+        "erro" => "pill-erro",
+        _ => "pill-desconectado"
+    };
+
+    private string TextoStatus(string status) => status switch
+    {
+        "conectado" => "● Conectado",
+        "aguardando_qr" => "⏳ Aguardando QR",
+        "erro" => "⚠ Erro",
+        _ => "○ Desconectado"
+    };
+
+    public void Dispose()
+    {
+        _timerPolling?.Dispose();
+    }
+
+    private async Task VerificarStatusServico()
+    {
+        if (ProcessandoServico) return;   // não sobrescreve estado durante start/stop
+
+        try
+        {
+            var resp = await Http.GetFromJsonAsync<StatusServicoResponse>(
+                "/api/whatsapp-instancia/servico/status",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            ServicoRodando = resp?.Rodando ?? false;
+        }
+        catch { ServicoRodando = false; }
+    }
+
+    private async Task IniciarServico()
+    {
+        ProcessandoServico = true;
+        try
+        {
+            await Http.PostAsJsonAsync("/api/whatsapp-instancia/servico/iniciar", new { });
+
+            // Aguarda até 10s verificando a cada 1s se o Node já subiu
+            for (int i = 0; i < 10; i++)
+            {
+                await Task.Delay(1000);
+                await VerificarStatusServico();
+                StateHasChanged();
+                if (ServicoRodando) break;
+            }
+
+            Mensagem = ServicoRodando
+                ? "Serviço iniciado com sucesso!"
+                : "Serviço iniciado.";
+            Sucesso = ServicoRodando;
+        }
+        catch (Exception ex) { Mensagem = "Erro: " + ex.Message; Sucesso = false; }
+        finally { ProcessandoServico = false; }
+    }
+
+    private async Task PararServico()
+    {
+        ProcessandoServico = true;
+        try
+        {
+            await Http.PostAsJsonAsync("/api/whatsapp-instancia/servico/parar", new { });
+
+            ProcessandoServico = false;   // libera o VerificarStatusServico
+            for (int i = 0; i < 10; i++)
+            {
+                await Task.Delay(1000);
+                await VerificarStatusServico();
+                StateHasChanged();
+                if (!ServicoRodando) break;
+            }
+            ProcessandoServico = true;    // restaura para o finally zerar
+
+            Mensagem = ServicoRodando
+                ? "Serviço enviado para parar — aguarde alguns segundos."
+                : "Serviço parado.";
+            Sucesso = true; // NSSM pode demorar mas vai parar
+        }
+        catch (Exception ex) { Mensagem = "Erro: " + ex.Message; Sucesso = false; }
+        finally { ProcessandoServico = false; }
+    }
+
+    private class StatusServicoResponse
+    {
+        public bool Rodando { get; set; }
+    }
+
+    // ── ViewModels ─────────────────────────────────────────
+    private class InstanciaVm
+    {
+        public int Codigo { get; set; }
+        public string Nome { get; set; } = "";
+        public string Status { get; set; } = "desconectado";
+        public string? Numero { get; set; }
+        public string? QrCodeBase64 { get; set; }
+        public DateTime? DataConexao { get; set; }
+        public DateTime? DataUltimoPing { get; set; }
+        public int CodEmp { get; set; }
+
+    }
+
+    private class QrResponse
+    {
+        public string Status { get; set; } = "";
+        public string? QrCodeBase64 { get; set; }
+        public string? Numero { get; set; }
+    }
+
+    private class ErroResponse
+    {
+        public string Erro { get; set; } = "";
+    }
+}

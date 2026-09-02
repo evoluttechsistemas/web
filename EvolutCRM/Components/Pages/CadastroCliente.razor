@@ -1,0 +1,836 @@
+﻿@page "/cadastro-cliente"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject ClienteCadastroService ClienteService
+@inject AdminService AdminService
+@inject UserState UserState
+@inject IJSRuntime JS
+
+<PageTitle>Cadastro de Cliente</PageTitle>
+
+<div class="cc-wrap">
+    <div class="cc-header">
+        <div>
+            <div class="cc-title">
+                <span class="cc-title-ico"><i class="fas fa-users"></i></span>
+                <span>Cadastro de Cliente</span>
+            </div>
+            <div class="cc-subtitle">@EmpresaAtual</div>
+        </div>
+
+        <button type="button" class="cc-btn primary" @onclick="NovoCliente" disabled="@(!PodeEditarCadastroCliente)">
+            <i class="fas fa-plus"></i>
+            Novo cliente
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensagem))
+    {
+        <div class="cc-alert @(classeMensagem == "alert-success" ? "ok" : "err")">@mensagem</div>
+    }
+
+    <div class="cc-grid">
+        <section class="cc-card">
+            <EditForm Model="cliente" OnValidSubmit="SalvarAsync">
+                <DataAnnotationsValidator />
+
+                <div class="cc-card-head">
+                    <div class="cc-card-title">
+                        @(cliente.Codigo > 0 ? $"Editando cliente #{cliente.Codigo}" : "Novo cliente")
+                    </div>
+
+                    <label class="cc-check">
+                        <InputCheckbox @bind-Value="cliente.Inativo" />
+                        <span>Inativo</span>
+                    </label>
+                </div>
+
+                <div class="cc-card-body">
+                    <ValidationSummary />
+
+                    <div class="cc-row two">
+                        <div class="cc-field">
+                            <label>Nome</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Nome" />
+                            <ValidationMessage For="@(() => cliente.Nome)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>Apelido</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Apelido" />
+                            <ValidationMessage For="@(() => cliente.Apelido)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row three">
+                        <div class="cc-field">
+                            <label>CPF/CNPJ</label>
+                            <InputText class="cc-input" @bind-Value="cliente.CpfCnpj" />
+                            <ValidationMessage For="@(() => cliente.CpfCnpj)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>Telefone</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Telefone" />
+                            <ValidationMessage For="@(() => cliente.Telefone)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>Celular</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Celular" />
+                            <ValidationMessage For="@(() => cliente.Celular)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row two">
+                        <div class="cc-field">
+                            <label>E-mail</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Email" />
+                            <ValidationMessage For="@(() => cliente.Email)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>CEP</label>
+                            <InputText class="cc-input" @bind-Value="cliente.CEP" />
+                            <ValidationMessage For="@(() => cliente.CEP)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row address">
+                        <div class="cc-field">
+                            <label>Endereço</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Endereco" />
+                            <ValidationMessage For="@(() => cliente.Endereco)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>Número</label>
+                            <InputText class="cc-input" @bind-Value="cliente.NumeroEndereco" />
+                            <ValidationMessage For="@(() => cliente.NumeroEndereco)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row three">
+                        <div class="cc-field">
+                            <label>Bairro</label>
+                            <InputText class="cc-input" @bind-Value="cliente.Bairro" />
+                            <ValidationMessage For="@(() => cliente.Bairro)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>Cidade</label>
+                            <InputText class="cc-input" @bind-Value="cliente.NomeCidade" />
+                            <ValidationMessage For="@(() => cliente.NomeCidade)" />
+                        </div>
+
+                        <div class="cc-field">
+                            <label>UF</label>
+                            <InputText class="cc-input" maxlength="2" @bind-Value="cliente.UF" />
+                            <ValidationMessage For="@(() => cliente.UF)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row">
+                        <div class="cc-field">
+                            <label>Complemento</label>
+                            <InputText class="cc-input" @bind-Value="cliente.ComplementoEndereco" />
+                            <ValidationMessage For="@(() => cliente.ComplementoEndereco)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-row">
+                        <div class="cc-field">
+                            <label>Observação</label>
+                            <InputTextArea class="cc-input cc-textarea" @bind-Value="cliente.Observacao" />
+                            <ValidationMessage For="@(() => cliente.Observacao)" />
+                        </div>
+                    </div>
+
+                    <div class="cc-form-actions">
+                        <button type="submit" class="cc-btn primary" disabled="@(!PodeEditarCadastroCliente || salvando)">
+                            <i class="fas fa-save"></i>
+                            @(salvando ? "Salvando..." : "Salvar")
+                        </button>
+
+                        <button type="button" class="cc-btn" @onclick="NovoCliente" disabled="@salvando">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+
+                        @if (cliente.Codigo > 0)
+                        {
+                            <button type="button" class="cc-btn danger" @onclick="ExcluirAtualAsync" disabled="@(!PodeEditarCadastroCliente || salvando)">
+                                <i class="fas fa-trash"></i>
+                                Excluir
+                            </button>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </section>
+
+        <section class="cc-card">
+            <div class="cc-card-head">
+                <div class="cc-card-title">Clientes cadastrados</div>
+                <span class="cc-counter">@clientes.Count cliente(s)</span>
+            </div>
+
+            <div class="cc-toolbar">
+                <InputText class="cc-input" placeholder="Buscar por nome, apelido, CPF/CNPJ ou código"
+                           @bind-Value="termoBusca" />
+
+                <label class="cc-check">
+                    <InputCheckbox @bind-Value="incluirInativos" />
+                    <span>Inativos</span>
+                </label>
+
+                <button type="button" class="cc-btn" @onclick="CarregarAsync" disabled="@carregando">
+                    <i class="fas fa-search"></i>
+                    Buscar
+                </button>
+            </div>
+
+            @if (carregando)
+            {
+                <div class="cc-empty">Carregando clientes...</div>
+            }
+            else if (clientes.Count == 0)
+            {
+                <div class="cc-empty">Nenhum cliente encontrado.</div>
+            }
+            else
+            {
+                <div class="cc-table-wrap">
+                    <table class="cc-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Cliente</th>
+                                <th>CPF/CNPJ</th>
+                                <th>Contato</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in clientes)
+                            {
+                                <tr class="@(item.Inativo ? "cc-muted-row" : "")">
+                                    <td>@item.Codigo</td>
+                                    <td>
+                                        <span class="cc-main-text">@item.Nome</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Apelido))
+                                        {
+                                            <span class="cc-sub-text">@item.Apelido</span>
+                                        }
+                                    </td>
+                                    <td>@item.CpfCnpj</td>
+                                    <td>
+                                        <span>@item.Telefone</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Celular))
+                                        {
+                                            <span class="cc-sub-text">@item.Celular</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="cc-status @(item.Inativo ? "off" : "")">
+                                            @(item.Inativo ? "Inativo" : "Ativo")
+                                        </span>
+                                    </td>
+                                    <td class="cc-actions-cell">
+                                        <button type="button" class="cc-icon-btn" title="Editar cliente"
+                                                @onclick="() => EditarAsync(item.Codigo)">
+                                            <i class="fas fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+<style>
+    .cc-wrap {
+        --cc-ink: #0f172a;
+        --cc-ink2: #334155;
+        --cc-muted: #64748b;
+        --cc-line: #e2e8f0;
+        --cc-bg: #f0f4fd;
+        --cc-card: #ffffff;
+        --cc-blue: #2563eb;
+        --cc-blue-d: #1e3a8a;
+        --cc-red: #dc2626;
+        --cc-rad: 14px;
+        --cc-rad-sm: 10px;
+        --cc-tr: .16s ease;
+        height: 100%;
+        overflow-y: auto;
+        background: var(--cc-bg);
+        color: var(--cc-ink);
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        padding: 20px 22px 40px;
+    }
+
+        .cc-wrap::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .cc-wrap::-webkit-scrollbar-thumb {
+            background: #c7d2e8;
+            border-radius: 999px;
+        }
+
+    .cc-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .cc-title {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--cc-blue-d);
+        line-height: 1.15;
+    }
+
+    .cc-title-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: linear-gradient(135deg, var(--cc-blue), var(--cc-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, .32);
+    }
+
+    .cc-subtitle {
+        font-size: 12.5px;
+        color: var(--cc-muted);
+        margin-top: 6px;
+        margin-left: 51px;
+        font-weight: 600;
+    }
+
+    .cc-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 38px;
+        padding: 0 15px;
+        border-radius: var(--cc-rad-sm);
+        border: 1px solid var(--cc-line);
+        background: var(--cc-card);
+        color: var(--cc-ink2);
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--cc-tr);
+        white-space: nowrap;
+    }
+
+        .cc-btn:hover {
+            border-color: var(--cc-blue);
+            color: var(--cc-blue);
+            background: #f5f9ff;
+        }
+
+        .cc-btn.primary {
+            background: linear-gradient(135deg, var(--cc-blue), var(--cc-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(37, 99, 235, .28);
+        }
+
+            .cc-btn.primary:hover {
+                color: #fff;
+                filter: brightness(1.03);
+            }
+
+        .cc-btn.danger {
+            background: #fff;
+            color: var(--cc-red);
+            border-color: #fecaca;
+        }
+
+        .cc-btn:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+        }
+
+    .cc-alert {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: var(--cc-rad-sm);
+        font-size: 12.5px;
+        font-weight: 700;
+        border: 1px solid var(--cc-line);
+        background: var(--cc-card);
+    }
+
+        .cc-alert.ok {
+            color: #166534;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+
+        .cc-alert.err {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+    .cc-grid {
+        display: grid;
+        grid-template-columns: minmax(430px, 560px) minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .cc-card {
+        background: var(--cc-card);
+        border: 1px solid var(--cc-line);
+        border-radius: var(--cc-rad);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+        overflow: hidden;
+    }
+
+    .cc-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--cc-line);
+        background: #f8fbff;
+    }
+
+    .cc-card-title {
+        font-size: 14px;
+        font-weight: 850;
+        color: var(--cc-blue-d);
+    }
+
+    .cc-card-body {
+        padding: 16px;
+    }
+
+    .cc-row {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+        .cc-row.two {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .cc-row.three {
+            grid-template-columns: 1fr 1fr 110px;
+        }
+
+        .cc-row.address {
+            grid-template-columns: 1fr 110px;
+        }
+
+    .cc-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+    }
+
+        .cc-field label {
+            font-size: 11.5px;
+            font-weight: 800;
+            color: var(--cc-ink2);
+        }
+
+    .cc-input {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #cbd5e1;
+        border-radius: var(--cc-rad-sm);
+        padding: 7px 10px;
+        background: #fff;
+        color: var(--cc-ink);
+        font: inherit;
+        font-size: 12.5px;
+        outline: none;
+        transition: var(--cc-tr);
+    }
+
+        .cc-input:focus {
+            border-color: var(--cc-blue);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+        }
+
+    .cc-textarea {
+        min-height: 88px;
+        resize: vertical;
+    }
+
+    .cc-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--cc-muted);
+        font-size: 12px;
+        font-weight: 700;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+        .cc-check input {
+            accent-color: var(--cc-blue);
+        }
+
+    .cc-form-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding-top: 4px;
+    }
+
+    .cc-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--cc-line);
+        background: #f8fbff;
+    }
+
+        .cc-toolbar .cc-input {
+            flex: 1;
+        }
+
+    .cc-counter {
+        color: var(--cc-muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .cc-empty {
+        margin: 16px;
+        padding: 24px;
+        border: 1px dashed #cbd5e1;
+        border-radius: var(--cc-rad-sm);
+        color: var(--cc-muted);
+        text-align: center;
+        font-size: 12.5px;
+        font-weight: 700;
+        background: #f8fafc;
+    }
+
+    .cc-table-wrap {
+        overflow: auto;
+    }
+
+    .cc-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+    }
+
+        .cc-table th {
+            padding: 10px 12px;
+            text-align: left;
+            color: var(--cc-muted);
+            background: #f8fbff;
+            border-bottom: 1px solid var(--cc-line);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            white-space: nowrap;
+        }
+
+        .cc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+        .cc-table tbody tr:hover {
+            background: #f8fbff;
+        }
+
+        .cc-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+    .cc-main-text {
+        font-weight: 800;
+        color: var(--cc-ink);
+    }
+
+    .cc-sub-text {
+        display: block;
+        margin-top: 2px;
+        font-size: 11.5px;
+        color: var(--cc-muted);
+    }
+
+    .cc-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 800;
+        background: #dcfce7;
+        color: #166534;
+    }
+
+        .cc-status.off {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+    .cc-muted-row {
+        opacity: .62;
+    }
+
+    .cc-actions-cell {
+        width: 1%;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .cc-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--cc-line);
+        background: #fff;
+        color: var(--cc-blue-d);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--cc-tr);
+    }
+
+        .cc-icon-btn:hover {
+            border-color: var(--cc-blue);
+            color: var(--cc-blue);
+            background: #eff6ff;
+        }
+
+    .validation-errors {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: var(--cc-rad-sm);
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .validation-message {
+        color: #dc2626;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    @@media (max-width: 1100px) {
+        .cc-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 720px) {
+        .cc-wrap {
+            padding: 16px 14px 32px;
+        }
+
+        .cc-row.two,
+        .cc-row.three,
+        .cc-row.address {
+            grid-template-columns: 1fr;
+        }
+
+        .cc-toolbar {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .cc-btn {
+            width: 100%;
+        }
+
+        .cc-header .cc-btn {
+            width: auto;
+        }
+    }
+</style>
+
+@code {
+    private ClienteCadastroModel cliente = new();
+    private List<ClienteCadastroModel> clientes = new();
+    private string termoBusca = "";
+    private bool incluirInativos;
+    private bool carregando;
+    private bool salvando;
+    private bool PodeVisualizarCadastroCliente;
+    private bool PodeEditarCadastroCliente;
+    private string mensagem = "";
+    private string classeMensagem = "alert-info";
+
+    private string EmpresaAtual =>
+        UserState.CurrentCompanyId > 0
+            ? $"Empresa: {UserState.CurrentCompany} ({UserState.CurrentCompanyId})"
+            : "Empresa não carregada";
+
+    protected override async Task OnInitializedAsync()
+    {
+        PodeVisualizarCadastroCliente = await AdminService.UsuarioTemPermissaoAsync(
+            UserState.CurrentUser,
+            "CADASTROS_CLIENTES_VISUALIZAR");
+
+        PodeEditarCadastroCliente = await AdminService.UsuarioTemPermissaoAsync(
+            UserState.CurrentUser,
+            "CADASTROS_CLIENTES_EDITAR");
+
+        if (!PodeVisualizarCadastroCliente)
+        {
+            MostrarErro("Voce nao tem permissao para acessar o cadastro de clientes.");
+            return;
+        }
+
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            carregando = true;
+            clientes = await ClienteService.ListarAsync(termoBusca, incluirInativos);
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao carregar clientes: {ex.Message}");
+        }
+        finally
+        {
+            carregando = false;
+        }
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (!PodeEditarCadastroCliente)
+        {
+            MostrarErro("Voce nao tem permissao para alterar cadastro de clientes.");
+            return;
+        }
+
+        try
+        {
+            salvando = true;
+
+            var codigo = await ClienteService.SalvarAsync(cliente);
+            cliente = await ClienteService.ObterAsync(codigo) ?? new ClienteCadastroModel();
+
+            MostrarSucesso("Cliente salvo com sucesso.");
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao salvar cliente: {ex.Message}");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private async Task EditarAsync(int codigo)
+    {
+        try
+        {
+            var encontrado = await ClienteService.ObterAsync(codigo);
+            if (encontrado is null)
+            {
+                MostrarErro("Cliente não encontrado para a empresa logada.");
+                return;
+            }
+
+            cliente = encontrado;
+            mensagem = "";
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao abrir cliente: {ex.Message}");
+        }
+    }
+
+    private async Task ExcluirAtualAsync()
+    {
+        if (!PodeEditarCadastroCliente)
+        {
+            MostrarErro("Voce nao tem permissao para excluir clientes.");
+            return;
+        }
+
+        if (cliente.Codigo <= 0)
+            return;
+
+        var confirmar = await JS.InvokeAsync<bool>("confirm", "Deseja realmente excluir este cliente?");
+        if (!confirmar)
+            return;
+
+        try
+        {
+            salvando = true;
+            await ClienteService.ExcluirAsync(cliente.Codigo);
+            NovoCliente();
+            MostrarSucesso("Cliente excluído com sucesso.");
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarErro($"Erro ao excluir cliente: {ex.Message}");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private void NovoCliente()
+    {
+        cliente = new ClienteCadastroModel();
+        mensagem = "";
+        classeMensagem = "alert-info";
+    }
+
+    private void MostrarSucesso(string texto)
+    {
+        mensagem = texto;
+        classeMensagem = "alert-success";
+    }
+
+    private void MostrarErro(string texto)
+    {
+        mensagem = texto;
+        classeMensagem = "alert-danger";
+    }
+}

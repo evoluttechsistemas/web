@@ -1,0 +1,556 @@
+﻿@page "/admin/log-acesso"
+@inject EvolutCRM.Services.LogAcessoService LogAcessoService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@using EvolutCRM.Models
+
+<style>
+    .la-wrap {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+        background: #f0f4fd;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    /* ── HEADER ── */
+    .la-header {
+        flex-shrink: 0;
+        padding: 16px 20px 14px;
+        background: linear-gradient(135deg, #1e3a8a, #172554);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid rgba(255,255,255,.1);
+    }
+
+    .la-header-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.22);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+    }
+
+    .la-header-title {
+        flex: 1;
+        min-width: 0;
+    }
+
+        .la-header-title h1 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            line-height: 1.2;
+        }
+
+        .la-header-title span {
+            font-size: 11px;
+            color: #93c5fd;
+            font-weight: 500;
+        }
+
+    .la-badge-total {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.15);
+        border: 1px solid rgba(255,255,255,.22);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    /* ── FILTROS ── */
+    .la-filters {
+        flex-shrink: 0;
+        padding: 12px 16px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-end;
+    }
+
+    .la-filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+        .la-filter-group label {
+            font-size: 10px;
+            font-weight: 700;
+            color: #1e40af;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .la-filter-group select,
+        .la-filter-group input {
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid #dbeafe;
+            border-radius: 8px;
+            background: #f8fbff;
+            color: #0f172a;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            outline: none;
+            transition: border-color .15s, box-shadow .15s;
+        }
+
+            .la-filter-group select:focus,
+            .la-filter-group input:focus {
+                border-color: #3b82f6;
+                background: #fff;
+                box-shadow: 0 0 0 3px rgba(59,130,246,.13);
+            }
+
+    .la-btn {
+        height: 34px;
+        padding: 0 16px;
+        border-radius: 8px;
+        border: none;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: filter .15s, transform .15s;
+    }
+
+        .la-btn:hover:not(:disabled) {
+            filter: brightness(1.06);
+            transform: translateY(-1px);
+        }
+
+        .la-btn:disabled {
+            opacity: .6;
+            cursor: wait;
+        }
+
+    .la-btn-primary {
+        background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(29,78,216,.25);
+    }
+
+    .la-btn-ghost {
+        background: #f1f5f9;
+        color: #475569;
+        border: 1px solid #e2e8f0;
+    }
+
+    /* ── STATS ── */
+    .la-stats {
+        flex-shrink: 0;
+        display: flex;
+        gap: 8px;
+        padding: 10px 16px;
+        background: #f8fbff;
+        border-bottom: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+
+    .la-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        border: 1px solid;
+    }
+
+    .la-stat-login {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #15803d;
+    }
+
+    .la-stat-logout {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+
+    .la-stat-exp {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #c2410c;
+    }
+
+    .la-stat-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+    }
+
+    /* ── TABLE AREA ── */
+    .la-table-wrap {
+        flex: 1;
+        overflow: auto;
+        padding: 12px 16px;
+    }
+
+        .la-table-wrap::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        .la-table-wrap::-webkit-scrollbar-thumb {
+            background: #bfdbfe;
+            border-radius: 999px;
+        }
+
+    .la-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+    }
+
+        .la-table th {
+            position: sticky;
+            top: 0;
+            background: #1e3a8a;
+            color: #bfdbfe;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            padding: 9px 10px;
+            text-align: left;
+            white-space: nowrap;
+            z-index: 2;
+        }
+
+            .la-table th:first-child {
+                border-radius: 8px 0 0 0;
+            }
+
+            .la-table th:last-child {
+                border-radius: 0 8px 0 0;
+            }
+
+        .la-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #1e293b;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .la-table tbody tr:hover td {
+            background: #f0f4fd;
+        }
+
+        .la-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+    .la-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        border: 1px solid;
+    }
+
+    .la-chip-login {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+        color: #15803d;
+    }
+
+    .la-chip-logout {
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1d4ed8;
+    }
+
+    .la-chip-exp {
+        background: #fff7ed;
+        border-color: #fed7aa;
+        color: #c2410c;
+    }
+
+    .la-user-cell {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .la-avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        background: linear-gradient(135deg, #1d4ed8, #1e3a8a);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .la-ua {
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: #64748b;
+        font-size: 11px;
+    }
+
+    .la-empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: #94a3b8;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .la-loading {
+        text-align: center;
+        padding: 40px 20px;
+        color: #3b82f6;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    @@media (max-width: 768px) {
+        .la-filters {
+            gap: 8px;
+        }
+
+        .la-filter-group select,
+        .la-filter-group input {
+            min-width: 120px;
+        }
+
+        .col-ua, .col-emp {
+            display: none;
+        }
+    }
+</style>
+
+<div class="la-wrap">
+
+    <!-- HEADER -->
+    <div class="la-header">
+        <div class="la-header-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+        </div>
+        <div class="la-header-title">
+            <h1>Log de Acesso</h1>
+            <span>Logins registrados no sistema</span>
+        </div>
+        @if (registros != null)
+        {
+            <div class="la-badge-total">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+                @registros.Count registros
+            </div>
+        }
+    </div>
+
+    <!-- FILTROS -->
+    <div class="la-filters">
+        <div class="la-filter-group">
+            <label>Usuário</label>
+            <select @bind="filtroUsuario">
+                <option value="">Todos</option>
+                @foreach (var u in usuarios)
+                {
+                    <option value="@u">@u</option>
+                }
+            </select>
+        </div>
+
+        
+        <div class="la-filter-group">
+            <label>De</label>
+            <input type="date" @bind="filtroDe" />
+        </div>
+
+        <div class="la-filter-group">
+            <label>Até</label>
+            <input type="date" @bind="filtroAte" />
+        </div>
+
+        <button class="la-btn la-btn-primary" @onclick="FiltrarAsync" disabled="@carregando">
+            @(carregando ? "Buscando..." : "Filtrar")
+        </button>
+
+        <button class="la-btn la-btn-ghost" @onclick="LimparFiltrosAsync" disabled="@carregando">
+            Limpar
+        </button>
+    </div>
+
+    <!-- STATS -->
+    @if (registros != null && registros.Any())
+    {
+        <div class="la-stats">
+            <div class="la-stat la-stat-login">
+                <span class="la-stat-dot"></span>
+                @registros.Count(r => r.TipoEvento == "LOGIN") Logins
+            </div>
+            <div class="la-stat la-stat-logout">
+                <span class="la-stat-dot"></span>
+                @registros.Count(r => r.TipoEvento == "LOGOUT") Logouts
+            </div>
+            <div class="la-stat la-stat-exp">
+                <span class="la-stat-dot"></span>
+                @registros.Count(r => r.TipoEvento == "SESSAO_EXPIRADA") Sessões Expiradas
+            </div>
+        </div>
+    }
+
+    <!-- TABELA -->
+    <div class="la-table-wrap">
+        @if (carregando)
+        {
+            <div class="la-loading">Carregando registros...</div>
+        }
+        else if (registros == null || !registros.Any())
+        {
+            <div class="la-empty">Nenhum registro encontrado para os filtros selecionados.</div>
+        }
+        else
+        {
+            <table class="la-table">
+                <thead>
+                    <tr>
+                        <th>Data / Hora</th>
+                        <th>Usuário</th>
+                        <th class="col-emp">Empresa</th>
+                        <th>Evento</th>
+                        <th>IP</th>
+                        <th class="col-ua">Navegador / Agente</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in registros)
+                    {
+                        <tr>
+                            <td>@r.DataHora.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            <td>
+                                <div class="la-user-cell">
+                                    <div class="la-avatar">@ObterIniciais(r.Usuario)</div>
+                                    @r.Usuario
+                                </div>
+                            </td>
+                            <td class="col-emp">@(string.IsNullOrWhiteSpace(r.NomeEmpresa) ? "-" : r.NomeEmpresa)</td>
+                            <td>
+                                <span class="la-chip @ObterChipClass(r.TipoEvento)">
+                                    @ObterLabel(r.TipoEvento)
+                                </span>
+                            </td>
+                            <td>@(string.IsNullOrWhiteSpace(r.Ip) ? "-" : r.Ip)</td>
+                            <td class="col-ua">
+                                <div class="la-ua" title="@r.UserAgent">
+                                    @(string.IsNullOrWhiteSpace(r.UserAgent) ? "-" : r.UserAgent)
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+</div>
+
+@code {
+    private List<LogAcessoModel>? registros;
+    private List<string> usuarios = new();
+    private bool carregando = false;
+
+    private string filtroUsuario = "";
+    private DateTime? filtroDe = DateTime.Today;
+    private DateTime? filtroAte = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        usuarios = await LogAcessoService.ObterUsuariosAsync();
+    }
+
+    private async Task FiltrarAsync()
+    {
+        carregando = true;
+        StateHasChanged();
+
+        registros = await LogAcessoService.ObterAsync(
+            usuario: string.IsNullOrWhiteSpace(filtroUsuario) ? null : filtroUsuario,
+            codEmp: null,
+            de: filtroDe,
+            ate: filtroAte,
+            limite: 500,
+            tipoEvento: "LOGIN");
+
+        carregando = false;
+    }
+
+    private async Task LimparFiltrosAsync()
+    {
+        filtroUsuario = "";
+        filtroDe = DateTime.Today;
+        filtroAte = DateTime.Today;
+        await FiltrarAsync();
+    }
+
+    private static string ObterIniciais(string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(usuario)) return "?";
+        var partes = usuario.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return partes.Length >= 2
+            ? $"{partes[0][0]}{partes[1][0]}"
+            : usuario.Length >= 2 ? usuario[..2] : usuario;
+    }
+
+    private static string ObterChipClass(string tipo) => tipo switch
+    {
+        "LOGIN" => "la-chip-login",
+        "LOGOUT" => "la-chip-logout",
+        "SESSAO_EXPIRADA" => "la-chip-exp",
+        _ => "la-chip-logout"
+    };
+
+    private static string ObterLabel(string tipo) => tipo switch
+    {
+        "LOGIN" => "Login",
+        "LOGOUT" => "Logout",
+        "SESSAO_EXPIRADA" => "Sessão Expirada",
+        _ => tipo
+    };
+}

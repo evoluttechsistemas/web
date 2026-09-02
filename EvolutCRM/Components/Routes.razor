@@ -1,0 +1,16 @@
+﻿@using EvolutCRM.Components.Layout
+@using EvolutCRM.Abas
+
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        @if (routeData.PageType == typeof(EvolutCRM.Components.Pages.Login))
+        {
+            <RouteView RouteData="routeData" DefaultLayout="typeof(LoginLayout)" />
+        }
+        else
+        {
+            <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+        }
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

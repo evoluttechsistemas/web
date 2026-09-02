@@ -1,0 +1,2717 @@
+﻿@page "/tickets"
+@implements IDisposable
+@using EvolutCRM.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.WebUtilities
+
+@inject EvolutCRM.Services.TicketService TicketService
+@inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@inject TicketNotificationState TicketNotify
+@inject IJSRuntime JS
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+
+    :root {
+        --b50: #eff6ff;
+        --b100: #dbeafe;
+        --b200: #bfdbfe;
+        --b300: #93c5fd;
+        --b400: #60a5fa;
+        --b500: #3b82f6;
+        --b600: #2563eb;
+        --b700: #1d4ed8;
+        --b800: #1e40af;
+        --b900: #1e3a8a;
+        --b950: #172554;
+        --surface: #ffffff;
+        --bg: #eef7ff;
+        --bg2: #e0f2fe;
+        --ink: #0f172a;
+        --ink2: #1e293b;
+        --ink3: #334155;
+        --muted: #64748b;
+        --soft: #94a3b8;
+        --line: #cbd5e1;
+        --g50: #f0fdf4;
+        --g600: #16a34a;
+        --g700: #15803d;
+        --g100: #dcfce7;
+        --g800: #166534;
+        --r50: #fff1f2;
+        --r100: #ffe4e6;
+        --r600: #dc2626;
+        --r700: #b91c1c;
+        --r800: #7f1d1d;
+        --a50: #fffbeb;
+        --a100: #fef3c7;
+        --a600: #d97706;
+        --a700: #b45309;
+        --a800: #78350f;
+        --v50: #eff6ff;
+        --v100: #dbeafe;
+        --v600: #2563eb;
+        --v700: #1d4ed8;
+        --v800: #1e40af;
+        --p50: #fdf4ff;
+        --p100: #fae8ff;
+        --p600: #c026d3;
+        --p800: #701a75;
+        --rad: 4px;
+        --rad2: 6px;
+        --rad3: 10px;
+        --sh: 0 1px 2px rgba(15,23,42,.06),0 2px 8px rgba(15,23,42,.05);
+        --sh2: 0 4px 16px rgba(37,99,235,.18),0 1px 4px rgba(37,99,235,.1);
+        --tr: .13s ease;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    .tk {
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 11px;
+        color: var(--ink);
+        background: var(--bg);
+        min-height: 100vh;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ SHELL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-shell {
+        max-width: 1680px;
+        margin: 0 auto;
+        padding: 10px 14px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TOPBAR Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .tk-search {
+        position: relative;
+        flex: 1;
+        min-width: 180px;
+    }
+
+    .tk-search-ico {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--soft);
+        pointer-events: none;
+        display: flex;
+    }
+
+    .tk-search input {
+        width: 100%;
+        height: 28px;
+        padding: 0 8px 0 28px;
+        border: 1.5px solid var(--b300);
+        border-radius: 999px;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        color: var(--ink);
+        background: #fff;
+        outline: none;
+        transition: var(--tr);
+    }
+
+        .tk-search input:focus {
+            border-color: var(--b500);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.2);
+        }
+
+        .tk-search input::placeholder {
+            color: var(--soft);
+        }
+
+    .tk-btn {
+        height: 28px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: none;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        .tk-btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .tk-btn:active {
+            transform: none;
+        }
+
+    .tk-btn-ghost {
+        background: #fff;
+        border: 1.5px solid var(--b300);
+        color: var(--b700);
+    }
+
+        .tk-btn-ghost:hover {
+            background: var(--b50);
+            border-color: var(--b500);
+        }
+
+    .tk-btn-solid {
+        background: linear-gradient(135deg,var(--b600),var(--b900));
+        color: #fff;
+        box-shadow: var(--sh2);
+    }
+
+        .tk-btn-solid:hover {
+            box-shadow: 0 6px 20px rgba(37,99,235,.4);
+        }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ TABS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .tk-tab {
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1.5px solid var(--line);
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: #fff;
+        color: var(--muted);
+    }
+
+        .tk-tab:hover {
+            background: var(--b50);
+            color: var(--b700);
+            border-color: var(--b300);
+        }
+
+        .tk-tab.active {
+            background: linear-gradient(135deg,var(--b600),var(--b900));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: var(--sh2);
+        }
+
+    .tk-tab-n {
+        font-size: 9px;
+        font-weight: 800;
+        border-radius: 999px;
+        padding: 1px 5px;
+        min-width: 16px;
+        text-align: center;
+        line-height: 1.6;
+        background: rgba(255,255,255,.22);
+        color: inherit;
+    }
+
+    .tk-tab:not(.active) .tk-tab-n {
+        background: var(--b100);
+        color: var(--b800);
+    }
+
+    .tk-card-cols {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .tk-card-cols-panel {
+        position: absolute;
+        right: 0;
+        top: 31px;
+        z-index: 15;
+        width: 250px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: var(--rad3);
+        background: #fff;
+        box-shadow: var(--sh2);
+    }
+
+    .tk-card-cols-title {
+        margin: 4px 0 6px;
+        color: var(--muted);
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 8px;
+        font-weight: 900;
+        text-transform: uppercase;
+    }
+
+    .tk-card-cols-item {
+        min-height: 26px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--ink2);
+        font-size: 10px;
+        font-weight: 750;
+        cursor: pointer;
+    }
+
+        .tk-card-cols-item input {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--b600);
+        }
+
+    .tk-card-cols-foot {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+    }
+
+    .tk-subtabs {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    .tk-subtab {
+        height: 23px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1.5px solid var(--b200);
+        background: #fff;
+        color: var(--b700);
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 9.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        .tk-subtab.active {
+            background: var(--b100);
+            border-color: var(--b500);
+            color: var(--b900);
+        }
+
+    .tk-subtab-n {
+        background: var(--b200);
+        color: var(--b900);
+        font-size: 9px;
+        font-weight: 800;
+        border-radius: 999px;
+        padding: 1px 5px;
+        min-width: 14px;
+        text-align: center;
+    }
+
+    .tk-chip-search {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 23px;
+        padding: 0 9px;
+        background: #fffbeb;
+        border: 1.5px solid #fcd34d;
+        border-radius: 999px;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: #92400e;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CARD + GRID Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-card {
+        background: var(--surface);
+        border-radius: var(--rad3);
+        overflow: hidden;
+        border: 1.5px solid var(--b200);
+        box-shadow: var(--sh);
+    }
+
+    /*
+                  Colunas fixas - dimensionadas pelo conteÃƒÂºdo real:
+                  #00000 | Assunto (flex) | Cliente(120) | ResponsÃƒÂ¡vel(80) | Prio(64) | Tipo(72) | Status(80) | Abrir(46)
+                */
+    .tk-grid {
+        display: grid;
+        grid-template-columns: 58px 1fr 120px 80px 70px 64px 72px 80px 46px;
+        align-items: stretch;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ THEAD Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-thead {
+        border-bottom: 2px solid var(--b900);
+    }
+
+        .tk-thead > span {
+            font-family: 'IBM Plex Mono',monospace;
+            font-size: 8.5px;
+            font-weight: 700;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            padding: 7px 6px;
+            display: flex;
+            align-items: center;
+            background: linear-gradient(180deg,var(--b700) 0%,var(--b900) 100%);
+            border-right: 1px solid rgba(255,255,255,.1);
+        }
+
+            .tk-thead > span:last-child {
+                border-right: none;
+            }
+
+            .tk-thead > span:nth-child(n+4) {
+                justify-content: center;
+            }
+
+            /* Destaque colorido por coluna no header */
+            .tk-thead > span:nth-child(1) {
+                background: linear-gradient(180deg,#1e40af,#172554);
+            }
+
+            .tk-thead > span:nth-child(2) {
+                background: linear-gradient(180deg,var(--b700),var(--b900));
+            }
+
+            .tk-thead > span:nth-child(3) {
+                background: linear-gradient(180deg,#1d4ed8,#1e3a8a);
+            }
+
+            .tk-thead > span:nth-child(4) {
+                background: linear-gradient(180deg,#1e3a8a,#172554);
+            }
+
+            .tk-thead > span:nth-child(5) {
+                background: linear-gradient(180deg,#1d4ed8,#1e40af);
+            }
+
+            .tk-thead > span:nth-child(6) {
+                background: linear-gradient(180deg,#1e40af,#1e3a8a);
+            }
+
+            .tk-thead > span:nth-child(7) {
+                background: linear-gradient(180deg,var(--b700),var(--b900));
+            }
+
+            .tk-thead > span:nth-child(8) {
+                background: linear-gradient(180deg,#172554,#0f172a);
+            }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ROWS Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-row {
+        cursor: pointer;
+        border-bottom: 1px solid var(--line);
+        transition: background var(--tr);
+        position: relative;
+    }
+
+        .tk-row:last-child {
+            border-bottom: none;
+        }
+
+        .tk-row:hover {
+            background: var(--b50);
+        }
+
+        .tk-row::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            border-radius: 0 2px 2px 0;
+            background: transparent;
+            transition: var(--tr);
+        }
+
+        .tk-row:hover::before {
+            background: var(--b400);
+        }
+
+        .tk-row.novo::before {
+            background: #7f1d1d;
+            width: 4px;
+            box-shadow: 0 0 10px rgba(127,29,29,.9);
+        }
+
+        .tk-row.sla-danger::before {
+            background: var(--r600);
+        }
+
+        .tk-row.sla-warning::before {
+            background: var(--a600);
+        }
+
+        .tk-row.sla-ok::before {
+            background: var(--g600);
+        }
+
+        .tk-row.aprovacao-aprovado::before {
+            background: var(--g600);
+        }
+
+        .tk-row.aprovacao-recusado::before {
+            background: var(--r600);
+        }
+
+        .tk-row.novo {
+            animation: tkNovoPulse 1s ease-in-out infinite;
+            border-bottom: 1px solid rgba(153,27,27,.3);
+        }
+
+    @@keyframes tkNovoPulse {
+        0%, 100% {
+            background: #fecaca;
+            box-shadow: inset 4px 0 0 #991b1b, 0 0 0 rgba(153,27,27,0);
+        }
+
+        50% {
+            background: #fca5a5;
+            box-shadow: inset 4px 0 0 #7f1d1d, 0 3px 22px rgba(153,27,27,.35);
+        }
+    }
+
+    .tk-row.novo .cc-code {
+        color: #7f1d1d;
+    }
+
+    .tk-row.novo .cc-title {
+        color: #450a0a;
+    }
+
+    .tk-row.novo:hover {
+        animation: none;
+        background: #f87171;
+    }
+
+    .tk-row.sla-danger {
+        background: #fffafa;
+    }
+
+    .tk-row.aprovacao-aprovado {
+        background: #f0fdf6;
+    }
+
+    .tk-row.aprovacao-recusado {
+        background: #fff5f5;
+    }
+
+    /* cÃƒÂ©lulas */
+    .tk-row > div {
+        padding: 5px 6px;
+        border-right: 1px solid #f1f5f9;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        align-self: stretch;
+    }
+
+        .tk-row > div:last-child {
+            border-right: none;
+        }
+
+        .tk-row > div:nth-child(n+4) {
+            justify-content: center;
+        }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ CELL CONTENT Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .cc-code {
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 9.5px;
+        font-weight: 700;
+        color: var(--b700);
+        letter-spacing: .02em;
+        white-space: nowrap;
+    }
+
+    .cc-title {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--ink);
+        line-height: 1.22;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+    }
+
+    .cc-sub {
+        font-size: 8.5px;
+        color: var(--soft);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .cc-client {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--ink3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+    }
+
+    .cc-user {
+        font-size: 9px;
+        font-weight: 700;
+        color: var(--b800);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+        background: var(--b100);
+        border-radius: 3px;
+        padding: 2px 4px;
+        line-height: 1.4;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ BADGES Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .bx {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 9px;
+        font-weight: 700;
+        white-space: nowrap;
+        letter-spacing: .02em;
+        line-height: 1.4;
+    }
+
+    /* prioridade */
+    .px-1 {
+        background: var(--g100);
+        color: var(--g800);
+    }
+
+    .px-2 {
+        background: var(--b100);
+        color: var(--b800);
+    }
+
+    .px-3 {
+        background: var(--a100);
+        color: var(--a800);
+    }
+
+    .px-4 {
+        background: var(--r100);
+        color: var(--r800);
+    }
+
+    /* tipo */
+    .tx-melhoria {
+        background: var(--g100);
+        color: var(--g800);
+    }
+
+    .tx-erro {
+        background: var(--r100);
+        color: var(--r800);
+    }
+
+    .tx-mnv {
+        background: var(--p100);
+        color: var(--p800);
+    }
+
+    .tx-chamado {
+        background: var(--v100);
+        color: var(--v800);
+    }
+
+    /* status */
+    .sx-1 {
+        background: var(--b100);
+        color: var(--b800);
+    }
+
+    .sx-2 {
+        background: var(--v100);
+        color: var(--v800);
+    }
+
+    .sx-3 {
+        background: var(--g100);
+        color: var(--g800);
+    }
+
+    .sx-4 {
+        background: var(--a100);
+        color: var(--a800);
+    }
+
+    .sx-5 {
+        background: var(--p100);
+        color: var(--p800);
+    }
+
+    .sx-6 {
+        background: #fef9c3;
+        color: #713f12;
+        border: 1px solid #fde047;
+    }
+
+    /* novo badge */
+    .bx-novo {
+        font-size: 7.5px;
+        font-weight: 800;
+        padding: 1px 5px;
+        border-radius: 2px;
+        background: #991b1b;
+        color: #fff;
+        letter-spacing: .05em;
+        margin-left: 4px;
+        vertical-align: middle;
+        box-shadow: 0 0 6px rgba(153,27,27,.6);
+        animation: tkNovoBadge 1s ease-in-out infinite;
+    }
+
+    @@keyframes tkNovoBadge {
+        0%, 100% {
+            background: #991b1b;
+            box-shadow: 0 0 5px rgba(153,27,27,.6);
+        }
+
+        50% {
+            background: #7f1d1d;
+            box-shadow: 0 0 12px rgba(127,29,29,.9);
+        }
+    }
+
+    /* SLA tag */
+    .sla-t {
+        font-size: 8.5px;
+        font-weight: 700;
+        padding: 1px 4px;
+        border-radius: 2px;
+        white-space: nowrap;
+    }
+
+        .sla-t.ok {
+            background: var(--g100);
+            color: var(--g700);
+        }
+
+        .sla-t.warn {
+            background: var(--a100);
+            color: var(--a700);
+        }
+
+        .sla-t.danger {
+            background: var(--r100);
+            color: var(--r700);
+        }
+
+        .sla-t.none {
+            background: var(--b50);
+            color: var(--soft);
+        }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ OPEN BTN Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-open {
+        height: 22px;
+        padding: 0 8px;
+        border-radius: var(--rad);
+        border: none;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 9px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        background: linear-gradient(135deg,var(--b500),var(--b700));
+        color: #fff;
+        white-space: nowrap;
+        letter-spacing: .02em;
+    }
+
+        .tk-open:hover {
+            background: linear-gradient(135deg,var(--b600),var(--b800));
+            transform: translateY(-1px);
+        }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ EMPTY Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .tk-empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--soft);
+        font-size: 10.5px;
+        font-weight: 600;
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FILTER MODAL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    .f-back {
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,.52);
+        backdrop-filter: blur(5px);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px;
+    }
+
+    .f-panel {
+        width: 100%;
+        max-width: 680px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 24px 60px rgba(15,23,42,.24);
+        overflow: hidden;
+        animation: fIn .18s ease;
+    }
+
+    @@keyframes fIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .f-head {
+        background: linear-gradient(135deg,var(--b700),var(--b950));
+        padding: 16px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+    }
+
+    .f-head-t {
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        margin: 0;
+    }
+
+    .f-head-s {
+        font-size: 10px;
+        color: var(--b300);
+        margin-top: 2px;
+    }
+
+    .f-close {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(255,255,255,.3);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: var(--tr);
+        line-height: 1;
+    }
+
+        .f-close:hover {
+            background: rgba(255,255,255,.25);
+        }
+
+    .f-body {
+        padding: 16px 18px;
+    }
+
+    .f-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .f-field {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+        .f-field.full {
+            grid-column: 1/-1;
+        }
+
+    .f-label {
+        font-size: 9.5px;
+        font-weight: 700;
+        color: var(--ink3);
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .f-ctrl {
+        height: 30px;
+        padding: 0 9px;
+        border: 1.5px solid var(--b200);
+        border-radius: var(--rad2);
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        color: var(--ink);
+        background: #fff;
+        outline: none;
+        transition: var(--tr);
+        width: 100%;
+        -webkit-appearance: none;
+    }
+
+        .f-ctrl:focus {
+            border-color: var(--b500);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+
+    .f-auto {
+        list-style: none;
+        background: #fff;
+        border: 1.5px solid var(--b200);
+        border-radius: var(--rad2);
+        margin-top: 3px;
+        max-height: 140px;
+        overflow-y: auto;
+        box-shadow: var(--sh2);
+    }
+
+        .f-auto li {
+            padding: 6px 9px;
+            font-size: 10px;
+            cursor: pointer;
+            color: var(--ink3);
+            transition: var(--tr);
+        }
+
+            .f-auto li:hover {
+                background: var(--b50);
+                color: var(--b700);
+            }
+
+    .f-check {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 10.5px;
+        font-weight: 600;
+        color: var(--ink3);
+        cursor: pointer;
+        padding: 3px 0;
+    }
+
+        .f-check input {
+            width: 13px;
+            height: 13px;
+            accent-color: var(--b600);
+            cursor: pointer;
+        }
+
+    .f-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        padding: 12px 18px;
+        border-top: 1.5px solid var(--line);
+        background: var(--b50);
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RESPONSIVE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    @@media(max-width:960px) {
+        .tk-shell {
+            padding: 8px 8px 20px;
+        }
+
+        .tk-bar {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+
+        .tk-search {
+            grid-column: 1/-1;
+        }
+
+        .tk-btn {
+            width: 100%;
+            justify-content: center;
+            border-radius: var(--rad2);
+        }
+
+        .tk-tabs {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 4px;
+        }
+
+        .tk-tab {
+            border-radius: var(--rad2);
+            justify-content: space-between;
+            height: 29px;
+        }
+
+        .tk-thead {
+            display: none;
+        }
+
+        .tk-card {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            overflow: visible;
+        }
+
+        .tk-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            padding: 10px;
+            border-radius: var(--rad2);
+            border: 1.5px solid var(--b200);
+            margin-bottom: 6px;
+            background: #fff;
+            box-shadow: var(--sh);
+        }
+
+            .tk-row > div {
+                border-right: none;
+                padding: 0;
+                align-self: auto;
+            }
+
+                .tk-row > div:nth-child(n+4) {
+                    justify-content: flex-start;
+                }
+
+            .tk-row::before {
+                top: 0;
+                bottom: auto;
+                right: 0;
+                left: 0;
+                width: auto;
+                height: 3px;
+                border-radius: var(--rad2) var(--rad2) 0 0;
+            }
+
+        .tk-open {
+            width: 100%;
+            height: 28px;
+            border-radius: var(--rad2);
+            font-size: 10px;
+            margin-top: 2px;
+        }
+    }
+
+    @@media(max-width:600px) {
+        .tk-tabs {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .tk-bar {
+            grid-template-columns: 1fr;
+        }
+
+        .f-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .f-field.full {
+            grid-column: 1;
+        }
+
+        .f-foot {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+            .f-foot .tk-btn-solid {
+                grid-column: 1/-1;
+                order: -1;
+            }
+    }
+
+    @@media(max-width:768px) {
+        .f-back {
+            align-items: flex-end;
+            padding: 0;
+        }
+
+        .f-panel {
+            border-radius: 14px 14px 0 0;
+            max-height: 92vh;
+            overflow-y: auto;
+            animation: fUp .2s ease;
+        }
+
+        @@keyframes fUp {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        .f-head {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+
+        .f-foot {
+            position: sticky;
+            bottom: 0;
+        }
+    }
+
+    /* ===== VISAO EM CARDS ===== */
+    .tk-card-board {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(190px, 240px);
+        gap: 8px;
+        align-items: start;
+        overflow-x: auto;
+        padding-bottom: 6px;
+    }
+
+    .tk-card-col {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--rad3);
+        box-shadow: var(--sh);
+        overflow: hidden;
+        min-width: 0;
+    }
+
+        .tk-card-col.suporte-alert {
+            border-color: #b91c1c;
+            box-shadow: 0 0 0 2px rgba(185,28,28,.35), 0 0 18px rgba(185,28,28,.28), var(--sh);
+            animation: tkPulseRed 0.85s infinite;
+        }
+
+    .tk-card-head {
+        height: 34px;
+        padding: 0 9px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        border-bottom: 1px solid var(--line);
+        font-size: 10.2px;
+        font-weight: 900;
+        color: var(--b900);
+        background: linear-gradient(135deg, var(--b50), #fff);
+    }
+
+        .tk-card-head.dev {
+            color: var(--v800);
+            background: linear-gradient(135deg, var(--v50), #fff);
+        }
+
+        .tk-card-head.atualizar {
+            color: var(--a800);
+            background: linear-gradient(135deg, var(--a50), #fff);
+        }
+
+        .tk-card-head.pendente {
+            color: var(--p800);
+            background: linear-gradient(135deg, var(--p50), #fff);
+        }
+
+        .tk-card-head.aprovacao {
+            color: var(--g800);
+            background: linear-gradient(135deg, var(--g50), #fff);
+        }
+
+        .tk-card-head.finalizado {
+            color: var(--ink2);
+            background: linear-gradient(135deg, #f1f5f9, #fff);
+        }
+
+    .tk-card-count {
+        min-width: 22px;
+        height: 20px;
+        padding: 0 7px;
+        border-radius: 999px;
+        background: var(--b600);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        font-weight: 900;
+    }
+
+    .tk-card-body {
+        height: calc(100vh - 150px);
+        overflow: auto;
+    }
+
+    .tk-card-ticket {
+        position: relative;
+        padding: 7px 8px 7px 10px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+        cursor: pointer;
+        min-width: 0;
+        overflow: hidden;
+        transition: var(--tr);
+    }
+
+        .tk-card-ticket:hover {
+            background: var(--b50);
+        }
+
+        .tk-card-ticket::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 6px;
+            bottom: 6px;
+            width: 3px;
+            border-radius: 999px;
+            background: var(--g600);
+        }
+
+        .tk-card-ticket.ticket-new {
+            background: #fee2e2;
+            animation: tkPulseTicketRed 0.85s infinite;
+        }
+
+            .tk-card-ticket.ticket-new::before {
+                background: var(--r600);
+            }
+
+    .tk-card-ticket-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
+        margin-bottom: 3px;
+    }
+
+    .tk-card-code {
+        color: var(--b700);
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 8.7px;
+        font-weight: 900;
+        flex: 0 0 auto;
+    }
+
+    .tk-card-user {
+        max-width: 78px;
+        padding: 2px 6px;
+        border-radius: 5px;
+        background: var(--b100);
+        color: var(--b800);
+        font-size: 7.8px;
+        font-weight: 900;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+        .tk-card-user.user-new {
+            background: #7f1d1d;
+            color: #fca5a5;
+            box-shadow: 0 0 8px rgba(127,29,29,.55);
+            animation: tkNovoBadge 1s ease-in-out infinite;
+        }
+
+    .tk-card-title {
+        color: var(--ink);
+        font-size: 10px;
+        font-weight: 900;
+        line-height: 1.18;
+        margin-bottom: 3px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    .tk-card-client {
+        color: var(--muted);
+        font-size: 8.5px;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .tk-card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        min-width: 0;
+    }
+
+    .tk-card-sla {
+        flex: 0 0 auto;
+        font-size: 7.8px;
+        font-weight: 950;
+        border-radius: 999px;
+        padding: 2px 6px;
+    }
+
+        .tk-card-sla.ok {
+            background: var(--g100);
+            color: var(--g800);
+        }
+
+        .tk-card-sla.warn {
+            background: var(--a100);
+            color: var(--a800);
+        }
+
+        .tk-card-sla.danger {
+            background: var(--r100);
+            color: var(--r800);
+        }
+
+    .tk-card-empty {
+        padding: 14px 10px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 9.5px;
+        font-weight: 800;
+    }
+
+    @@keyframes tkPulseRed {
+        0%, 100% {
+            box-shadow: 0 0 0 2px rgba(185,28,28,.35), 0 0 14px rgba(185,28,28,.22), var(--sh);
+        }
+
+        50% {
+            box-shadow: 0 0 0 4px rgba(220,38,38,.62), 0 0 26px rgba(220,38,38,.42), var(--sh);
+        }
+    }
+
+    @@keyframes tkPulseTicketRed {
+        0%, 100% {
+            background: #fee2e2;
+        }
+
+        50% {
+            background: #fecaca;
+        }
+    }
+
+    @@media(max-width: 1350px) {
+        .tk-card-board {
+            grid-auto-columns: minmax(220px, 260px);
+        }
+    }
+
+    @@media(max-width: 900px) {
+        .tk-card-board {
+            grid-auto-columns: minmax(240px, 82vw);
+        }
+
+        .tk-card-body {
+            max-height: none;
+        }
+    }
+
+    .cc-viewers {
+        display: flex;
+        gap: 3px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .cc-viewer-badge {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 8px;
+        font-weight: 900;
+        border: 1.5px solid white;
+        box-shadow: 0 1px 4px rgba(0,0,0,.2);
+    }
+
+    .tk-card-viewers {
+        display: flex;
+        gap: 3px;
+        flex-wrap: wrap;
+        margin-top: 3px;
+    }
+
+    .tk-card-viewer-badge {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 6.5px;
+        font-weight: 900;
+        border: 1px solid white;
+        box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+</style>
+
+<div class="tk">
+    <div class="tk-shell">
+
+        <!-- TOPBAR -->
+        <header class="tk-bar">
+            <div class="tk-search">
+                <span class="tk-search-ico">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                </span>
+                <input placeholder="Buscar ticket, cliente, assunto..." @bind="_searchTerm" />
+            </div>
+
+            <button class="tk-btn tk-btn-ghost" @onclick="AbrirFiltro" type="button">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+                Filtrar
+            </button>
+
+            <button class="tk-btn tk-btn-ghost" @onclick="Recarregar" type="button">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
+                Atualizar
+            </button>
+
+            <button class="tk-btn tk-btn-solid" @onclick="NovoTicket" type="button">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                Novo Ticket
+            </button>
+        </header>
+
+        <!-- TABS -->
+        <nav class="tk-tabs">
+            @foreach (var setor in SetoresTicket)
+            {
+                <button type="button" class="@ClasseAbaSetor(setor.Codigo)"
+                        @onclick="@(() => SelecionarAbaSetor(setor.Codigo))"
+                        @ondragenter="PermitirSoltarTicket" @ondragenter:preventDefault="true"
+                        @ondragover="PermitirSoltarTicket" @ondragover:preventDefault="true"
+                        @ondrop="@(() => SoltarTicketNaAbaSetor(setor.Codigo))" @ondrop:preventDefault="true">
+                    @setor.Descricao <span class="tk-tab-n">@CountPorStatusSetor(setor.Codigo)</span>
+                </button>
+            }
+
+            @foreach (var situacao in SituacoesAbasPrincipais)
+            {
+                <button type="button" class="@ClasseAbaStatus(situacao.Codigo)"
+                        @onclick="@(() => SelecionarAbaStatus(situacao.Codigo))"
+                        @ondragenter="PermitirSoltarTicket" @ondragenter:preventDefault="true"
+                        @ondragover="PermitirSoltarTicket" @ondragover:preventDefault="true"
+                        @ondrop="@(() => SoltarTicketNaAba(situacao.Codigo))" @ondrop:preventDefault="true">
+                    @situacao.Descricao <span class="tk-tab-n">@CountPorStatus(situacao.Codigo)</span>
+                </button>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_searchTerm))
+            {
+                <span class="tk-chip-search">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                    "@_searchTerm"
+                </span>
+            }
+            <button type="button"
+                    class="tk-tab @(VisaoCards ? "active" : "")"
+                    @onclick="AlternarVisaoCards">
+                Cards
+            </button>
+
+            @if (VisaoCards)
+            {
+                <div class="tk-card-cols">
+                    <button type="button" class="tk-tab" @onclick="AlternarSeletorColunasCards">
+                        Colunas
+                    </button>
+
+                    @if (MostrarSeletorColunasCards)
+                    {
+                        <div class="tk-card-cols-panel">
+                            <div class="tk-card-cols-title">Setores</div>
+                            @foreach (var setor in SetoresTicket)
+                            {
+                                var chave = ChaveColunaSetor(setor.Codigo);
+                                <label class="tk-card-cols-item">
+                                    <input type="checkbox"
+                                           checked="@ColunaCardVisivel(chave)"
+                                           @onchange="@((ChangeEventArgs e) => AlternarColunaCardAsync(chave, e))" />
+                                    <span>@setor.Descricao</span>
+                                </label>
+                            }
+
+                            <div class="tk-card-cols-title">Situações</div>
+                            @foreach (var situacao in SituacoesCardsStatus)
+                            {
+                                var chave = ChaveColunaSituacao(situacao.Codigo);
+                                <label class="tk-card-cols-item">
+                                    <input type="checkbox"
+                                           checked="@ColunaCardVisivel(chave)"
+                                           @onchange="@((ChangeEventArgs e) => AlternarColunaCardAsync(chave, e))" />
+                                    <span>@situacao.Descricao</span>
+                                </label>
+                            }
+
+                            <div class="tk-card-cols-foot">
+                                <button type="button" class="tk-btn tk-btn-ghost" @onclick="MostrarTodasColunasCardsAsync">
+                                    Mostrar todas
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+        </nav>
+
+        <!-- CONTEÃƒÅ¡DO -->
+        @if (!string.IsNullOrWhiteSpace(_searchTerm) || TemFiltroAvancado() || FiltroAplicado)
+        {
+            @RenderListaBusca("Resultados")
+        }
+        else if (VisaoCards)
+        {
+            @RenderVisaoCards()
+        }
+        else if (StatusSelecionado == 1 && AbaSetorSelecionada == 2)
+        {
+            <div class="tk-subtabs">
+                <button type="button" class="tk-subtab @(StatusDesenvolvimentoSelecionado == 1 ? "active" : "")"
+                        @onclick="@(() => SelecionarStatusDesenvolvimento(1))"
+                        @ondragenter="PermitirSoltarTicket" @ondragenter:preventDefault="true"
+                        @ondragover="PermitirSoltarTicket" @ondragover:preventDefault="true"
+                        @ondrop="@(() => SoltarTicketNaAbaSetorSituacao(2, 1))" @ondrop:preventDefault="true">
+                    @StatusTexto(1) <span class="tk-subtab-n">@CountDesenvolvimentoPorSituacao(1)</span>
+                </button>
+                <button type="button" class="tk-subtab @(StatusDesenvolvimentoSelecionado == 2 ? "active" : "")"
+                        @onclick="@(() => SelecionarStatusDesenvolvimento(2))"
+                        @ondragenter="PermitirSoltarTicket" @ondragenter:preventDefault="true"
+                        @ondragover="PermitirSoltarTicket" @ondragover:preventDefault="true"
+                        @ondrop="@(() => SoltarTicketNaAbaSetorSituacao(2, 2))" @ondrop:preventDefault="true">
+                    @StatusTexto(2) <span class="tk-subtab-n">@CountDesenvolvimentoPorSituacao(2)</span>
+                </button>
+            </div>
+            @RenderListaTickets(StatusDesenvolvimentoSelecionado)
+        }
+        else
+        {
+            @RenderListaTickets(StatusSelecionado)
+        }
+
+    </div>
+</div>
+
+<script>
+    window.crmNotify=async function(title,body){
+        if(!("Notification"in window))return;
+        if(Notification.permission==="granted"){new Notification(title,{body,icon:"/images/logo-evoluttech.png"});}
+        else if(Notification.permission!=="denied"){
+            const p=await Notification.requestPermission();
+            if(p==="granted")new Notification(title,{body,icon:"/images/logo-evoluttech.png"});
+        }
+    };
+</script>
+
+@if (MostrarModalFiltro)
+{
+    <div class="f-back" @onclick="FecharFiltro">
+        <div class="f-panel" @onclick:stopPropagation="true">
+            <div class="f-head">
+                <div>
+                    <h3 class="f-head-t">Filtros de Tickets</h3>
+                    <p class="f-head-s">Refine a listagem com critÃƒÂ©rios especÃƒÂ­ficos.</p>
+                </div>
+                <button type="button" class="f-close" @onclick="FecharFiltro">Fechar</button>
+            </div>
+            <div class="f-body">
+                <div class="f-grid">
+                    <div class="f-field full">
+                        <label class="f-label">Cliente</label>
+                        <input class="f-ctrl" placeholder="Código ou nome..." @bind="ClienteFiltroBusca" @bind:event="oninput" @bind:after="BuscarClientesFiltro" />
+                        @if (SugestoesFiltroCliente?.Any() == true)
+                        {
+                            <ul class="f-auto">
+                                @foreach (var cli in SugestoesFiltroCliente)
+                                {
+                                    <li @onclick="async () => await SelecionarClienteFiltro(cli)"><strong>@cli.Codigo</strong> Ã¢â‚¬â€ @cli.Nome</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Usuário do cliente</label>
+                        <select class="f-ctrl" @bind="Filtros.UsuarioCliente">
+                            <option value="">Todos</option>
+                            @foreach (var u in UsuariosClienteFiltro)
+                            {
+                                <option value="@u.Usuario">@u.Usuario</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Responsável</label>
+                        <select class="f-ctrl" @bind="Filtros.UsuarioResponsavel">
+                            <option value="">Todos</option>
+                            @foreach (var u in UsuariosDisponiveis)
+                            {
+                                <option value="@u">@u</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Título / Descrição</label>
+                        <input class="f-ctrl" placeholder="Parte do Título..." @bind="Filtros.DescricaoTitulo" />
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Status</label>
+                        <select class="f-ctrl" @bind="Filtros.CodSituacao">
+                            <option value="">Todos</option>
+                            @foreach (var situacao in SituacoesTicket)
+                            {
+                                <option value="@situacao.Codigo">@situacao.Descricao</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Tipo</label>
+                        <select class="f-ctrl" @bind="Filtros.CodTipo">
+                            <option value="">Todos</option>
+                            @foreach (var tipo in TiposTicket)
+                            {
+                                <option value="@tipo.Codigo">@tipo.Descricao</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Prioridade</label>
+                        <select class="f-ctrl" @bind="Filtros.Prioridade">
+                            <option value="">Todas</option>
+                            <option value="1">Baixa</option>
+                            <option value="2">Normal</option>
+                            <option value="3">Alta</option>
+                            <option value="4">Urgente</option>
+                        </select>
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Data inicial</label>
+                        <input class="f-ctrl" type="date" @bind="Filtros.DataInicial" />
+                    </div>
+                    <div class="f-field">
+                        <label class="f-label">Data final</label>
+                        <input class="f-ctrl" type="date" @bind="Filtros.DataFinal" />
+                    </div>
+                    <div class="f-field full">
+                        <label class="f-check">
+                            <input type="checkbox" @bind="Filtros.SomenteNovos" />
+                            Somente tickets novos
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="f-foot">
+                <button type="button" class="tk-btn tk-btn-ghost" @onclick="LimparFiltros">Limpar</button>
+                <button type="button" class="tk-btn tk-btn-ghost" @onclick="FecharFiltro">Cancelar</button>
+                <button type="button" class="tk-btn tk-btn-solid" @onclick="AplicarFiltros">Aplicar filtros</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    /* ===== VISAO EM CARDS ===== */
+    private bool VisaoCards = false;
+    private bool _preferenciaVisualizacaoCarregada = false;
+    private bool MostrarSeletorColunasCards = false;
+    private HashSet<string> ColunasCardsOcultas = new(StringComparer.OrdinalIgnoreCase);
+    private const string StorageVisualizacaoTickets = "tickets_visualizacao";
+    private const string StorageColunasCardsOcultas = "tickets_cards_colunas_ocultas";
+
+    private async Task AlternarVisaoCards()
+    {
+        VisaoCards = !VisaoCards;
+
+        if (VisaoCards)
+        {
+            StatusSelecionado = 1;
+            AbaSetorSelecionada = null;
+            await CarregarTickets();
+        }
+
+        await JS.InvokeVoidAsync("localStorage.setItem", StorageVisualizacaoTickets, VisaoCards ? "cards" : "abas");
+        StateHasChanged();
+    }
+
+    private async Task CarregarPreferenciaVisualizacaoAsync()
+    {
+        if (_preferenciaVisualizacaoCarregada)
+            return;
+
+        _preferenciaVisualizacaoCarregada = true;
+
+        var visualizacao = await JS.InvokeAsync<string>(
+            "localStorage.getItem",
+            StorageVisualizacaoTickets
+        );
+
+        VisaoCards = visualizacao == "cards";
+        await CarregarPreferenciaColunasCardsAsync();
+
+        if (VisaoCards)
+            await CarregarTickets();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CarregarPreferenciaColunasCardsAsync()
+    {
+        var raw = await JS.InvokeAsync<string>(
+            "localStorage.getItem",
+            StorageColunasCardsOcultas
+        );
+
+        ColunasCardsOcultas = string.IsNullOrWhiteSpace(raw)
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : raw.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private async Task SalvarPreferenciaColunasCardsAsync()
+    {
+        var raw = string.Join("|", ColunasCardsOcultas.OrderBy(x => x));
+        await JS.InvokeVoidAsync("localStorage.setItem", StorageColunasCardsOcultas, raw);
+    }
+
+    private void AlternarSeletorColunasCards()
+    {
+        MostrarSeletorColunasCards = !MostrarSeletorColunasCards;
+    }
+
+    private async Task AlternarColunaCardAsync(string chave, ChangeEventArgs e)
+    {
+        var visivel = e.Value is bool b
+            ? b
+            : bool.TryParse(e.Value?.ToString(), out var parsed) && parsed;
+
+        if (!visivel && TotalColunasCardsVisiveis <= 1)
+            return;
+
+        if (visivel)
+            ColunasCardsOcultas.Remove(chave);
+        else
+            ColunasCardsOcultas.Add(chave);
+
+        await SalvarPreferenciaColunasCardsAsync();
+    }
+
+    private async Task MostrarTodasColunasCardsAsync()
+    {
+        ColunasCardsOcultas.Clear();
+        await SalvarPreferenciaColunasCardsAsync();
+    }
+
+    private bool ColunaCardVisivel(string chave) => !ColunasCardsOcultas.Contains(chave);
+
+    private static string ChaveColunaSetor(int codigo) => $"setor:{codigo}";
+
+    private static string ChaveColunaSituacao(int codigo) => $"situacao:{codigo}";
+
+    private Dictionary<int, List<string>> _visualizadoresPorTicket = new();
+
+    private async Task CarregarVisualizadoresAsync()
+    {
+        try
+        {
+            var novosMapas = new Dictionary<int, List<string>>();
+            // Limita aos tickets atualmente carregados para não sobrecarregar
+            foreach (var t in _tickets)
+            {
+                var viewers = await TicketService.ObterVisualizadoresTicketAsync(t.Codigo);
+                if (viewers.Any())
+                    novosMapas[t.Codigo] = viewers.Select(v => v.Usuario).ToList();
+            }
+            _visualizadoresPorTicket = novosMapas;
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("console.error", $"Erro visualizadores: {ex.Message}");
+        }
+    }
+
+    private List<string> ObterVisualizadores(int codigo, string? usuarioResponsavel)
+    {
+        if (!_visualizadoresPorTicket.TryGetValue(codigo, out var lista))
+            return new List<string>();
+
+        return lista;
+    }
+
+    private IEnumerable<TicketSituacaoCadastroModel> SituacoesAbasPrincipais =>
+        SituacoesTicket
+            .Where(s => s.Codigo != 1 && s.Codigo != 2)
+            .OrderBy(s => s.Ordem)
+            .ThenBy(s => s.Codigo);
+
+    private IEnumerable<TicketSituacaoCadastroModel> SituacoesCardsStatus =>
+        SituacoesTicket
+            .Where(s => s.Codigo != 1 && s.Codigo != 2)
+            .OrderBy(s => s.Ordem)
+            .ThenBy(s => s.Codigo);
+
+    private IEnumerable<TicketSetorCadastroModel> SetoresCardsVisiveis =>
+        SetoresTicket
+            .Where(s => ColunaCardVisivel(ChaveColunaSetor(s.Codigo)))
+            .OrderBy(s => s.Ordem)
+            .ThenBy(s => s.Codigo);
+
+    private IEnumerable<TicketSituacaoCadastroModel> SituacoesCardsVisiveis =>
+        SituacoesCardsStatus
+            .Where(s => ColunaCardVisivel(ChaveColunaSituacao(s.Codigo)));
+
+    private int TotalColunasCardsVisiveis =>
+        SetoresTicket.Count(s => ColunaCardVisivel(ChaveColunaSetor(s.Codigo))) +
+        SituacoesCardsStatus.Count(s => ColunaCardVisivel(ChaveColunaSituacao(s.Codigo)));
+
+    private string ClasseAbaSetor(int codSetor) =>
+        StatusSelecionado == 1 && AbaSetorSelecionada == codSetor
+            ? "tk-tab active"
+            : "tk-tab";
+
+    private string ClasseAbaStatus(int codSituacao) =>
+        StatusSelecionado == codSituacao
+            ? "tk-tab active"
+            : "tk-tab";
+
+    private string TextoSetor(int codSetor) =>
+        SetoresTicket.FirstOrDefault(s => s.Codigo == codSetor)?.Descricao
+        ?? codSetor switch
+        {
+            1 => "Suporte",
+            2 => "Desenvolvimento",
+            3 => "Comercial",
+            4 => "Treinamento",
+            _ => $"Setor {codSetor}"
+        };
+
+    private string GerarCorUsuario(string nome)
+    {
+        string[] cores =
+        {
+        "#e53935", "#1976d2", "#43a047", "#8e24aa", "#fb8c00",
+        "#00897b", "#3949ab", "#d81b60", "#5e35b1", "#546e7a"
+    };
+
+        int indice = Math.Abs(nome.GetHashCode()) % cores.Length;
+        return cores[indice];
+    }
+
+    private List<TicketChamadoCModel> TicketsCardSuporte()
+    => TicketsCardsBase()
+        .Where(t => t.CodSetor == 1 && t.CodSituacao == 1)
+        .OrderByDescending(IsTicketNovo)
+        .ThenByDescending(t => t.DataHoraUltimaGravacao)
+        .ToList();
+
+    private List<TicketChamadoCModel> TicketsCardDesenvolvimento()
+        => TicketsCardsBase()
+            .Where(t => t.CodSetor == 2 && (t.CodSituacao == 1 || t.CodSituacao == 2))
+            .OrderByDescending(IsTicketNovo)
+            .ThenBy(t => t.CodSituacao)
+            .ThenByDescending(t => t.DataHoraUltimaGravacao)
+            .ToList();
+
+    private List<TicketChamadoCModel> TicketsCardSetor(int codSetor)
+        => TicketsCardsBase()
+            .Where(t => t.CodSetor == codSetor)
+            .Where(t => codSetor == 2 ? (t.CodSituacao == 1 || t.CodSituacao == 2) : t.CodSituacao == 1)
+            .OrderByDescending(IsTicketNovo)
+            .ThenBy(t => t.CodSituacao)
+            .ThenByDescending(t => t.DataHoraUltimaGravacao)
+            .ToList();
+
+    private string ClasseCardSetor(int codSetor) => codSetor switch
+    {
+        1 => "suporte",
+        2 => "dev",
+        _ => "suporte"
+    };
+
+    private string ClasseCardStatus(int codSituacao) => codSituacao switch
+    {
+        3 => "finalizado",
+        4 => "atualizar",
+        5 => "pendente",
+        6 => "aprovacao",
+        _ => ""
+    };
+
+    private List<TicketChamadoCModel> TicketsCardStatus(int status)
+        => TicketsCardsBase()
+            .Where(t => t.CodSituacao == status)
+            .OrderByDescending(IsTicketNovo)
+            .ThenByDescending(t => t.DataHoraUltimaGravacao)
+            .ToList();
+
+    private bool TemTicketNovoSuporte() => TicketsCardSuporte().Any(IsTicketNovo);
+    private bool TemTicketNovoDesenvolvimento() => TicketsCardDesenvolvimento().Any(IsTicketNovo);
+
+    private IEnumerable<TicketChamadoCModel> TicketsCardsBase()
+    {
+        var q = _tickets.AsEnumerable();
+
+        var usuario = "";
+
+        if (!string.IsNullOrWhiteSpace(_usuarioSelecionado))
+            usuario = _usuarioSelecionado.Trim().ToUpper();
+        else if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            usuario = UserState.CurrentUser.Trim().ToUpper();
+
+        if (!string.IsNullOrWhiteSpace(usuario))
+        {
+            q = q.Where(t =>
+                !string.IsNullOrWhiteSpace(t.Usuario) &&
+                (
+                    t.Usuario.Trim().Equals(usuario, StringComparison.OrdinalIgnoreCase) ||
+                    t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)
+                )
+            );
+        }
+
+        return q;
+    }
+
+    RenderFragment RenderVisaoCards() => b =>
+    {
+        var s = 0;
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", "tk-card-board");
+
+        foreach (var setor in SetoresCardsVisiveis)
+        {
+            var ticketsSetor = TicketsCardSetor(setor.Codigo);
+            var alerta = ticketsSetor.Any(IsTicketNovo);
+            var classe = ClasseCardSetor(setor.Codigo);
+
+            RenderCardColuna(
+                b,
+                ref s,
+                setor.Descricao,
+                classe,
+                ticketsSetor,
+                alerta,
+                async () => await SoltarTicketNaAbaSetor(setor.Codigo));
+        }
+
+        foreach (var situacao in SituacoesCardsVisiveis)
+        {
+            RenderCardColuna(
+                b,
+                ref s,
+                situacao.Descricao,
+                ClasseCardStatus(situacao.Codigo),
+                TicketsCardStatus(situacao.Codigo),
+                false,
+                async () => await SoltarTicketNaAba(situacao.Codigo));
+        }
+
+        b.CloseElement();
+    };
+
+    private void RenderCardColuna(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder b, ref int s, string titulo, string classe, List<TicketChamadoCModel> tickets, bool alerta, Func<Task> onDrop)
+    {
+        b.OpenElement(s++, "section");
+        b.AddAttribute(s++, "class", $"tk-card-col {(alerta ? "suporte-alert" : "")}");
+        b.AddAttribute(s++, "ondragenter", EventCallback.Factory.Create<DragEventArgs>(this, PermitirSoltarTicket));
+        b.AddAttribute(s++, "ondragenter:preventDefault", true);
+        b.AddAttribute(s++, "ondragover", EventCallback.Factory.Create<DragEventArgs>(this, PermitirSoltarTicket));
+        b.AddAttribute(s++, "ondragover:preventDefault", true);
+        b.AddAttribute(s++, "ondrop", EventCallback.Factory.Create<DragEventArgs>(this, async () => await onDrop()));
+        b.AddAttribute(s++, "ondrop:preventDefault", true);
+
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", $"tk-card-head {classe}");
+        b.OpenElement(s++, "span");
+        b.AddContent(s++, titulo);
+        b.CloseElement();
+        b.OpenElement(s++, "span");
+        b.AddAttribute(s++, "class", "tk-card-count");
+        b.AddContent(s++, tickets.Count);
+        b.CloseElement();
+        b.CloseElement();
+
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", "tk-card-body");
+        if (!tickets.Any())
+        {
+            b.OpenElement(s++, "div");
+            b.AddAttribute(s++, "class", "tk-card-empty");
+            b.AddContent(s++, "Nenhum ticket.");
+            b.CloseElement();
+        }
+        else
+        {
+            foreach (var ticket in tickets) EscreverLinhaCard(b, ref s, ticket);
+        }
+        b.CloseElement();
+        b.CloseElement();
+    }
+
+    private void EscreverLinhaCard(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder b, ref int s, TicketChamadoCModel t)
+    {
+        var ticketNovo = IsTicketNovo(t);
+        var usuarioNovo = IsUsuarioNovo(t.Usuario);
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", $"tk-card-ticket {(ticketNovo ? "ticket-new" : "")} {RowSlaCss(t)}");
+        b.AddAttribute(s++, "draggable", "true");
+        b.AddAttribute(s++, "ondragstart", EventCallback.Factory.Create<DragEventArgs>(this, () => IniciarArrasteTicket(t.Codigo)));
+        b.AddAttribute(s++, "onclick", EventCallback.Factory.Create(this, () => AbrirTicket(t.Codigo)));
+
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", "tk-card-ticket-top");
+        b.OpenElement(s++, "span");
+        b.AddAttribute(s++, "class", "tk-card-code");
+        b.AddContent(s++, $"#{t.Codigo:D5}");
+        b.CloseElement();
+        b.OpenElement(s++, "span");
+        b.AddAttribute(s++, "class", $"tk-card-user {(usuarioNovo ? "user-new" : "")}");
+        b.AddContent(s++, usuarioNovo ? "NOVO" : t.Usuario!.Trim().ToUpper());
+        b.CloseElement();
+        b.CloseElement();
+
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", "tk-card-title");
+        b.AddContent(s++, t.Assunto ?? "");
+        b.CloseElement();
+
+        var viewersCard = ObterVisualizadores(t.Codigo, t.Usuario);
+        if (viewersCard.Any())
+        {
+            b.OpenElement(s++, "div");
+            b.AddAttribute(s++, "class", "tk-card-viewers");
+            foreach (var v in viewersCard)
+            {
+                b.OpenElement(s++, "span");
+                b.AddAttribute(s++, "class", "tk-card-viewer-badge");
+                b.AddAttribute(s++, "title", v);
+                b.AddAttribute(s++, "style", $"background:{GerarCorUsuario(v)}");
+                b.AddContent(s++, v.Length >= 2 ? v.Substring(0, 2).ToUpper() : v.ToUpper());
+                b.CloseElement();
+            }
+            b.CloseElement();
+        }
+
+        b.OpenElement(s++, "div");
+        b.AddAttribute(s++, "class", "tk-card-foot");
+        b.OpenElement(s++, "span");
+        b.AddAttribute(s++, "class", "tk-card-client");
+        b.AddContent(s++, !string.IsNullOrWhiteSpace(t.ApelidoCliente) ? t.ApelidoCliente
+    : !string.IsNullOrWhiteSpace(t.NomeCliente) ? t.NomeCliente
+    : $"Cliente {t.CodCliente}");
+        b.CloseElement();
+        b.OpenElement(s++, "span");
+        b.AddAttribute(s++, "class", $"tk-card-sla {SlaTagCss(t)}");
+        b.AddContent(s++, SlaTexto(t));
+        b.CloseElement();
+        b.CloseElement();
+        b.CloseElement();
+    }
+    private PeriodicTimer? _refreshTimer;
+    private DateTime _ultimaNotificacaoNovo = DateTime.MinValue;
+    private DateTime _ultimaNotificacaoAtualizar = DateTime.MinValue;
+    private List<TicketChamadoCModel> _tickets = new();
+    private List<string> UsuariosDisponiveis = new();
+    private List<TicketSetorCadastroModel> SetoresTicket = new();
+    private List<TicketSituacaoCadastroModel> SituacoesTicket = new();
+    private List<TicketTipoCadastroModel> TiposTicket = new();
+    private string? _searchTerm;
+    private string _usuarioSelecionado = null!;
+    private HashSet<int> _ticketsNotificados = new();
+
+    protected override void OnInitialized()
+    {
+        LerStatusDaUrl();
+        UserState.OnChange += OnUserStateChanged;
+        if (UserState.IsReady && !string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            _ = InitializeFromUserState();
+        _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        _ = AutoRefreshLoop();
+        CarregarNotificacoes();
+    }
+
+    private async Task AutoRefreshLoop()
+    {
+        try
+        {
+            while (_refreshTimer != null && await _refreshTimer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        if (VisaoCards || StatusSelecionado != 3)
+                            await CarregarTickets();
+
+                        await CarregarNotificacoes();
+                        await CarregarVisualizadoresAsync();
+                        await InvokeAsync(StateHasChanged);
+                    }
+                    catch (Exception ex) { await JS.InvokeVoidAsync("console.error", $"Erro: {ex.Message}"); }
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task InitializeFromUserState()
+    {
+        await JS.InvokeVoidAsync("crmLog", $"[Tickets] Init Ã¢â€ â€™ {UserState.CurrentUser}");
+        _usuarioSelecionado = UserState.CurrentUser.Trim().ToUpper();
+        await CarregarClassificacoesTicketAsync();
+        await CarregarTickets();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CarregarClassificacoesTicketAsync()
+    {
+        SetoresTicket = await TicketClassificacaoService.ListarSetoresAsync(false);
+        SituacoesTicket = await TicketClassificacaoService.ListarSituacoesAsync(false);
+        TiposTicket = await TicketClassificacaoService.ListarTiposAsync(false);
+
+        if (!SetoresTicket.Any())
+        {
+            SetoresTicket = new()
+            {
+                new TicketSetorCadastroModel { Codigo = 1, Descricao = "Suporte", Ordem = 10, Ativo = true },
+                new TicketSetorCadastroModel { Codigo = 2, Descricao = "Desenvolvimento", Ordem = 20, Ativo = true }
+            };
+        }
+
+        if (!SituacoesTicket.Any())
+        {
+            SituacoesTicket = new()
+            {
+                new TicketSituacaoCadastroModel { Codigo = 1, Descricao = "Suporte", Ordem = 10, Ativo = true },
+                new TicketSituacaoCadastroModel { Codigo = 2, Descricao = "Desenvolvimento", Ordem = 20, Ativo = true },
+                new TicketSituacaoCadastroModel { Codigo = 4, Descricao = "Atualizar", Ordem = 30, Ativo = true },
+                new TicketSituacaoCadastroModel { Codigo = 5, Descricao = "Pendente", Ordem = 40, Ativo = true },
+                new TicketSituacaoCadastroModel { Codigo = 6, Descricao = "Aprovacao", Ordem = 50, Ativo = true },
+                new TicketSituacaoCadastroModel { Codigo = 3, Descricao = "Finalizado", Ordem = 60, Ativo = true }
+            };
+        }
+
+        if (!TiposTicket.Any())
+        {
+            TiposTicket = new()
+            {
+                new TicketTipoCadastroModel { Codigo = 1, Descricao = "Melhoria", Ordem = 10, Ativo = true },
+                new TicketTipoCadastroModel { Codigo = 2, Descricao = "Erro", Ordem = 20, Ativo = true },
+                new TicketTipoCadastroModel { Codigo = 3, Descricao = "N. Viavel", Ordem = 30, Ativo = true },
+                new TicketTipoCadastroModel { Codigo = 4, Descricao = "Chamado", Ordem = 40, Ativo = true },
+                new TicketTipoCadastroModel { Codigo = 5, Descricao = "WhatsApp", Ordem = 50, Ativo = true }
+            };
+        }
+
+        if (!AbaSetorSelecionada.HasValue || !SetoresTicket.Any(s => s.Codigo == AbaSetorSelecionada.Value))
+            AbaSetorSelecionada = SetoresTicket.FirstOrDefault()?.Codigo ?? 1;
+
+        if (!SituacoesTicket.Any(s => s.Codigo == StatusSelecionado))
+            StatusSelecionado = 1;
+
+        if (!SituacoesTicket.Any(s => s.Codigo == StatusDesenvolvimentoSelecionado))
+            StatusDesenvolvimentoSelecionado = 1;
+    }
+
+    private async void OnUserStateChanged()
+    {
+        if (!UserState.IsReady) return;
+        await JS.InvokeVoidAsync("crmLog", $"[Tickets] UserState Ã¢â€ â€™ {UserState.CurrentUser}");
+        await InitializeFromUserState();
+    }
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await CarregarPreferenciaVisualizacaoAsync();
+    }
+    public void Dispose()
+    {
+        UserState.OnChange -= OnUserStateChanged;
+        _refreshTimer?.Dispose();
+    }
+
+    async Task CarregarTickets()
+    {
+        var novos = await TicketService.ListarChamadosAsync();
+        var usuarioLogado = UserState.CurrentUser?.Trim();
+        var agora = DateTime.Now;
+
+        var ticketsNovos = novos.Where(t =>
+            t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+            !_ticketsNotificados.Contains(t.Codigo) &&
+            !string.IsNullOrWhiteSpace(t.Usuario) &&
+            (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
+             t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase))).ToList();
+
+        if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds(3))
+        {
+            _ultimaNotificacaoNovo = agora;
+            foreach (var t in ticketsNovos) _ticketsNotificados.Add(t.Codigo);
+        }
+
+        _tickets = novos;
+
+        if (VisaoCards && SituacoesTicket.Any(s => s.Codigo == 3))
+        {
+            var finalizados = await TicketService.ListarChamadosFinalizadosAsync();
+            _tickets.RemoveAll(t => t.CodSituacao == 3);
+            _tickets.AddRange(finalizados);
+        }
+
+        // Carrega usuários só uma vez (não muda a cada refresh de 5s)
+        if (UsuariosDisponiveis.Count == 0)
+        {
+            UsuariosDisponiveis = (await TicketService.ListarUsuariosAsync())
+                .Where(u => !string.IsNullOrWhiteSpace(u))
+                .Select(u => u.Trim().ToUpper()).Distinct().OrderBy(u => u).ToList();
+        }
+        _ticketsNotificados.RemoveWhere(id => !_tickets.Any(t => t.Codigo == id && t.Novo == "S"));
+        await InvokeAsync(StateHasChanged);
+    }
+
+    async Task Recarregar()
+    {
+        if (StatusSelecionado == 3) await CarregarTicketsFinalizados();
+        else await CarregarTickets();
+    }
+
+    async Task NovoTicket()
+    {
+        try { await JS.InvokeVoidAsync("console.log", "NovoTicket()"); Nav.NavigateTo("/ticket"); }
+        catch (Exception ex) { await JS.InvokeVoidAsync("console.error", $"Erro: {ex.Message}"); }
+    }
+
+    void AbrirTicket(int id)
+    {
+        var returnUrl = Nav.ToBaseRelativePath(Nav.Uri);
+        if (string.IsNullOrWhiteSpace(returnUrl)) returnUrl = "tickets";
+        Nav.NavigateTo($"/ticket/{id}?returnUrl={Uri.EscapeDataString("/" + returnUrl)}");
+    }
+
+    IEnumerable<TicketChamadoCModel> FiltrarPorStatus(int situacao)
+    {
+        var q = _tickets.AsEnumerable();
+
+        if (Filtros.CodCliente.HasValue)
+            q = q.Where(t => t.CodCliente == Filtros.CodCliente.Value);
+
+        if (!string.IsNullOrWhiteSpace(Filtros.UsuarioCliente))
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.UsuarioAbertura) &&
+                t.UsuarioAbertura.Trim().Equals(Filtros.UsuarioCliente.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(Filtros.DescricaoTitulo))
+        {
+            var termo = Filtros.DescricaoTitulo.Trim();
+            q = q.Where(t => t.Assunto?.Contains(termo, StringComparison.OrdinalIgnoreCase) ?? false);
+        }
+
+        if (Filtros.CodSituacao.HasValue)
+            q = q.Where(t => t.CodSituacao == Filtros.CodSituacao.Value);
+        else if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm))
+            q = q.Where(t => t.CodSituacao == situacao);
+
+        if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm) && AbaSetorSelecionada.HasValue)
+            q = q.Where(t => t.CodSetor == AbaSetorSelecionada.Value);
+
+        if (Filtros.CodTipo.HasValue) q = q.Where(t => t.CodTipo == Filtros.CodTipo.Value);
+        if (Filtros.Prioridade.HasValue) q = q.Where(t => t.Prioridade == Filtros.Prioridade.Value);
+        if (Filtros.DataInicial.HasValue) q = q.Where(t => t.DataHoraAbertura.Date >= Filtros.DataInicial.Value.Date);
+        if (Filtros.DataFinal.HasValue) q = q.Where(t => t.DataHoraAbertura.Date <= Filtros.DataFinal.Value.Date);
+        if (Filtros.SomenteNovos)
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.Novo) &&
+                t.Novo.Trim().Equals("S", StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var busca = _searchTerm.Trim();
+            q = q.Where(t =>
+                (t.Assunto?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (t.NomeCliente?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (t.ApelidoCliente?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        string? usuarioFiltro = null;
+        bool modoPadrao = !FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm);
+        if (!string.IsNullOrWhiteSpace(Filtros.UsuarioResponsavel))
+            usuarioFiltro = Filtros.UsuarioResponsavel.Trim().ToUpper();
+        else if (modoPadrao && !string.IsNullOrWhiteSpace(_usuarioSelecionado))
+            usuarioFiltro = _usuarioSelecionado.Trim().ToUpper();
+
+        if (!string.IsNullOrWhiteSpace(usuarioFiltro))
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.Usuario) &&
+                (t.Usuario.Trim().Equals(usuarioFiltro, StringComparison.OrdinalIgnoreCase) ||
+                 t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
+
+        return q
+            .OrderByDescending(t => t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true)
+            .ThenByDescending(t => t.Prioridade)
+            .ThenByDescending(t => t.DataHoraUltimaGravacao);
+    }
+
+    int CountPorStatus(int situacao) => FiltrarPorStatus(situacao).Count();
+
+    int CountPorStatusSetor(int codSetor)
+    {
+        var q = _tickets.AsEnumerable().Where(t => t.CodSetor == codSetor);
+        q = codSetor == 2 ? q.Where(t => t.CodSituacao == 1 || t.CodSituacao == 2) : q.Where(t => t.CodSituacao == 1);
+        if (!string.IsNullOrWhiteSpace(_usuarioSelecionado))
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.Usuario) &&
+                (t.Usuario.Trim().Equals(_usuarioSelecionado, StringComparison.OrdinalIgnoreCase) ||
+                 t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
+        return q.Count();
+    }
+
+    int CountDesenvolvimentoPorSituacao(int situacao)
+    {
+        var q = _tickets.AsEnumerable().Where(t => t.CodSetor == 2 && t.CodSituacao == situacao);
+        if (!string.IsNullOrWhiteSpace(_usuarioSelecionado))
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.Usuario) &&
+                (t.Usuario.Trim().Equals(_usuarioSelecionado, StringComparison.OrdinalIgnoreCase) ||
+                 t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
+        return q.Count();
+    }
+
+    [JSInvokable]
+    public async Task HandleTicketDropped(int ticketId, int novaSituacao)
+    {
+        await TicketService.AlterarSituacaoAsync(ticketId, novaSituacao, UserState.CurrentUser);
+        await CarregarTickets();
+        var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser);
+        TicketNotify.SetNovos(qtd);
+        StateHasChanged();
+    }
+
+    private async Task CarregarNotificacoes()
+    {
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser)) return;
+        var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser.Trim().ToUpper());
+        TicketNotify.SetNovos(qtd);
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬ HELPERS Ã¢â€â‚¬Ã¢â€â‚¬ */
+    string StatusTexto(int c) =>
+        SituacoesTicket.FirstOrDefault(s => s.Codigo == c)?.Descricao
+        ?? c switch
+        {
+            1 => "Suporte",
+            2 => "Dev.",
+            3 => "Finalizado",
+            4 => "Atualizar",
+            5 => "Pend. Cliente",
+            6 => "Aprovação",
+            _ => $"#{c}"
+        };
+
+    static string StatusCss(int c) => c switch
+    { 1 => "sx-1", 2 => "sx-2", 3 => "sx-3", 4 => "sx-4", 5 => "sx-5", 6 => "sx-6", _ => "sx-1" };
+
+    string TextoTipo(int c) =>
+        TiposTicket.FirstOrDefault(t => t.Codigo == c)?.Descricao
+        ?? c switch
+        {
+            1 => "Melhoria",
+            2 => "Erro",
+            3 => "M.N.V.",
+            4 => "Chamado",
+            5 => "WhatsApp",
+            _ => $"Tipo {c}"
+        };
+
+    static string TipoCss(int c) => c switch
+    { 1 => "tx-melhoria", 2 => "tx-erro", 3 => "tx-mnv", 4 => "tx-chamado", _ => "tx-chamado" };
+    static string TextoPrio(int p) => p switch
+    { 1 => "Baixa", 2 => "Normal", 3 => "Alta", 4 => "Urgente", _ => "Normal" };
+    static string PrioCss(int p) => p switch
+    { 1 => "px-1", 2 => "px-2", 3 => "px-3", 4 => "px-4", _ => "px-2" };
+
+    static bool IsTicketNovo(TicketChamadoCModel t) =>
+        !string.IsNullOrWhiteSpace(t.Novo) &&
+        t.Novo.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) &&
+        t.CodSituacao != 3;
+
+    static bool IsUsuarioNovo(string? usuario) =>
+        string.IsNullOrWhiteSpace(usuario) ||
+        usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase);
+
+    string ClasseAprovacao(TicketChamadoCModel t) => t.StatusAprovacao?.ToUpper() switch
+    { "APROVADO" => "aprovacao-aprovado", "RECUSADO" => "aprovacao-recusado", _ => "" };
+
+    /* SLA */
+    TimeSpan SlaPrazo(int cod) => cod switch { 2 => TimeSpan.FromDays(2), 1 => TimeSpan.FromDays(30), _ => TimeSpan.Zero };
+
+    TimeSpan SlaDecorrido(TicketChamadoCModel t)
+    {
+        if (t.CodSituacao == 4) return TimeSpan.Zero;
+        if (t.CodTipo == 2) return DiasUteis(t.DataHoraAbertura, DateTime.Now);
+        return DateTime.Now - t.DataHoraAbertura;
+    }
+
+    TimeSpan DiasUteis(DateTime ini, DateTime fim)
+    {
+        double h = 0; var cur = ini;
+        while (cur < fim)
+        {
+            var next = cur.Date.AddDays(1); var end = fim < next ? fim : next;
+            if (cur.DayOfWeek != DayOfWeek.Saturday && cur.DayOfWeek != DayOfWeek.Sunday)
+                h += (end - cur).TotalHours;
+            cur = next;
+        }
+        return TimeSpan.FromHours(h);
+    }
+
+    int SlaPerc(TicketChamadoCModel t)
+    {
+        var prazo = SlaPrazo(t.CodTipo);
+        if (prazo.TotalMinutes == 0 || t.CodSituacao == 4) return 0;
+        return (int)Math.Min((SlaDecorrido(t).TotalMinutes / prazo.TotalMinutes) * 100, 100);
+    }
+
+    string SlaTagCss(TicketChamadoCModel t)
+    {
+        if (t.CodTipo == 3 || t.CodSituacao == 4) return "none";
+        var p = SlaPerc(t);
+        return p < 60 ? "ok" : p < 90 ? "warn" : "danger";
+    }
+
+    string SlaTexto(TicketChamadoCModel t)
+    {
+        if (t.CodTipo == 3) return "Sem prazo";
+        if (t.CodSituacao == 4) return "Pausado";
+        return $"SLA {SlaPerc(t)}%";
+    }
+
+    string RowSlaCss(TicketChamadoCModel t)
+    {
+        if (t.CodTipo == 3 || t.CodSituacao == 4) return "";
+        var p = SlaPerc(t);
+        return p < 60 ? "sla-ok" : p < 90 ? "sla-warning" : "sla-danger";
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬ RENDER Ã¢â€â‚¬Ã¢â€â‚¬ */
+    void EscreverLinha(Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder b, ref int s, TicketChamadoCModel t)
+    {
+        bool novo = IsTicketNovo(t);
+        var cls = $"tk-grid tk-row {RowSlaCss(t)} {ClasseAprovacao(t)} {(novo ? "novo" : "")}";
+
+        b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", cls);
+        b.AddAttribute(s++, "draggable", "true");
+        b.AddAttribute(s++, "ondragstart", EventCallback.Factory.Create<DragEventArgs>(this, () => IniciarArrasteTicket(t.Codigo)));
+        b.AddAttribute(s++, "onclick", EventCallback.Factory.Create(this, () => AbrirTicket(t.Codigo)));
+
+        // 1 CÃƒÂ³digo
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", "cc-code");
+        b.AddContent(s++, $"#{t.Codigo:D5}"); b.CloseElement();
+        b.CloseElement();
+
+        // 2 Assunto
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", "cc-title");
+        b.AddContent(s++, t.Assunto);
+        if (novo) { b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", "bx-novo"); b.AddContent(s++, "NOVO"); b.CloseElement(); }
+        b.CloseElement();
+        b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", "cc-sub");
+        b.AddContent(s++, $"{t.DataHoraAbertura:dd/MM/yy HH:mm}");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", $"sla-t {SlaTagCss(t)}");
+        b.AddContent(s++, SlaTexto(t)); b.CloseElement();
+        b.CloseElement();
+        b.CloseElement();
+        b.CloseElement();
+
+        // 3 Cliente
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", "cc-client");
+        b.AddContent(s++, !string.IsNullOrWhiteSpace(t.ApelidoCliente) ? t.ApelidoCliente : t.NomeCliente);
+        b.CloseElement(); b.CloseElement();
+
+        // 4 ResponsÃƒÂ¡vel
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", "cc-user");
+        if (IsUsuarioNovo(t.Usuario))
+        {
+            b.AddAttribute(s++, "style", "background:#7f1d1d;color:#fca5a5;");
+            b.AddContent(s++, "NOVO");
+        }
+        else
+        {
+            b.AddContent(s++, t.Usuario.Trim().ToUpper());
+        }
+        b.CloseElement(); b.CloseElement();
+
+        // 5 Visualizando
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", "cc-viewers");
+        var viewers = ObterVisualizadores(t.Codigo, t.Usuario);
+        if (viewers.Any())
+        {
+            foreach (var v in viewers)
+            {
+                b.OpenElement(s++, "span");
+                b.AddAttribute(s++, "class", "cc-viewer-badge");
+                b.AddAttribute(s++, "title", v);
+                b.AddAttribute(s++, "style", $"background:{GerarCorUsuario(v)}");
+                b.AddContent(s++, v.Length >= 2 ? v.Substring(0, 2).ToUpper() : v.ToUpper());
+                b.CloseElement();
+            }
+        }
+        else
+        {
+            b.AddContent(s++, "—");
+        }
+        b.CloseElement(); b.CloseElement();
+
+        // 6 Prioridade
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", $"bx {PrioCss(t.Prioridade)}");
+        b.AddContent(s++, TextoPrio(t.Prioridade)); b.CloseElement(); b.CloseElement();
+
+        // 7 Tipo
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", $"bx {TipoCss(t.CodTipo)}");
+        b.AddContent(s++, TextoTipo(t.CodTipo)); b.CloseElement(); b.CloseElement();
+
+        // 8 Status
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "span"); b.AddAttribute(s++, "class", $"bx {StatusCss(t.CodSituacao)}");
+        b.AddContent(s++, StatusTexto(t.CodSituacao)); b.CloseElement(); b.CloseElement();
+
+        // 9 AÃƒÂ§ÃƒÂµes
+        b.OpenElement(s++, "div");
+        b.OpenElement(s++, "button"); b.AddAttribute(s++, "type", "button"); b.AddAttribute(s++, "class", "tk-open");
+        b.AddAttribute(s++, "onclick:stopPropagation", true);
+        b.AddAttribute(s++, "onclick", EventCallback.Factory.Create(this, () => AbrirTicket(t.Codigo)));
+        b.AddContent(s++, "Abrir"); b.CloseElement();
+        b.CloseElement();
+
+        b.CloseElement();
+    }
+
+    RenderFragment RenderListaTickets(int situacao) => b =>
+    {
+        var s = 0;
+        var items = FiltrarPorStatus(situacao).ToList();
+        b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", "tk-card");
+        b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", "tk-grid tk-thead");
+        b.AddMarkupContent(s++, "<span>Código</span><span>Assunto</span><span>Cliente</span><span>Responsável</span><span>Visualizando</span><span>Prioridade</span><span>Tipo</span><span>Status</span><span></span>");
+        b.CloseElement();
+        if (!items.Any()) { b.OpenElement(s++, "div"); b.AddAttribute(s++, "class", "tk-empty"); b.AddContent(s++, "Nenhum ticket encontrado"); b.CloseElement(); }
+        else { foreach (var t in items) EscreverLinha(b, ref s, t); }
+        b.CloseElement();
+    };
+
+    RenderFragment RenderListaBusca(string titulo) => RenderListaTickets(1);
+    RenderFragment RenderColuna(string titulo, int situacao) => RenderListaTickets(situacao);
+    RenderFragment RenderColunaBusca(string titulo) => RenderListaBusca(titulo);
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬ DRAG Ã¢â€â‚¬Ã¢â€â‚¬ */
+    private int? _ticketArrastando;
+    private void IniciarArrasteTicket(int id) => _ticketArrastando = id;
+    private void PermitirSoltarTicket(DragEventArgs e) { }
+
+    private async Task SoltarTicketNaAba(int novaSituacao)
+    {
+        if (!_ticketArrastando.HasValue) return;
+        var id = _ticketArrastando.Value; _ticketArrastando = null;
+        await HandleTicketDropped(id, novaSituacao);
+        StatusSelecionado = novaSituacao;
+    }
+
+    private async Task SoltarTicketNaAbaSetor(int codSetor)
+    {
+        if (!_ticketArrastando.HasValue) return;
+        var id = _ticketArrastando.Value; _ticketArrastando = null;
+        await TicketService.AlterarSituacaoAsync(id, 1, UserState.CurrentUser);
+        await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
+        StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
+        await CarregarTickets(); await CarregarNotificacoes(); StateHasChanged();
+    }
+
+    private async Task SoltarTicketNaAbaSetorSituacao(int codSetor, int codSituacao)
+    {
+        if (!_ticketArrastando.HasValue) return;
+        var id = _ticketArrastando.Value; _ticketArrastando = null;
+        await TicketService.AlterarSituacaoAsync(id, codSituacao, UserState.CurrentUser);
+        await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
+        StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
+        if (codSetor == 2) StatusDesenvolvimentoSelecionado = codSituacao;
+        await CarregarTickets(); await CarregarNotificacoes(); StateHasChanged();
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬ STATE Ã¢â€â‚¬Ã¢â€â‚¬ */
+    private int StatusSelecionado = 1;
+    private int? AbaSetorSelecionada = 1;
+    private int StatusDesenvolvimentoSelecionado = 1;
+
+    private void LerStatusDaUrl()
+    {
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var q = QueryHelpers.ParseQuery(uri.Query);
+        if (q.TryGetValue("status", out var sv) && int.TryParse(sv, out var s) && s > 0)
+            StatusSelecionado = s;
+
+        if (q.TryGetValue("setor", out var setV) && int.TryParse(setV, out var set) && set > 0)
+        {
+            StatusSelecionado = 1;
+            AbaSetorSelecionada = set;
+        }
+
+        if (q.TryGetValue("devStatus", out var dsV) && int.TryParse(dsV, out var ds) && ds > 0)
+        {
+            StatusSelecionado = 1;
+            AbaSetorSelecionada = 2;
+            StatusDesenvolvimentoSelecionado = ds;
+        }
+    }
+
+    private async Task SelecionarAbaStatus(int status)
+    {
+        StatusSelecionado = status; AbaSetorSelecionada = null;
+        if (status == 3) await CarregarTicketsFinalizados(); else await CarregarTickets();
+        AtualizarUrl(); StateHasChanged();
+    }
+
+    private async Task SelecionarAbaSetor(int codSetor)
+    {
+        StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
+        if (codSetor == 2) StatusDesenvolvimentoSelecionado = 1;
+        await CarregarTickets(); AtualizarUrl(); StateHasChanged();
+    }
+
+    private void SelecionarStatusDesenvolvimento(int situacao)
+    {
+        StatusDesenvolvimentoSelecionado = situacao; StatusSelecionado = 1; AbaSetorSelecionada = 2;
+        AtualizarUrl(); StateHasChanged();
+    }
+
+    private void AtualizarUrl()
+    {
+        var url = $"/tickets?status={StatusSelecionado}";
+        if (AbaSetorSelecionada.HasValue) url += $"&setor={AbaSetorSelecionada.Value}";
+        if (AbaSetorSelecionada == 2) url += $"&devStatus={StatusDesenvolvimentoSelecionado}";
+        Nav.NavigateTo(url, replace: true);
+    }
+
+    async Task CarregarTicketsFinalizados()
+    {
+        var fin = await TicketService.ListarChamadosFinalizadosAsync();
+        _tickets.RemoveAll(t => t.CodSituacao == 3);
+        _tickets.AddRange(fin);
+    }
+
+    /* Ã¢â€â‚¬Ã¢â€â‚¬ FILTRO Ã¢â€â‚¬Ã¢â€â‚¬ */
+    private bool FiltroAplicado = false;
+    private bool MostrarModalFiltro = false;
+    private FiltroTicketModel Filtros = new();
+    private string ClienteFiltroBusca = "";
+    private List<ClienteModel> SugestoesFiltroCliente = new();
+    private List<UsuarioClienteDto> UsuariosClienteFiltro = new();
+
+    public class FiltroTicketModel
+    {
+        public int? CodCliente { get; set; }
+        public string? NomeCliente { get; set; }
+        public string? UsuarioCliente { get; set; }
+        public string? UsuarioResponsavel { get; set; }
+        public string? DescricaoTitulo { get; set; }
+        public int? CodSituacao { get; set; }
+        public int? CodTipo { get; set; }
+        public DateTime? DataInicial { get; set; }
+        public DateTime? DataFinal { get; set; }
+        public bool SomenteNovos { get; set; }
+        public int? Prioridade { get; set; }
+    }
+
+    void AbrirFiltro() => MostrarModalFiltro = true;
+    void FecharFiltro() => MostrarModalFiltro = false;
+
+    async Task BuscarClientesFiltro()
+    {
+        if (string.IsNullOrWhiteSpace(ClienteFiltroBusca) || ClienteFiltroBusca.Trim().Length < 2) { SugestoesFiltroCliente.Clear(); return; }
+        SugestoesFiltroCliente = await TicketService.BuscarClientesAsync(ClienteFiltroBusca.Trim());
+    }
+
+    async Task SelecionarClienteFiltro(ClienteModel cli)
+    {
+        Filtros.CodCliente = cli.Codigo; Filtros.NomeCliente = cli.Nome;
+        ClienteFiltroBusca = $"{cli.Codigo} - {cli.Nome}"; SugestoesFiltroCliente.Clear();
+        UsuariosClienteFiltro = await TicketService.ObterUsuariosClienteAsync(cli.Codigo);
+        Filtros.UsuarioCliente = null;
+    }
+
+    void LimparFiltros()
+    {
+        Filtros = new();
+        ClienteFiltroBusca = "";
+        SugestoesFiltroCliente.Clear();
+        UsuariosClienteFiltro.Clear();
+        FiltroAplicado = false;
+    }
+    async Task AplicarFiltros()
+    {
+        MostrarModalFiltro = false;
+        FiltroAplicado = true;
+        await Recarregar();
+        StateHasChanged();
+    }
+
+    bool TemFiltroAvancado() =>
+        Filtros.CodCliente.HasValue || !string.IsNullOrWhiteSpace(Filtros.UsuarioCliente) ||
+        !string.IsNullOrWhiteSpace(Filtros.UsuarioResponsavel) || !string.IsNullOrWhiteSpace(Filtros.DescricaoTitulo) ||
+        Filtros.CodSituacao.HasValue || Filtros.CodTipo.HasValue || Filtros.Prioridade.HasValue ||
+        Filtros.DataInicial.HasValue || Filtros.DataFinal.HasValue || Filtros.SomenteNovos;
+}

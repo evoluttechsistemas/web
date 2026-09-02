@@ -1,0 +1,1734 @@
+﻿@page "/documentacoes/novo"
+@page "/documentacoes/{Codigo:int}"
+
+@inject EvolutCRM.Services.DocumentacaoService DocumentacaoService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@inject IWebHostEnvironment Env
+@inject IJSRuntime JS
+
+@using Microsoft.JSInterop
+@using EvolutCRM.Models
+@using Microsoft.AspNetCore.Hosting
+@using Microsoft.AspNetCore.Components.Forms
+@using System.IO
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    .de-root {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+        background: #f8f9fb;
+        font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+        color: #0f172a;
+    }
+
+    /* ── Topbar ── */
+    .de-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 20px;
+        height: 52px;
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        z-index: 200;
+    }
+
+    .de-topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .de-btn-back {
+        width: 30px;
+        height: 30px;
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+        background: #fff;
+        color: #475569;
+        font-size: 16px;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+    }
+
+        .de-btn-back:hover {
+            background: #f1f5f9;
+        }
+
+    .de-doc-title-input {
+        border: none;
+        outline: none;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        background: transparent;
+        min-width: 200px;
+        max-width: 420px;
+    }
+
+        .de-doc-title-input::placeholder {
+            color: #94a3b8;
+        }
+
+    .de-topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .de-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 5px;
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+        .de-badge.pub {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+    .de-btn {
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        border-radius: 7px;
+        padding: 7px 13px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .de-btn:hover {
+            background: #f8fafc;
+        }
+
+        .de-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+            .de-btn.primary:hover {
+                background: #1d4ed8;
+            }
+
+        .de-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+    .de-select {
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+        background: #fff;
+        color: #374151;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 7px 10px;
+        cursor: pointer;
+    }
+
+    /* ── Body layout ── */
+    .de-body {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .de-sidebar {
+        border-right: 1px solid #e2e8f0;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 16px 14px;
+        gap: 16px;
+    }
+
+    .de-sidebar-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .de-sidebar-label {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #94a3b8;
+        padding: 0 2px;
+    }
+
+    .de-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .de-field-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+    }
+
+    .de-input, .de-textarea, .de-select-sm {
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 7px 9px;
+        font-size: 12px;
+        color: #0f172a;
+        background: #fff;
+        outline: none;
+        width: 100%;
+        transition: border-color .15s;
+    }
+
+        .de-input:focus, .de-textarea:focus, .de-select-sm:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+        }
+
+    .de-textarea {
+        min-height: 76px;
+        resize: vertical;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .de-alert {
+        padding: 10px 12px;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+        .de-alert.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+
+        .de-alert.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+    /* ── Editor area ── */
+    .de-editor-wrap {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #f8f9fb;
+    }
+
+    /* ── Formatting toolbar ── */
+    .de-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 16px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+
+    .de-tb-btn {
+        border: none;
+        background: transparent;
+        color: #475569;
+        border-radius: 5px;
+        width: 30px;
+        height: 28px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: background .12s;
+    }
+
+        .de-tb-btn:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .de-tb-btn.active {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+    .de-tb-sep {
+        width: 1px;
+        height: 20px;
+        background: #e2e8f0;
+        margin: 0 4px;
+        flex-shrink: 0;
+    }
+
+    .de-tb-select {
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+        padding: 4px 6px;
+        cursor: pointer;
+        height: 28px;
+    }
+
+    .de-tb-insert-btn {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        background: #fff;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 9px;
+        height: 28px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+        .de-tb-insert-btn:hover {
+            background: #f1f5f9;
+        }
+
+    /* ── Content editable area ── */
+    .de-content-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 40px 0 80px;
+    }
+
+    .de-content-inner {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 32px;
+    }
+
+    .de-editor {
+        min-height: 600px;
+        outline: none;
+        font-size: 15px;
+        line-height: 1.7;
+        color: #1e293b;
+        caret-color: #2563eb;
+    }
+
+        /* Typography in the editor */
+        .de-editor h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 1.4em 0 .4em;
+            color: #0f172a;
+        }
+
+        .de-editor h2 {
+            font-size: 1.45rem;
+            font-weight: 700;
+            margin: 1.2em 0 .35em;
+            color: #0f172a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: .3em;
+        }
+
+        .de-editor h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 1em 0 .3em;
+            color: #0f172a;
+        }
+
+        .de-editor p {
+            margin: .5em 0;
+        }
+
+        .de-editor ul, .de-editor ol {
+            margin: .5em 0;
+            padding-left: 1.5em;
+        }
+
+        .de-editor li {
+            margin: .25em 0;
+        }
+
+        .de-editor blockquote {
+            border-left: 3px solid #2563eb;
+            margin: 1em 0;
+            padding: .5em 1em;
+            background: #eff6ff;
+            border-radius: 0 6px 6px 0;
+            color: #1e40af;
+            font-style: italic;
+        }
+
+        .de-editor pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        .de-editor code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: .88em;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .de-editor pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: inherit;
+            color: inherit;
+        }
+
+        .de-editor hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 1.5em 0;
+        }
+
+        .de-editor mark {
+            background: #fef08a;
+            color: #713f12;
+            border-radius: 2px;
+            padding: 1px 2px;
+        }
+
+        .de-editor a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+
+        /* Media elements */
+        .de-editor .de-img-wrap {
+            display: inline-block;
+            position: relative;
+            margin: 8px 0;
+            max-width: 100%;
+            line-height: 0;
+        }
+
+            .de-editor .de-img-wrap img {
+                border-radius: 6px;
+                display: block;
+                max-width: 100%;
+                cursor: default;
+            }
+
+            .de-editor .de-img-wrap.selected img {
+                outline: 2px solid #2563eb;
+                outline-offset: 2px;
+            }
+
+    .de-resize-handle {
+        position: absolute;
+        right: -5px;
+        bottom: -5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: se-resize;
+        border: 2px solid #fff;
+        display: none;
+    }
+
+    .de-img-wrap.selected .de-resize-handle {
+        display: block;
+    }
+
+    .de-img-controls {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        display: none;
+        gap: 4px;
+        background: rgba(0,0,0,.55);
+        border-radius: 5px;
+        padding: 3px 5px;
+    }
+
+    .de-img-wrap:hover .de-img-controls,
+    .de-img-wrap.selected .de-img-controls {
+        display: flex;
+    }
+
+    .de-img-ctrl-btn {
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 11px;
+        cursor: pointer;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-weight: 700;
+    }
+
+        .de-img-ctrl-btn:hover {
+            background: rgba(255,255,255,.2);
+        }
+
+    .de-video-wrap {
+        margin: 12px 0;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #000;
+        position: relative;
+    }
+
+        .de-video-wrap iframe {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+            display: block;
+        }
+
+        .de-video-wrap video {
+            width: 100%;
+            display: block;
+            border-radius: 10px;
+        }
+
+    .de-video-controls {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: none;
+        gap: 4px;
+    }
+
+    .de-video-wrap:hover .de-video-controls {
+        display: flex;
+    }
+
+    .de-video-ctrl-btn {
+        background: rgba(0,0,0,.6);
+        border: none;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 5px;
+        padding: 4px 8px;
+        cursor: pointer;
+    }
+
+    .de-callout {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 12px 14px;
+        border-radius: 8px;
+        margin: 10px 0;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+    }
+
+    .de-callout-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .de-callout[data-type="warning"] {
+        background: #fffbeb;
+        border-color: #fde68a;
+    }
+
+    .de-callout[data-type="danger"] {
+        background: #fee2e2;
+        border-color: #fecaca;
+    }
+
+    .de-callout[data-type="success"] {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+    }
+
+    .de-table-wrap {
+        overflow-x: auto;
+        margin: 12px 0;
+    }
+
+    .de-editor table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 400px;
+    }
+
+    .de-editor th {
+        background: #f1f5f9;
+        font-weight: 700;
+    }
+
+    .de-editor td, .de-editor th {
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        font-size: 13px;
+        text-align: left;
+    }
+
+        .de-editor td:focus {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+        }
+
+    /* Floating slash menu */
+    .de-slash-menu {
+        position: absolute;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 9px;
+        box-shadow: 0 8px 32px rgba(15,23,42,.12);
+        z-index: 999;
+        width: 240px;
+        padding: 6px;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .de-slash-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+        .de-slash-item:hover, .de-slash-item.active {
+            background: #f1f5f9;
+        }
+
+    .de-slash-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: #f1f5f9;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    .de-slash-label {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .de-slash-desc {
+        font-size: 11px;
+        color: #64748b;
+    }
+
+    .de-placeholder::before {
+        content: attr(data-placeholder);
+        color: #94a3b8;
+        pointer-events: none;
+        position: absolute;
+    }
+
+    /* video modal */
+    .de-modal-bg {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.5);
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .de-modal {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        width: 440px;
+        max-width: 95vw;
+        box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+
+        .de-modal h3 {
+            margin: 0 0 14px;
+            font-size: 16px;
+        }
+
+    .de-modal-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 14px;
+    }
+
+    @@media(max-width: 900px) {
+        .de-body {
+            grid-template-columns: 1fr;
+        }
+
+        .de-sidebar {
+            display: none;
+        }
+        
+    }
+
+    .de-thumb-preview {
+        width: 100%;
+        aspect-ratio: 16/9;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #f1f5f9;
+        border: 1.5px dashed #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 600;
+        position: relative;
+        cursor: pointer;
+    }
+
+        .de-thumb-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+    .de-thumb-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .de-thumb-btn {
+        flex: 1;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+        .de-thumb-btn:hover {
+            background: #f8fafc;
+        }
+
+        .de-thumb-btn.danger {
+            color: #b91c1c;
+            border-color: #fecaca;
+        }
+</style>
+
+<div class="de-root">
+
+    <!-- Topbar -->
+    <div class="de-topbar">
+        <div class="de-topbar-left">
+            <button class="de-btn-back" @onclick="Voltar" title="Voltar">←</button>
+            <input class="de-doc-title-input"
+                   placeholder="Título da documentação..."
+                   @bind="tutorial.Titulo"
+                   @bind:event="oninput"
+                   @onblur="GerarSlugSeVazio" />
+            <span class="de-badge @(tutorial.Publicado == "S" ? "pub" : "")">
+                @(tutorial.Publicado == "S" ? "Publicado" : "Rascunho")
+            </span>
+        </div>
+        <div class="de-topbar-right">
+            @if (!string.IsNullOrWhiteSpace(mensagem))
+            {
+                <span class="de-alert @tipoMensagem" style="margin:0; padding:6px 10px;">@mensagem</span>
+            }
+            <select class="de-select" @bind="tutorial.Publicado">
+                <option value="N">Rascunho</option>
+                <option value="S">Publicado</option>
+            </select>
+            <button class="de-btn primary" disabled="@salvando" @onclick="SalvarAsync">
+                @(salvando ? "Salvando..." : "Salvar")
+            </button>
+        </div>
+    </div>
+
+    <div class="de-body">
+
+        <!-- Sidebar: metadados -->
+        <aside class="de-sidebar">
+
+            <div class="de-sidebar-section">
+                <div class="de-sidebar-label">Metadados</div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Categoria</div>
+                    <input class="de-input" @bind="tutorial.Categoria"
+                           placeholder="Ex: Tickets, CRM, Financeiro" />
+                </div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Sistema</div>
+                    <select class="de-input" @bind="tutorial.Sistema">
+                        <option value="EVOLUTTECH">EvolutTech</option>
+                        <option value="HELP">HELP</option>
+                    </select>
+                </div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Slug público</div>
+                    <input class="de-input" @bind="tutorial.Slug"
+                           placeholder="como-abrir-ticket" />
+                </div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Ordem</div>
+                    <input class="de-input" type="number" @bind="tutorial.Ordem" />
+                </div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Thumbnail de capa</div>
+                    <div class="de-thumb-preview" @onclick="TriggerThumbnailInput">
+                        @if (!string.IsNullOrWhiteSpace(_thumbnailPreview))
+                        {
+                            <img src="@_thumbnailPreview" alt="Capa" />
+                        }
+                        else if (tutorial.Codigo > 0 && tutorial.Thumbnail != null)
+                        {
+                            <img src="/api/thumbnail/@tutorial.Codigo" alt="Capa" />
+                        }
+                        else
+                        {
+                            <span>🖼 Clique para enviar imagem</span>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_thumbnailPreview) || tutorial.Thumbnail != null)
+                    {
+                        <div class="de-thumb-actions">
+                            <button type="button" class="de-thumb-btn" @onclick="TriggerThumbnailInput">Trocar</button>
+                            <button type="button" class="de-thumb-btn danger" @onclick="RemoverThumbnail">Remover</button>
+                        </div>
+                    }
+                    <InputFile id="thumb-input" OnChange="OnThumbnailSelecionada"
+                               accept="image/png,image/jpeg,image/webp,image/gif"
+                               style="display:none" />
+                </div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Descrição (resumo)</div>
+                    <textarea class="de-textarea" @bind="tutorial.Descricao"
+                              placeholder="Breve resumo que o usuário vê antes de abrir..."></textarea>
+                </div>
+            </div>
+
+            <div class="de-sidebar-section">
+                <div class="de-sidebar-label">Dicas de uso</div>
+                <div style="font-size:11px; color:#64748b; line-height:1.5;">
+                    <p style="margin:0 0 6px;">Digite <strong>/</strong> para inserir blocos: títulos, imagens, vídeos, tabelas, destaques.</p>
+                    <p style="margin:0 0 6px;">Cole prints diretamente no corpo com <strong>Ctrl+V</strong>.</p>
+                    <p style="margin:0;">Arraste a alça no canto da imagem para redimensionar.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor -->
+        <div class="de-editor-wrap">
+
+            <!-- Toolbar de formatação -->
+            <div class="de-toolbar" id="de-toolbar">
+                <select class="de-tb-select" id="tb-block-type" title="Tipo de bloco"
+                        @onchange="OnBlockTypeChange">
+                    <option value="p">Parágrafo</option>
+                    <option value="h1">Título 1</option>
+                    <option value="h2">Título 2</option>
+                    <option value="h3">Título 3</option>
+                    <option value="pre">Código</option>
+                </select>
+
+                <div class="de-tb-sep"></div>
+
+                <button class="de-tb-btn" title="Negrito (Ctrl+B)"
+                        @onclick='() => ExecCmd("bold")'>
+                    <strong>B</strong>
+                </button>
+                <button class="de-tb-btn" title="Itálico (Ctrl+I)"
+                        @onclick='() => ExecCmd("italic")'>
+                    <em>I</em>
+                </button>
+                <button class="de-tb-btn" title="Sublinhado (Ctrl+U)"
+                        @onclick='() => ExecCmd("underline")' style="text-decoration:underline;">
+                    U
+                </button>
+                <button class="de-tb-btn" title="Riscado"
+                        @onclick='() => ExecCmd("strikethrough")' style="text-decoration:line-through;">
+                    S
+                </button>
+                <button class="de-tb-btn" title="Destacar"
+                        @onclick="AplicarDestaque">
+                    M
+                </button>
+
+                <div class="de-tb-sep"></div>
+
+                <button class="de-tb-btn" title="Lista com marcadores"
+                        @onclick='() => ExecCmd("insertUnorderedList")'>
+                    ≡
+                </button>
+                <button class="de-tb-btn" title="Lista numerada"
+                        @onclick='() => ExecCmd("insertOrderedList")'>
+                    1.
+                </button>
+                <button class="de-tb-btn" title="Citação / destaque azul"
+                        @onclick="InserirBlockquote">
+                    ❝
+                </button>
+
+                <div class="de-tb-sep"></div>
+
+                <button class="de-tb-btn" title="Alinhar à esquerda"
+                        @onclick='() => ExecCmd("justifyLeft")'>
+                    ⬛
+                </button>
+                <button class="de-tb-btn" title="Centralizar"
+                        @onclick='() => ExecCmd("justifyCenter")'>
+                    ☰
+                </button>
+
+                <div class="de-tb-sep"></div>
+
+                <button class="de-tb-insert-btn" title="Inserir imagem (ou Ctrl+V com print)"
+                        @onclick="TriggerImageInput">
+                    🖼 Imagem
+                </button>
+
+                <button class="de-tb-insert-btn" title="Inserir vídeo (YouTube/Vimeo/URL)"
+                        @onclick="AbrirModalVideo">
+                    ▶ Vídeo
+                </button>
+
+                <button class="de-tb-insert-btn" title="Inserir tabela"
+                        @onclick="InserirTabela">
+                    ⊞ Tabela
+                </button>
+
+                <button class="de-tb-insert-btn" title="Inserir separador"
+                        @onclick='() => ExecCmd("insertHorizontalRule")'>
+                    — Divisor
+                </button>
+
+                <button class="de-tb-insert-btn" title="Inserir bloco de destaque"
+                        @onclick="InserirCallout">
+                    💡 Destaque
+                </button>
+
+                <InputFile id="img-input" OnChange="OnImagemSelecionada"
+                           accept="image/png,image/jpeg,image/webp,image/gif"
+                           style="display:none" />
+            </div>
+
+            <!-- Área do editor -->
+            <div class="de-content-scroll">
+                <div class="de-content-inner">
+                    <div @key="@("editor-fixo")"
+                         id="de-editor"
+                         class="de-editor"
+                         contenteditable="true"
+                         spellcheck="true"
+                         data-placeholder="Comece a escrever ou digite / para inserir blocos...">
+                        @((MarkupString)_htmlInicial)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal inserir vídeo -->
+@if (modalVideoAberto)
+{
+    <div class="de-modal-bg" @onclick="FecharModalVideo">
+        <div class="de-modal" @onclick:stopPropagation="true">
+            <h3>Inserir vídeo</h3>
+            <div class="de-field" style="margin-bottom:10px;">
+                <div class="de-field-label">URL do vídeo</div>
+                <input class="de-input" @bind="videoUrl"
+                       placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..." />
+            </div>
+            <div style="font-size:11px; color:#64748b;">Suporta YouTube, Vimeo ou link direto de vídeo (mp4, webm).</div>
+            <div class="de-modal-actions">
+                <button class="de-btn" @onclick="FecharModalVideo">Cancelar</button>
+                <button class="de-btn primary" @onclick="ConfirmarVideo">Inserir</button>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    window._deRef = null;
+
+    window.deInit = function (dotnetRef) {
+        window._deRef = dotnetRef;
+        const editor = document.getElementById('de-editor');
+        if (!editor) return;
+
+        // Placeholder
+        editor.addEventListener('input', () => {
+            editor.classList.toggle('de-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
+            dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+        });
+        editor.classList.toggle('de-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
+
+        // Ctrl+V: paste de imagem
+        editor.addEventListener('paste', async (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        const base64 = reader.result.split(',')[1];
+                        const url = await dotnetRef.invokeMethodAsync('SalvarImagemBase64JS', base64, item.type);
+                        if (url) window.deInsertImage(url);
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        // Slash menu
+        let slashMenu = null;
+        editor.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && slashMenu) {
+                e.preventDefault();
+                const active = slashMenu.querySelector('.de-slash-item.active');
+                if (active) active.click();
+                return;
+            }
+            if (e.key === 'ArrowDown' && slashMenu) {
+                e.preventDefault();
+                const items = slashMenu.querySelectorAll('.de-slash-item');
+                let idx = Array.from(items).findIndex(x => x.classList.contains('active'));
+                items[idx]?.classList.remove('active');
+                items[Math.min(idx + 1, items.length - 1)]?.classList.add('active');
+                return;
+            }
+            if (e.key === 'ArrowUp' && slashMenu) {
+                e.preventDefault();
+                const items = slashMenu.querySelectorAll('.de-slash-item');
+                let idx = Array.from(items).findIndex(x => x.classList.contains('active'));
+                items[idx]?.classList.remove('active');
+                items[Math.max(idx - 1, 0)]?.classList.add('active');
+                return;
+            }
+            if (e.key === 'Escape' && slashMenu) { removeSlash(); return; }
+        });
+
+        editor.addEventListener('input', () => {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+            const range = sel.getRangeAt(0);
+            const node = range.startContainer;
+            const text = node.textContent || '';
+            const offset = range.startOffset;
+            const lastSlash = text.lastIndexOf('/', offset);
+            if (lastSlash !== -1 && lastSlash === offset - 1) {
+                showSlash(range, node, lastSlash);
+            } else if (lastSlash !== -1) {
+                const q = text.substring(lastSlash + 1, offset).toLowerCase();
+                if (slashMenu) filterSlash(q);
+            } else {
+                removeSlash();
+            }
+        });
+
+        const slashCommands = [
+            { icon: 'H1', label: 'Título 1', desc: 'Grande', action: () => insertBlock('h1') },
+            { icon: 'H2', label: 'Título 2', desc: 'Médio', action: () => insertBlock('h2') },
+            { icon: 'H3', label: 'Título 3', desc: 'Pequeno', action: () => insertBlock('h3') },
+            { icon: '¶', label: 'Parágrafo', desc: 'Texto normal', action: () => insertBlock('p') },
+            { icon: '—', label: 'Divisor', desc: 'Linha horizontal', action: () => { document.execCommand('insertHorizontalRule'); } },
+            { icon: '❝', label: 'Citação', desc: 'Bloco azul', action: () => window.deInsertBlockquote() },
+            { icon: '≡', label: 'Lista', desc: 'Com marcadores', action: () => document.execCommand('insertUnorderedList') },
+            { icon: '1.', label: 'Lista numerada', desc: 'Numerada', action: () => document.execCommand('insertOrderedList') },
+            { icon: '💡', label: 'Destaque', desc: 'Caixa azul', action: () => window.deInsertCallout('info') },
+            { icon: '⚠', label: 'Aviso', desc: 'Caixa amarela', action: () => window.deInsertCallout('warning') },
+            { icon: '🖼', label: 'Imagem', desc: 'Upload ou colar', action: () => document.getElementById('img-input').click() },
+            { icon: '▶', label: 'Vídeo', desc: 'YouTube / Vimeo', action: () => dotnetRef.invokeMethodAsync('AbrirModalVideoJS') },
+            { icon: '⊞', label: 'Tabela', desc: '3 colunas', action: () => window.deInsertTable() },
+            { icon: '</>', label: 'Código', desc: 'Bloco de código', action: () => insertBlock('pre') },
+        ];
+
+        function showSlash(range, node, slashIdx) {
+            removeSlash();
+            const rect = range.getBoundingClientRect();
+            slashMenu = document.createElement('div');
+            slashMenu.className = 'de-slash-menu';
+            slashMenu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+            slashMenu.style.left = rect.left + 'px';
+            renderSlashItems(slashCommands, node, slashIdx);
+            document.body.appendChild(slashMenu);
+        }
+
+        function renderSlashItems(cmds, node, slashIdx) {
+            if (!slashMenu) return;
+            slashMenu.innerHTML = '';
+            cmds.forEach((cmd, i) => {
+                const item = document.createElement('div');
+                item.className = 'de-slash-item' + (i === 0 ? ' active' : '');
+                item.innerHTML = `<div class="de-slash-icon">${cmd.icon}</div><div><div class="de-slash-label">${cmd.label}</div><div class="de-slash-desc">${cmd.desc}</div></div>`;
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    removeTextBeforeSlash(node, slashIdx);
+                    cmd.action();
+                    removeSlash();
+                });
+                slashMenu.appendChild(item);
+            });
+        }
+
+        function filterSlash(q) {
+            if (!slashMenu) return;
+            const filtered = slashCommands.filter(c =>
+                c.label.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q));
+            if (filtered.length === 0) { removeSlash(); return; }
+            const node = window.getSelection()?.getRangeAt(0)?.startContainer;
+            renderSlashItems(filtered, node, -1);
+        }
+
+        function removeSlash() {
+            slashMenu?.remove();
+            slashMenu = null;
+        }
+
+        function removeTextBeforeSlash(node, slashIdx) {
+            if (!node || slashIdx < 0) return;
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+            const range = sel.getRangeAt(0);
+            const start = slashIdx;
+            const end = range.startOffset;
+            const deleteRange = document.createRange();
+            deleteRange.setStart(node, start);
+            deleteRange.setEnd(node, end);
+            deleteRange.deleteContents();
+        }
+
+        function insertBlock(tag) {
+            document.execCommand('formatBlock', false, tag);
+        }
+
+        document.addEventListener('click', (e) => {
+            if (slashMenu && !slashMenu.contains(e.target)) removeSlash();
+        });
+
+        // Image selection / resize
+        editor.addEventListener('click', (e) => {
+            editor.querySelectorAll('.de-img-wrap').forEach(w => w.classList.remove('selected'));
+            const wrap = e.target.closest('.de-img-wrap');
+            if (wrap) {
+                wrap.classList.add('selected');
+                e.stopPropagation();
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.de-img-wrap'))
+                editor.querySelectorAll('.de-img-wrap').forEach(w => w.classList.remove('selected'));
+        });
+
+        // Resize drag
+        editor.addEventListener('mousedown', (e) => {
+            if (!e.target.classList.contains('de-resize-handle')) return;
+            e.preventDefault();
+            const wrap = e.target.closest('.de-img-wrap');
+            const img = wrap?.querySelector('img');
+            if (!img) return;
+            const startX = e.clientX;
+            const startW = img.offsetWidth;
+            const onMove = (ev) => {
+                const newW = Math.max(80, startW + (ev.clientX - startX));
+                img.style.width = newW + 'px';
+                img.style.height = 'auto';
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    };
+
+    window._deContentBuffer = [];
+
+    window.deSetContentChunked = function(totalChunks) {
+        window._deContentBuffer = new Array(totalChunks);
+    };
+
+    window.deSetContentChunk = function(index, chunk) {
+        window._deContentBuffer[index] = chunk;
+    };
+
+    window.deSetContentFinalize = function() {
+        const html = window._deContentBuffer.join('');
+        window._deContentBuffer = [];
+        const el = document.getElementById('de-editor');
+        if (!el) return;
+        el.innerHTML = html || '';
+        el.classList.toggle('de-placeholder', !html || html === '<br>');
+    };
+
+    window.deSetContent = function (html) {
+        const el = document.getElementById('de-editor');
+        if (!el) return;
+        el.innerHTML = html || '';
+        el.classList.toggle('de-placeholder', !html || html === '<br>');
+    };
+
+    window.deGetContent = function () {
+        return document.getElementById('de-editor')?.innerHTML || '';
+    };
+
+    window.deExecCmd = function (cmd, value) {
+        document.getElementById('de-editor')?.focus();
+        document.execCommand(cmd, false, value ?? null);
+    };
+
+    window.deInsertImage = function (url, altText) {
+        const editor = document.getElementById('de-editor');
+        editor.focus();
+        const wrap = document.createElement('div');
+        wrap.className = 'de-img-wrap';
+        wrap.contentEditable = 'false';
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = altText || '';
+        img.style.width = '100%';
+
+        const handle = document.createElement('div');
+        handle.className = 'de-resize-handle';
+
+        const ctrls = document.createElement('div');
+        ctrls.className = 'de-img-controls';
+
+        const btnFloat = document.createElement('button');
+        btnFloat.className = 'de-img-ctrl-btn';
+        btnFloat.textContent = '↔ Flutuante';
+        btnFloat.onclick = () => {
+            wrap.style.float = wrap.style.float === 'right' ? '' : 'right';
+            wrap.style.margin = wrap.style.float === 'right' ? '0 0 8px 16px' : '8px 0';
+        };
+
+        const btnDel = document.createElement('button');
+        btnDel.className = 'de-img-ctrl-btn';
+        btnDel.textContent = '✕ Remover';
+        btnDel.onclick = () => { wrap.remove(); window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML); };
+
+        ctrls.appendChild(btnFloat);
+        ctrls.appendChild(btnDel);
+        wrap.appendChild(ctrls);
+        wrap.appendChild(img);
+        wrap.appendChild(handle);
+
+        document.execCommand('insertHTML', false, wrap.outerHTML);
+        window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+    };
+
+    window.deInsertVideo = function (url) {
+        const editor = document.getElementById('de-editor');
+        editor.focus();
+        let html = '';
+
+        const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+        const vi = url.match(/vimeo\.com\/(\d+)/);
+
+        if (yt) {
+            html = `<div class="de-video-wrap" contenteditable="false">
+                    <div class="de-video-controls">
+                        <button class="de-video-ctrl-btn" onclick="this.closest('.de-video-wrap').remove()">✕ Remover</button>
+                    </div>
+                    <iframe src="https://www.youtube.com/embed/${yt[1]}" allowfullscreen loading="lazy"></iframe>
+                </div><p><br></p>`;
+        } else if (vi) {
+            html = `<div class="de-video-wrap" contenteditable="false">
+                    <div class="de-video-controls">
+                        <button class="de-video-ctrl-btn" onclick="this.closest('.de-video-wrap').remove()">✕ Remover</button>
+                    </div>
+                    <iframe src="https://player.vimeo.com/video/${vi[1]}" allowfullscreen loading="lazy"></iframe>
+                </div><p><br></p>`;
+        } else {
+            html = `<div class="de-video-wrap" contenteditable="false">
+                    <div class="de-video-controls">
+                        <button class="de-video-ctrl-btn" onclick="this.closest('.de-video-wrap').remove()">✕ Remover</button>
+                    </div>
+                    <video controls src="${url}"></video>
+                </div><p><br></p>`;
+        }
+
+        document.execCommand('insertHTML', false, html);
+        window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+    };
+
+    window.deInsertBlockquote = function () {
+        document.getElementById('de-editor')?.focus();
+        document.execCommand('formatBlock', false, 'blockquote');
+    };
+
+    window.deInsertCallout = function (type) {
+        const icons = { info: '💡', warning: '⚠️', danger: '🚨', success: '✅' };
+        const html = `<div class="de-callout" data-type="${type}" contenteditable="false">
+                <span class="de-callout-icon">${icons[type] || '💡'}</span>
+                <div contenteditable="true" style="flex:1;outline:none;">Escreva aqui o destaque...</div>
+            </div><p><br></p>`;
+        document.getElementById('de-editor')?.focus();
+        document.execCommand('insertHTML', false, html);
+    };
+
+    window.deInsertTable = function () {
+        const html = `<div class="de-table-wrap">
+            <table>
+                <thead><tr><th>Coluna 1</th><th>Coluna 2</th><th>Coluna 3</th></tr></thead>
+                <tbody>
+                    <tr><td>Dado</td><td>Dado</td><td>Dado</td></tr>
+                    <tr><td>Dado</td><td>Dado</td><td>Dado</td></tr>
+                </tbody>
+            </table></div><p><br></p>`;
+        document.getElementById('de-editor')?.focus();
+        document.execCommand('insertHTML', false, html);
+    };
+
+    window.deTriggerFile = function(id) {
+        document.getElementById(id)?.click();
+    };
+
+</script>
+
+@code {
+
+    private string _htmlInicial = ""; // só para renderização inicial
+    [Parameter] public int Codigo { get; set; }
+    private string _thumbnailPreview = "";
+    private DocumentacaoTutorialModel tutorial = new();
+    private string mensagem = "";
+    private string tipoMensagem = "success";
+    private bool salvando;
+    private bool modalVideoAberto;
+    private string videoUrl = "";
+    private string _htmlCorpo = "";
+    private DotNetObjectReference<DocumentacaoEditor>? _dotnetRef;
+
+    private const long MaxImagemBytes = 8 * 1024 * 1024;
+
+    // ── Ciclo de vida ──────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Codigo > 0)
+        {
+            var existente = await DocumentacaoService.BuscarAsync(Codigo, UserState.CurrentCompanyId);
+            if (existente != null)
+            {
+                tutorial = existente;
+                _htmlCorpo = BlocosParaHtml(tutorial.Blocos);
+                _htmlInicial = _htmlCorpo; // só na primeira carga
+            }
+        }
+
+        if (tutorial.Codigo == 0)
+        {
+            tutorial.CodEmp = UserState.CurrentCompanyId;
+            tutorial.UsuarioCriacao = UserState.CurrentUser ?? "";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _dotnetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("deInit", _dotnetRef);
+
+        // Remove essa linha:
+        // _htmlInicial = "";
+    }
+
+    private static string[] ChunkarHtml(string html, int tamanhoChunk)
+    {
+        var chunks = new List<string>();
+        for (int i = 0; i < html.Length; i += tamanhoChunk)
+            chunks.Add(html.Substring(i, Math.Min(tamanhoChunk, html.Length - i)));
+        return chunks.ToArray();
+    }
+
+    public void Dispose() => _dotnetRef?.Dispose();
+
+    // ── Chamados pelo JS ────────────────────────────────────────────────────
+
+    [JSInvokable]
+    public void OnEditorInput(string html)
+    {
+        _htmlCorpo = html;
+    }
+
+    [JSInvokable]
+    public Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
+    {
+        // Retorna direto como data URL — vai inline no HTML
+        return Task.FromResult<string?>($"data:{mimeType};base64,{base64}");
+    }
+
+    [JSInvokable]
+    public void AbrirModalVideoJS()
+    {
+        modalVideoAberto = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    // ── Toolbar ────────────────────────────────────────────────────────────
+
+    private async Task ExecCmd(string cmd, string? value = null)
+    {
+        await JS.InvokeVoidAsync("deExecCmd", cmd, value);
+    }
+
+    private async Task AplicarDestaque()
+    {
+        await JS.InvokeVoidAsync("deExecCmd", "hiliteColor", "#fef08a");
+    }
+
+    private async Task InserirBlockquote()
+    {
+        await JS.InvokeVoidAsync("deInsertBlockquote");
+    }
+
+    private async Task InserirTabela()
+    {
+        await JS.InvokeVoidAsync("deInsertTable");
+    }
+
+    private async Task InserirCallout()
+    {
+        await JS.InvokeVoidAsync("deInsertCallout", "info");
+    }
+
+    private async Task OnBlockTypeChange(ChangeEventArgs e)
+    {
+        var tag = e.Value?.ToString() ?? "p";
+        await JS.InvokeVoidAsync("deExecCmd", "formatBlock", tag);
+    }
+
+    // ── Imagem via toolbar / InputFile ─────────────────────────────────────
+
+    private async Task TriggerImageInput()
+    {
+        await JS.InvokeVoidAsync("deTriggerFile", "img-input");
+    }
+
+    private async Task OnImagemSelecionada(InputFileChangeEventArgs e)
+    {
+        var arquivo = e.File;
+        if (arquivo == null || arquivo.Size > MaxImagemBytes)
+        {
+            MostrarMensagem("Imagem muito grande (máx 8 MB).", "error");
+            return;
+        }
+
+        var ext = Path.GetExtension(arquivo.Name).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp" or ".gif"))
+        {
+            MostrarMensagem("Use imagem em JPG, PNG, WebP ou GIF.", "error");
+            return;
+        }
+
+        // Converte para base64 inline
+        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        var base64 = Convert.ToBase64String(ms.ToArray());
+        var mimeType = arquivo.ContentType;
+        var url = $"data:{mimeType};base64,{base64}";
+
+        await JS.InvokeVoidAsync("deInsertImage", url, arquivo.Name);
+    }
+
+    
+    // ── Modal vídeo ────────────────────────────────────────────────────────
+
+    private void AbrirModalVideo()
+    {
+        videoUrl = "";
+        modalVideoAberto = true;
+    }
+
+    private void FecharModalVideo() => modalVideoAberto = false;
+
+    private async Task ConfirmarVideo()
+    {
+        if (string.IsNullOrWhiteSpace(videoUrl)) { modalVideoAberto = false; return; }
+        await JS.InvokeVoidAsync("deInsertVideo", videoUrl.Trim());
+        modalVideoAberto = false;
+        videoUrl = "";
+    }
+
+    // ── Salvar ────────────────────────────────────────────────────────────
+
+    private async Task SalvarAsync()
+    {
+        if (salvando) return;
+
+        mensagem = "";
+        salvando = true;
+
+        var htmlAtual = await JS.InvokeAsync<string>("deGetContent");
+        _htmlCorpo = htmlAtual;
+
+        tutorial.CodEmp = UserState.CurrentCompanyId;
+        tutorial.UsuarioCriacao = string.IsNullOrWhiteSpace(tutorial.UsuarioCriacao)
+            ? UserState.CurrentUser ?? "" : tutorial.UsuarioCriacao;
+        tutorial.UsuarioAlteracao = UserState.CurrentUser ?? tutorial.UsuarioCriacao;
+
+        GerarSlugSeVazio();
+
+        if (string.IsNullOrWhiteSpace(tutorial.Titulo) || string.IsNullOrWhiteSpace(tutorial.Slug))
+        {
+            MostrarMensagem("Informe título e slug público.", "error");
+            salvando = false;
+            return;
+        }
+        if (tutorial.Thumbnail == null && string.IsNullOrWhiteSpace(_thumbnailPreview))
+        {
+            MostrarMensagem("Informe a thumbnail de capa.", "error");
+            salvando = false;
+            return;
+        }
+
+        // Converte HTML em blocos para persistência
+        tutorial.Blocos = HtmlParaBlocos(_htmlCorpo);
+
+        try
+        {
+            var codigo = await DocumentacaoService.SalvarAsync(tutorial);
+            tutorial.Codigo = codigo;
+            Codigo = codigo;
+            MostrarMensagem("Documentação salva com sucesso.", "success");
+
+            if (!Nav.Uri.Contains($"/documentacoes/{codigo}", StringComparison.OrdinalIgnoreCase))
+                Nav.NavigateTo($"/documentacoes/{codigo}", replace: true);
+        }
+        catch (Exception ex)
+        {
+            MostrarMensagem($"Erro ao salvar: {ex.Message}", "error");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    // ── Conversão HTML ↔ Blocos ────────────────────────────────────────────
+
+    /// <summary>
+    /// Converte o HTML do editor em blocos para salvar no banco.
+    /// Mantém compatibilidade total com a estrutura existente.
+    /// </summary>
+    private static List<DocumentacaoTutorialBlocoModel> HtmlParaBlocos(string html)
+    {
+        // Armazena o HTML inteiro em UM único bloco de tipo TEXTO.
+        // Isso preserva todo o conteúdo rico (imagens inline, vídeos, tabelas,
+        // formatação) sem precisar alterar o schema do banco.
+        return new List<DocumentacaoTutorialBlocoModel>
+        {
+            new DocumentacaoTutorialBlocoModel
+            {
+                Tipo = "TEXTO",
+                Titulo = "Conteúdo",
+                Conteudo = html ?? "",
+                Ordem = 1
+            }
+        };
+    }
+
+    /// <summary>
+    /// Reconstrói o HTML do editor a partir dos blocos salvos no banco.
+    /// Suporta o formato legado (múltiplos blocos) e o novo (bloco único de HTML).
+    /// </summary>
+    private static string BlocosParaHtml(List<DocumentacaoTutorialBlocoModel> blocos)
+    {
+        if (blocos == null || blocos.Count == 0) return "";
+
+        // Novo formato: bloco único com HTML completo
+        if (blocos.Count == 1 && blocos[0].Tipo == "TEXTO" && blocos[0].Titulo == "Conteúdo")
+            return blocos[0].Conteudo;
+
+        // Formato legado: converte cada bloco para HTML equivalente
+        var sb = new System.Text.StringBuilder();
+        foreach (var bloco in blocos.OrderBy(x => x.Ordem))
+        {
+            if (!string.IsNullOrWhiteSpace(bloco.Titulo))
+                sb.AppendLine($"<h2>{System.Net.WebUtility.HtmlEncode(bloco.Titulo)}</h2>");
+
+            switch (bloco.Tipo)
+            {
+                case "TEXTO":
+                    if (!string.IsNullOrWhiteSpace(bloco.Conteudo))
+                        sb.AppendLine($"<p>{bloco.Conteudo}</p>");
+                    break;
+
+                case "VIDEO":
+                    if (!string.IsNullOrWhiteSpace(bloco.UrlMidia))
+                    {
+                        var ytMatch = System.Text.RegularExpressions.Regex.Match(
+                            bloco.UrlMidia, @"(?:youtube\.com/watch\?v=|youtu\.be/)([^&\s]+)");
+                        var viMatch = System.Text.RegularExpressions.Regex.Match(
+                            bloco.UrlMidia, @"vimeo\.com/(\d+)");
+
+                        if (ytMatch.Success)
+                            sb.AppendLine($@"<div class=""de-video-wrap"" contenteditable=""false""><div class=""de-video-controls""><button class=""de-video-ctrl-btn"" onclick=""this.closest('.de-video-wrap').remove()"">✕ Remover</button></div><iframe src=""https://www.youtube.com/embed/{ytMatch.Groups[1].Value}"" allowfullscreen loading=""lazy""></iframe></div><p><br></p>");
+                        else if (viMatch.Success)
+                            sb.AppendLine($@"<div class=""de-video-wrap"" contenteditable=""false""><div class=""de-video-controls""><button class=""de-video-ctrl-btn"" onclick=""this.closest('.de-video-wrap').remove()"">✕ Remover</button></div><iframe src=""https://player.vimeo.com/video/{viMatch.Groups[1].Value}"" allowfullscreen loading=""lazy""></iframe></div><p><br></p>");
+                        else
+                            sb.AppendLine($@"<div class=""de-video-wrap"" contenteditable=""false""><video controls src=""{bloco.UrlMidia}""></video></div><p><br></p>");
+                    }
+                    break;
+
+                case "IMAGEM":
+                    if (!string.IsNullOrWhiteSpace(bloco.UrlMidia))
+                        sb.AppendLine($@"<div class=""de-img-wrap"" contenteditable=""false""><img src=""{bloco.UrlMidia}"" alt=""{System.Net.WebUtility.HtmlEncode(bloco.Titulo)}"" style=""width:100%""><div class=""de-resize-handle""></div></div><p><br></p>");
+                    if (!string.IsNullOrWhiteSpace(bloco.Conteudo))
+                        sb.AppendLine($"<p><em>{System.Net.WebUtility.HtmlEncode(bloco.Conteudo)}</em></p>");
+                    break;
+
+                case "LINK":
+                    if (!string.IsNullOrWhiteSpace(bloco.UrlLink))
+                        sb.AppendLine($@"<p><a href=""{bloco.UrlLink}"" target=""_blank"">{System.Net.WebUtility.HtmlEncode(!string.IsNullOrWhiteSpace(bloco.Conteudo) ? bloco.Conteudo : bloco.UrlLink)}</a></p>");
+                    break;
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    // ── Utilidades ─────────────────────────────────────────────────────────
+
+    private async Task<string> SalvarArquivoImagem(IBrowserFile arquivo, string extensao, string subpasta = "imagens")
+    {
+        var pastaFisica = Path.Combine(@"C:\FTP\Site\Help\wwwroot\uploads\documentacoes", subpasta);
+        var pastaRelativa = $"uploads/documentacoes/{subpasta}";
+        Directory.CreateDirectory(pastaFisica);
+
+        var nomeArquivo = $"{Guid.NewGuid():N}{extensao}";
+        var caminhoFisico = Path.Combine(pastaFisica, nomeArquivo);
+
+        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+        await using var fs = File.Create(caminhoFisico);
+        await stream.CopyToAsync(fs);
+
+        return $"/{pastaRelativa}/{nomeArquivo}";
+    }
+
+    private void GerarSlugSeVazio()
+    {
+        if (!string.IsNullOrWhiteSpace(tutorial.Slug) || string.IsNullOrWhiteSpace(tutorial.Titulo)) return;
+
+        tutorial.Slug = tutorial.Titulo
+            .ToLowerInvariant()
+            .Normalize(System.Text.NormalizationForm.FormD);
+
+        tutorial.Slug = new string(tutorial.Slug
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) !=
+                        System.Globalization.UnicodeCategory.NonSpacingMark)
+            .ToArray());
+
+        tutorial.Slug = System.Text.RegularExpressions.Regex.Replace(tutorial.Slug, "[^a-z0-9]+", "-").Trim('-');
+    }
+
+    private void Voltar() => Nav.NavigateTo("/documentacoes");
+
+    private void MostrarMensagem(string texto, string tipo)
+    {
+        mensagem = texto;
+        tipoMensagem = tipo;
+        StateHasChanged();
+    }
+
+    private async Task TriggerThumbnailInput()
+    {
+        await JS.InvokeVoidAsync("deTriggerFile", "thumb-input");
+    }
+
+    private async Task OnThumbnailSelecionada(InputFileChangeEventArgs e)
+    {
+        var arquivo = e.File;
+        if (arquivo == null || arquivo.Size > MaxImagemBytes)
+        {
+            MostrarMensagem("Imagem muito grande (máx 8 MB).", "error");
+            return;
+        }
+
+        var ext = Path.GetExtension(arquivo.Name).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp" or ".gif"))
+        {
+            MostrarMensagem("Use imagem em JPG, PNG, WebP ou GIF.", "error");
+            return;
+        }
+
+        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        tutorial.Thumbnail = ms.ToArray();
+        tutorial.ThumbnailMime = arquivo.ContentType;
+
+        // Preview temporário apenas para exibir na tela — NÃO vai para o banco
+        var base64 = Convert.ToBase64String(tutorial.Thumbnail);
+        _thumbnailPreview = $"data:{tutorial.ThumbnailMime};base64,{base64}";
+        tutorial.UrlThumbnail = ""; // limpa para não tentar salvar no campo pequeno
+        StateHasChanged();
+    }
+
+    private void RemoverThumbnail()
+    {
+        tutorial.UrlThumbnail = "";
+        tutorial.Thumbnail = null;
+        tutorial.ThumbnailMime = null;
+        _thumbnailPreview = "";
+        StateHasChanged();
+    }
+
+    private static string ObterInicial(string texto)
+        => string.IsNullOrWhiteSpace(texto) ? "D" : texto.Trim()[0].ToString().ToUpperInvariant();
+}

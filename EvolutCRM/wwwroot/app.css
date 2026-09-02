@@ -1,0 +1,230 @@
+h1:focus {
+    outline: none;
+}
+
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid #26b050;
+}
+
+.invalid {
+    outline: 1px solid #e50000;
+}
+
+.validation-message {
+    color: #e50000;
+}
+
+.blazor-error-boundary {
+    background: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTYiIGhlaWdodD0iNDkiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiIG92ZXJmbG93PSJoaWRkZW4iPjxkZWZzPjxjbGlwUGF0aCBpZD0iY2xpcDAiPjxyZWN0IHg9IjIzNSIgeT0iNTEiIHdpZHRoPSI1NiIgaGVpZ2h0PSI0OSIvPjwvY2xpcFBhdGg+PC9kZWZzPjxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMCkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKC0yMzUgLTUxKSI+PHBhdGggZD0iTTI2My41MDYgNTFDMjY0LjcxNyA1MSAyNjUuODEzIDUxLjQ4MzcgMjY2LjYwNiA1Mi4yNjU4TDI2Ny4wNTIgNTIuNzk4NyAyNjcuNTM5IDUzLjYyODMgMjkwLjE4NSA5Mi4xODMxIDI5MC41NDUgOTIuNzk1IDI5MC42NTYgOTIuOTk2QzI5MC44NzcgOTMuNTEzIDI5MSA5NC4wODE1IDI5MSA5NC42NzgyIDI5MSA5Ny4wNjUxIDI4OS4wMzggOTkgMjg2LjYxNyA5OUwyNDAuMzgzIDk5QzIzNy45NjMgOTkgMjM2IDk3LjA2NTEgMjM2IDk0LjY3ODIgMjM2IDk0LjM3OTkgMjM2LjAzMSA5NC4wODg2IDIzNi4wODkgOTMuODA3MkwyMzYuMzM4IDkzLjAxNjIgMjM2Ljg1OCA5Mi4xMzE0IDI1OS40NzMgNTMuNjI5NCAyNTkuOTYxIDUyLjc5ODUgMjYwLjQwNyA1Mi4yNjU4QzI2MS4yIDUxLjQ4MzcgMjYyLjI5NiA1MSAyNjMuNTA2IDUxWk0yNjMuNTg2IDY2LjAxODNDMjYwLjczNyA2Ni4wMTgzIDI1OS4zMTMgNjcuMTI0NSAyNTkuMzEzIDY5LjMzNyAyNTkuMzEzIDY5LjYxMDIgMjU5LjMzMiA2OS44NjA4IDI1OS4zNzEgNzAuMDg4N0wyNjEuNzk1IDg0LjAxNjEgMjY1LjM4IDg0LjAxNjEgMjY3LjgyMSA2OS43NDc1QzI2Ny44NiA2OS43MzA5IDI2Ny44NzkgNjkuNTg3NyAyNjcuODc5IDY5LjMxNzkgMjY3Ljg3OSA2Ny4xMTgyIDI2Ni40NDggNjYuMDE4MyAyNjMuNTg2IDY2LjAxODNaTTI2My41NzYgODYuMDU0N0MyNjEuMDQ5IDg2LjA1NDcgMjU5Ljc4NiA4Ny4zMDA1IDI1OS43ODYgODkuNzkyMSAyNTkuNzg2IDkyLjI4MzcgMjYxLjA0OSA5My41Mjk1IDI2My41NzYgOTMuNTI5NSAyNjYuMTE2IDkzLjUyOTUgMjY3LjM4NyA5Mi4yODM3IDI2Ny4zODcgODkuNzkyMSAyNjcuMzg3IDg3LjMwMDUgMjY2LjExNiA4Ni4wNTQ3IDI2My41NzYgODYuMDU0N1oiIGZpbGw9IiNGRkU1MDAiIGZpbGwtcnVsZT0iZXZlbm9kZCIvPjwvZz48L3N2Zz4=) no-repeat 1rem/1.8rem, #b32121;
+    padding: 1rem 1rem 1rem 3.7rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "An error has occurred."
+    }
+
+.darker-border-checkbox.form-check-input {
+    border-color: #929292;
+}
+
+
+.app-shell {
+    display: flex;
+    height: 100vh;
+}
+
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.aba-strip {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: flex-end !important;
+    gap: 2px;
+    background: #e9edf2;
+    padding: 6px 8px 0;
+    overflow-x: auto;
+    border-bottom: 1px solid #cfd6de;
+    flex-shrink: 0;
+}
+
+.aba-item {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    max-width: 220px;
+    min-width: 0;
+    cursor: pointer;
+    background: #dbe1e8;
+    color: #445;
+    border: 1px solid #cfd6de;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    font-size: .85rem;
+    white-space: nowrap;
+    user-select: none;
+}
+
+    .aba-item.ativa {
+        background: #fff;
+        color: #1b2733;
+        font-weight: 600;
+    }
+
+.aba-titulo {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.aba-fechar {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: #8894a3;
+    padding: 0 2px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+    .aba-fechar:hover {
+        background: #ff5c5c;
+        color: #fff;
+    }
+
+.aba-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.aba-conteudo {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden;
+    background: #fff;
+    position: relative;
+}
+
+.aba-painel {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+}
+
+    .aba-painel.oculta {
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
+
+    /* Quando o painel contém a tela de novo ticket,
+   deixa o painel rolar normalmente mas sem cortar */
+    .aba-painel:has(.modo-novo) {
+        position: static !important;
+        inset: unset !important;
+        width: 100% !important;
+        height: 100% !important;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+
+.aba-conteudo:has(.modo-novo) {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+}
+
+.aba-wrapper:has(.modo-novo) {
+    overflow-y: auto !important;
+}
+
+.modo-novo .ticket-modern-grid {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px) !important;
+}
+
+.modo-novo .ticket-modern-panel {
+    padding: 16px !important;
+}
+
+.modo-novo .grupo {
+    margin-bottom: 12px !important;
+}
+
+.modo-novo input,
+.modo-novo select {
+    height: 34px !important;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+}
+
+.modo-novo textarea {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+}
+
+.modo-novo label {
+    font-size: 10px !important;
+    margin-bottom: 4px !important;
+}
+
+.modo-novo .ticket-panel-title {
+    font-size: 1rem !important;
+    margin-bottom: 16px !important;
+}
+
+.modo-novo .grupo-linha {
+    gap: 12px !important;
+}
+
+.modo-novo .grid-2cols {
+    gap: 12px !important;
+}
+
+/* ===== MOBILE: fix abas (adicionar ao final do bloco @media(max-width:768px)) ===== */
+@media (max-width: 768px) {
+
+    .aba-wrapper {
+        height: auto !important;
+        min-height: calc(100dvh - 48px); /* desconta a strip de abas */
+        overflow: visible !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    .aba-strip {
+        flex-shrink: 0;
+    }
+
+    .aba-conteudo {
+        flex: 1 !important;
+        height: auto !important;
+        overflow: visible !important;
+        position: relative;
+    }
+
+    .aba-painel {
+        position: static !important;
+        inset: unset !important;
+        width: 100% !important;
+        min-height: calc(100dvh - 96px); /* strip ~48px + header mobile ~48px */
+        overflow: visible !important;
+    }
+
+        .aba-painel.oculta {
+            display: none !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+        }
+}

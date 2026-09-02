@@ -1,0 +1,1108 @@
+﻿@page "/admin/comissoes"
+
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@inject AdminService AdminService
+@inject TicketService TicketService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap');
+
+    :root {
+        --bg: #f4f7fb;
+        --surface: #ffffff;
+        --surface-2: #f8fbff;
+        --surface-3: #eef6ff;
+        --border: #d9e6f5;
+        --border-2: #bfd3ec;
+        --primary: #0d47a1;
+        --primary-2: #1565c0;
+        --primary-3: #42a5f5;
+        --primary-soft: #eaf4ff;
+        --primary-ultra: #f5f9ff;
+        --text: #172033;
+        --text-2: #334155;
+        --muted: #64748b;
+        --muted-2: #94a3b8;
+        --success: #16a34a;
+        --success-2: #15803d;
+        --success-soft: #ecfdf5;
+        --warning: #d97706;
+        --warning-2: #b45309;
+        --warning-soft: #fffbeb;
+        --danger: #dc2626;
+        --danger-2: #b91c1c;
+        --danger-soft: #fff1f2;
+        --money: #059669;
+        --money-soft: #ecfdf5;
+        --shadow-sm: 0 2px 8px rgba(15, 23, 42, .05);
+        --shadow: 0 12px 34px rgba(13, 71, 161, .10);
+        --shadow-lg: 0 20px 55px rgba(13, 71, 161, .15);
+        --radius: 20px;
+        --radius-md: 16px;
+        --radius-sm: 12px;
+    }
+
+    * {
+        box-sizing: border-box;
+    }
+
+    .admin-card {
+        position: relative;
+        width: 100%;
+        min-height: calc(100vh - 32px);
+        padding: 24px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: radial-gradient(circle at top right, rgba(22, 163, 74, .13), transparent 30%), radial-gradient(circle at top left, rgba(66, 165, 245, .11), transparent 28%), linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        box-shadow: var(--shadow);
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        overflow: hidden;
+        animation: comFadeUp .28s ease both;
+    }
+
+        .admin-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--money), var(--primary-3), var(--primary));
+            z-index: 2;
+        }
+
+        .admin-card::after {
+            content: "";
+            position: absolute;
+            right: -110px;
+            top: -110px;
+            width: 260px;
+            height: 260px;
+            border-radius: 999px;
+            background: rgba(13, 71, 161, .055);
+            pointer-events: none;
+        }
+
+    .card-title {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 0 5px;
+        color: var(--text);
+        font-size: 21px;
+        font-weight: 900;
+        letter-spacing: -.035em;
+        line-height: 1.15;
+    }
+
+        .card-title::before {
+            content: "🧾";
+            width: 42px;
+            height: 42px;
+            border-radius: 15px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--money), var(--primary));
+            color: #ffffff;
+            box-shadow: 0 10px 24px rgba(5, 150, 105, .22);
+            font-size: 19px;
+            flex: 0 0 auto;
+        }
+
+    .card-subtitle {
+        position: relative;
+        z-index: 3;
+        margin: 0 0 22px 54px;
+        color: var(--muted);
+        font-size: 12.5px;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    .filters-compact {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: minmax(260px, 2fr) minmax(160px, .7fr) minmax(170px, .8fr);
+        gap: 12px;
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .08), transparent 30%), #ffffff;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .admin-input {
+        width: 100%;
+        height: 46px;
+        border: 1.5px solid var(--border);
+        border-radius: 14px;
+        padding: 0 15px;
+        background: #ffffff;
+        color: var(--text);
+        font-family: 'Sora', Arial, sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        outline: none;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+        transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background .18s ease;
+    }
+
+    .filters-compact input.admin-input {
+        padding-left: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: 14px center;
+        background-size: 17px;
+    }
+
+    select.admin-input {
+        appearance: none;
+        cursor: pointer;
+        padding-right: 42px;
+        background-image: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 17px;
+    }
+
+    .admin-input::placeholder {
+        color: var(--muted-2);
+        font-weight: 500;
+    }
+
+    .admin-input:hover {
+        border-color: var(--border-2);
+        background-color: #ffffff;
+    }
+
+    .admin-input:focus {
+        border-color: var(--primary-3);
+        box-shadow: 0 0 0 4px rgba(66, 165, 245, .14), var(--shadow-sm);
+        transform: translateY(-1px);
+    }
+
+    .commission-hero {
+        position: relative;
+        z-index: 3;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+    }
+
+    .commission-main-card,
+    .commission-period-card {
+        position: relative;
+        min-height: 134px;
+        padding: 20px;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+
+    .commission-main-card {
+        border: 1.5px solid #bbf7d0;
+        background: radial-gradient(circle at top right, rgba(255,255,255,.75), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--money-soft) 100%);
+    }
+
+    .commission-period-card {
+        border: 1.5px solid var(--border);
+        background: radial-gradient(circle at top right, rgba(66, 165, 245, .12), transparent 34%), linear-gradient(135deg, #ffffff 0%, var(--primary-ultra) 100%);
+    }
+
+        .commission-main-card:hover,
+        .commission-period-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow);
+        }
+
+        .commission-main-card::before,
+        .commission-period-card::before {
+            content: "";
+            position: absolute;
+            right: -28px;
+            top: -28px;
+            width: 96px;
+            height: 96px;
+            border-radius: 999px;
+            background: rgba(22, 163, 74, .10);
+        }
+
+        .commission-period-card::before {
+            background: rgba(13, 71, 161, .09);
+        }
+
+        .commission-main-card::after,
+        .commission-period-card::after {
+            position: absolute;
+            right: 18px;
+            top: 18px;
+            width: 36px;
+            height: 36px;
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 17px;
+            font-weight: 900;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, .08);
+        }
+
+    .commission-main-card:nth-child(1)::after {
+        content: "✓";
+        background: #dcfce7;
+        color: var(--success);
+    }
+
+    .commission-main-card:nth-child(2)::after {
+        content: "R$";
+        background: #dcfce7;
+        color: var(--money);
+        font-size: 13px;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .commission-period-card::after {
+        content: "📅";
+        background: var(--primary-soft);
+        color: var(--primary);
+    }
+
+    .commission-main-card span,
+    .commission-period-card span {
+        display: block;
+        margin-bottom: 9px;
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+    }
+
+    .commission-main-card strong,
+    .commission-period-card strong {
+        position: relative;
+        z-index: 2;
+        display: block;
+        margin-right: 46px;
+        line-height: 1;
+        letter-spacing: -.045em;
+    }
+
+    .commission-main-card strong {
+        color: var(--money);
+        font-size: 33px;
+        font-weight: 900;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .commission-period-card strong {
+        color: var(--primary);
+        font-size: 21px;
+        font-weight: 900;
+    }
+
+    .commission-main-card small,
+    .commission-period-card small {
+        display: block;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .table-wrap {
+        position: relative;
+        z-index: 3;
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: #ffffff;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .table-wrap::-webkit-scrollbar {
+            height: 9px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: #eef4fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: #bfd3ec;
+            border-radius: 999px;
+        }
+
+            .table-wrap::-webkit-scrollbar-thumb:hover {
+                background: #9dbbe0;
+            }
+
+    table {
+        width: 100%;
+        min-width: 1120px;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-family: 'Sora', Arial, sans-serif;
+    }
+
+    thead {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+    }
+
+    th {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, #f8fbff 0%, #edf5ff 100%);
+        color: var(--muted);
+        text-align: left;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        white-space: nowrap;
+    }
+
+        th:first-child {
+            border-top-left-radius: 20px;
+            text-align: center;
+        }
+
+        th:last-child {
+            border-top-right-radius: 20px;
+        }
+
+    td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #edf2f7;
+        background: #ffffff;
+        color: var(--text-2);
+        font-size: 12.5px;
+        font-weight: 600;
+        vertical-align: middle;
+        transition: background .16s ease, color .16s ease;
+    }
+
+    tbody tr {
+        transition: box-shadow .16s ease;
+    }
+
+        tbody tr:hover td {
+            background: var(--primary-soft);
+        }
+
+            tbody tr:hover td:first-child {
+                box-shadow: inset 4px 0 0 var(--primary-3);
+            }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+    td[data-label="Selecionar"] {
+        text-align: center;
+    }
+
+    .commission-checkbox {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--money);
+        cursor: pointer;
+        filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .08));
+    }
+
+        .commission-checkbox:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+            filter: grayscale(1);
+        }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 28px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10.5px;
+        font-weight: 900;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .04);
+    }
+
+        .badge.status-info {
+            background: var(--primary-soft);
+            color: var(--primary);
+            border-color: rgba(13, 71, 161, .13);
+        }
+
+            .badge.status-info::before {
+                content: "#";
+                margin-right: 3px;
+                opacity: .7;
+            }
+
+        .badge.status-ok {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+
+            .badge.status-ok::before {
+                content: "✓";
+                margin-right: 6px;
+                font-family: 'Sora', Arial, sans-serif;
+            }
+
+        .badge.status-danger {
+            background: #ffe4e6;
+            color: var(--danger-2);
+            border-color: #fecdd3;
+        }
+
+            .badge.status-danger::before {
+                content: "●";
+                margin-right: 6px;
+                font-size: 8px;
+                animation: comPulseDanger 1.35s ease-in-out infinite;
+            }
+
+    .client-name {
+        display: block;
+        color: var(--text);
+        font-size: 13px;
+        font-weight: 900;
+        line-height: 1.25;
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .client-sub {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.35;
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .date-strong {
+        display: block;
+        color: var(--text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12.5px;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+
+    .date-sub {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 10.5px;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+
+    .obs-cell {
+        max-width: 320px;
+        color: var(--muted);
+        font-size: 11.5px;
+        font-weight: 600;
+        line-height: 1.45;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    tbody tr:hover .obs-cell {
+        color: var(--text-2);
+    }
+
+    .empty-state {
+        position: relative;
+        z-index: 3;
+        padding: 42px 24px;
+        border: 1.5px dashed var(--border-2);
+        border-radius: 20px;
+        background: radial-gradient(circle at top, rgba(66, 165, 245, .09), transparent 35%), #ffffff;
+        color: var(--muted);
+        text-align: center;
+        font-size: 13px;
+        font-weight: 800;
+        box-shadow: var(--shadow-sm);
+    }
+
+        .empty-state::before {
+            content: "🧾";
+            width: 58px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+            border-radius: 20px;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-size: 25px;
+            box-shadow: var(--shadow-sm);
+        }
+
+    @@media (max-width: 1180px) {
+        .filters-compact {
+            grid-template-columns: 1fr 180px 180px;
+        }
+
+        .commission-hero {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .commission-period-card {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @@media (max-width: 860px) {
+        .admin-card {
+            padding: 18px;
+            border-radius: 18px;
+        }
+
+        .card-title {
+            font-size: 18px;
+        }
+
+            .card-title::before {
+                width: 38px;
+                height: 38px;
+                border-radius: 14px;
+            }
+
+        .card-subtitle {
+            margin-left: 50px;
+        }
+
+        .filters-compact {
+            grid-template-columns: 1fr;
+            padding: 14px;
+        }
+
+        .commission-hero {
+            grid-template-columns: 1fr;
+        }
+
+        table {
+            min-width: 980px;
+        }
+    }
+
+    @@media (max-width: 650px) {
+        .admin-card {
+            min-height: auto;
+            padding: 14px;
+            border-radius: 16px;
+        }
+
+        .card-title {
+            align-items: flex-start;
+            font-size: 16px;
+        }
+
+            .card-title::before {
+                display: none;
+            }
+
+        .card-subtitle {
+            margin: 8px 0 18px;
+            font-size: 12px;
+        }
+
+        .admin-input {
+            height: 44px;
+            font-size: 12px;
+        }
+
+        .commission-main-card,
+        .commission-period-card {
+            min-height: 116px;
+            padding: 17px;
+        }
+
+            .commission-main-card strong {
+                font-size: 28px;
+            }
+
+            .commission-period-card strong {
+                font-size: 18px;
+            }
+
+        .table-wrap {
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            overflow: visible;
+        }
+
+        table {
+            min-width: unset;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+
+        thead {
+            display: none;
+        }
+
+        tbody,
+        tr,
+        td {
+            display: block;
+            width: 100%;
+        }
+
+            tbody tr {
+                border: 1px solid var(--border);
+                border-radius: 18px;
+                background: #ffffff;
+                box-shadow: var(--shadow-sm);
+                overflow: hidden;
+                transition: box-shadow .16s ease, transform .16s ease;
+            }
+
+                tbody tr:hover {
+                    transform: translateY(-2px);
+                    box-shadow: var(--shadow);
+                }
+
+                    tbody tr:hover td:first-child {
+                        box-shadow: none;
+                    }
+
+        td {
+            display: grid;
+            grid-template-columns: 135px minmax(0, 1fr);
+            gap: 12px;
+            align-items: start;
+            padding: 11px 13px;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 12px;
+        }
+
+            td:last-child {
+                border-bottom: none;
+            }
+
+            td::before {
+                content: attr(data-label);
+                color: var(--muted);
+                font-size: 9.5px;
+                font-weight: 900;
+                text-transform: uppercase;
+                letter-spacing: .08em;
+            }
+
+            td[data-label="Selecionar"] {
+                text-align: left;
+            }
+
+        .client-name,
+        .client-sub,
+        .obs-cell {
+            max-width: unset;
+        }
+    }
+
+    @@media (max-width: 430px) {
+        td {
+            grid-template-columns: 1fr;
+            gap: 5px;
+        }
+
+        .commission-main-card::after,
+        .commission-period-card::after {
+            display: none;
+        }
+
+        .commission-main-card strong,
+        .commission-period-card strong {
+            margin-right: 0;
+        }
+    }
+
+    @@keyframes comFadeUp {
+        from {
+            opacity: 0;
+            transform: translateY(8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes comPulseDanger {
+        0%, 100% {
+            opacity: .45;
+            transform: scale(.9);
+        }
+
+        50% {
+            opacity: 1;
+            transform: scale(1.18);
+        }
+    }
+</style>
+
+
+<div class="admin-card">
+    <div class="card-title">Comissões liberadas</div>
+    <div class="card-subtitle">
+        Exibe clientes que passaram pelo teste de 10 dias e possuem pagamento identificado no ContaReceber.
+    </div>
+
+    <div class="filters-compact">
+        <input class="admin-input"
+               placeholder="Buscar por código, cliente, entrada, pagamento ou observação..."
+               @bind="FiltroComissoes"
+               @bind:event="oninput" />
+        <select class="admin-input" @bind="TipoFiltroComissao">
+            <option value="mes">Mês específico</option>
+            <option value="ano">Ano inteiro</option>
+        </select>
+        @if (TipoFiltroComissao == "mes")
+        {
+            <select class="admin-input" @bind="FiltroComissaoMes">
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+            </select>
+        }
+        else
+        {
+            <select class="admin-input" @bind="FiltroComissaoAno">
+                @for (var ano = DateTime.Today.Year; ano >= DateTime.Today.Year - 5; ano--)
+                {
+                    <option value="@ano">@ano</option>
+                }
+            </select>
+        }
+    </div>
+
+    <div class="commission-hero">
+        <div class="commission-main-card">
+            <span>Comissões selecionadas</span>
+            <strong>@TotalComissoesLiberadas</strong>
+            <small>Clientes atualmente marcados para comissão.</small>
+        </div>
+        <div class="commission-main-card">
+            <span>Valor total</span>
+            <strong>@ValorTotalComissoes.ToString("C")</strong>
+            <small>Cada comissão equivale a R$ 25,00.</small>
+        </div>
+        <div class="commission-period-card">
+            <span>Período selecionado</span>
+            <strong>@PeriodoComissaoTexto</strong>
+            <small class="date-sub">Filtro por mês completo.</small>
+        </div>
+    </div>
+
+    @if (!ComissoesFiltradas.Any())
+    {
+        <div class="empty-state">
+            Nenhuma comissão encontrada para o mês/período selecionado.
+        </div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:45px;">OK</th>
+                        <th>Código</th>
+                        <th>Cliente</th>
+                        <th>Entrada / instalação</th>
+                        <th>Fim do teste</th>
+                        <th>Data pagamento</th>
+                        <th>Observação pagamento</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in ComissoesFiltradas)
+                    {
+                        <tr>
+                            <td data-label="Selecionar">
+                                <input type="checkbox"
+                                       class="commission-checkbox"
+                                       disabled="@(item.DataPagamento == null || item.EstaEmTeste)"
+                                       @bind="item.Selecionado" />
+                            </td>
+                            <td data-label="Código">
+                                <span class="badge status-info">@item.CodCliente</span>
+                            </td>
+                            <td data-label="Cliente">
+                                <span class="client-name">@item.ClienteExibicao</span>
+                                <span class="client-sub">@item.Nome</span>
+                            </td>
+                            <td data-label="Entrada / instalação">
+                                @if (item.DataInstalacao == null)
+                                {
+                                    <span class="date-strong" style="color:var(--muted);">—</span>
+                                    <span class="date-sub">Sem data</span>
+                                }
+                                else
+                                {
+                                    <span class="date-strong">@FormatarData(item.DataInstalacao)</span>
+                                    <span class="date-sub">@(item.EstaEmTeste ? "Início do teste" : "Data da observação")</span>
+                                }
+                            </td>
+                            <td data-label="Liberação (10 dias)">
+                                @if (item.DataFimTeste == null)
+                                {
+                                    <span class="date-strong" style="color:var(--muted);">—</span>
+                                    <span class="date-sub">Sem data prevista</span>
+                                }
+                                else
+                                {
+                                    var diasRestantes = (item.DataFimTeste.Value.Date - DateTime.Today).Days;
+                                    var jaLiberou = diasRestantes <= 0;
+                                    <span class="date-strong" style="color:@(jaLiberou ? "var(--success)" : "var(--warning)");">
+                                        @FormatarData(item.DataFimTeste)
+                                    </span>
+                                    <span class="date-sub">
+                                        @if (jaLiberou)
+                                        {
+                                            <span style="color:var(--success); font-weight:700;">✓ Liberado</span>
+                                        }
+                                        else
+                                        {
+                                            <span>Faltam @diasRestantes dia(s)</span>
+                                        }
+                                    </span>
+                                }
+                            </td>
+                            <td data-label="Data pagamento">
+                                <span class="date-strong">
+                                    @(item.DataPagamento == null ? "Ainda sem pagamento" : FormatarData(item.DataPagamento))
+                                </span>
+                                <span class="date-sub">
+                                    @(item.DataPagamento == null ? "Cliente em teste" : NomeMes(item.DataPagamento))
+                                </span>
+                            </td>
+                            <td data-label="Observação pagamento">
+                                <div class="obs-cell">
+                                    @(string.IsNullOrWhiteSpace(item.ObservacaoContaReceber) ? "-" : item.ObservacaoContaReceber)
+                                </div>
+                            </td>
+                            <td data-label="Status">
+                                <span class="badge @(item.EstaEmTeste ? "status-danger" : "status-ok")">
+                                    @item.StatusComissao
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private bool Carregando = true;
+    private bool PodeAcessarAdmin = false;
+    private bool PodeVisualizarComissoes = false;
+    private string MensagemPermissao = "";
+
+    private string TipoFiltroComissao = "mes";
+    private int FiltroComissaoMes = DateTime.Today.Month;
+    private int FiltroComissaoAno = DateTime.Today.Year;
+    private List<AdminComissaoDto> ListaComissoes = new();
+    private string FiltroComissoes = "";
+
+    private IEnumerable<AdminComissaoDto> ComissoesFiltradas =>
+    ListaComissoes
+        .Where(PassaFiltroTextoComissao)
+        .Where(PassaFiltroPeriodoComissao)
+        .OrderByDescending(c => c.DataPagamento)
+        .ThenBy(c => c.ClienteExibicao);
+
+    private bool PassaFiltroTextoComissao(AdminComissaoDto c)
+    {
+        if (string.IsNullOrWhiteSpace(FiltroComissoes))
+            return true;
+
+        return c.CodCliente.ToString().Contains(FiltroComissoes)
+            || (c.Nome ?? "").Contains(FiltroComissoes, StringComparison.OrdinalIgnoreCase)
+            || (c.Apelido ?? "").Contains(FiltroComissoes, StringComparison.OrdinalIgnoreCase)
+            || (c.ObservacaoContaReceber ?? "").Contains(FiltroComissoes, StringComparison.OrdinalIgnoreCase)
+            || FormatarData(c.DataInstalacao).Contains(FiltroComissoes)
+            || FormatarData(c.DataFimTeste).Contains(FiltroComissoes)
+            || FormatarData(c.DataPagamento).Contains(FiltroComissoes);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Carregando = true;
+        MensagemPermissao = "";
+
+        try
+        {
+            int tentativas = 0;
+
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            {
+                MensagemPermissao = "Usuário ainda não foi carregado. Atualize a página.";
+                PodeAcessarAdmin = false;
+                PodeVisualizarComissoes = false;
+                return;
+            }
+
+            var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ACESSAR"
+            );
+
+            PodeVisualizarComissoes = await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_COMISSOES_VISUALIZAR"
+            );
+
+            if (!PodeAcessarAdmin || !PodeVisualizarComissoes)
+            {
+                MensagemPermissao = "Você não tem permissão para acessar a tela de comissões.";
+                return;
+            }
+
+            ListaComissoes = await AdminService.ListarComissoesAsync();
+
+            foreach (var item in ListaComissoes)
+            {
+                item.Selecionado = item.DataPagamento != null && !item.EstaEmTeste;
+            }
+        }
+        catch (Exception ex)
+        {
+            MensagemPermissao = "Erro ao carregar comissões: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private bool PassaFiltroPeriodoComissao(AdminComissaoDto c)
+    {
+        // CLIENTES EM TESTE
+        if (c.EstaTestando && c.DataPagamento == null)
+        {
+            if (TipoFiltroComissao == "ano")
+            {
+                return DateTime.Today.Year == FiltroComissaoAno;
+            }
+
+            return DateTime.Today.Year == FiltroComissaoAno
+                && DateTime.Today.Month == FiltroComissaoMes;
+        }
+
+        // CLIENTES COM PAGAMENTO
+        if (c.DataPagamento == null)
+            return false;
+
+        var dataPagamento = c.DataPagamento.Value.Date;
+
+        if (TipoFiltroComissao == "ano")
+        {
+            return dataPagamento.Year == FiltroComissaoAno;
+        }
+
+        return dataPagamento.Year == FiltroComissaoAno
+            && dataPagamento.Month == FiltroComissaoMes;
+    }
+
+    private int TotalComissoesLiberadas =>
+    ComissoesFiltradas.Count(c => c.Selecionado);
+
+    private decimal ValorTotalComissoes =>
+    TotalComissoesLiberadas * 25m;
+
+    private string PeriodoComissaoTexto
+    {
+        get
+        {
+            if (TipoFiltroComissao == "ano")
+                return $"Ano inteiro de {FiltroComissaoAno}";
+
+            var nomeMes = new DateTime(FiltroComissaoAno, FiltroComissaoMes, 1)
+                .ToString("MMMM", new System.Globalization.CultureInfo("pt-BR"));
+
+            return $"{nomeMes}/{FiltroComissaoAno}";
+        }
+    }
+
+    private string NomeMes(DateTime? data)
+    {
+        if (data == null)
+            return "-";
+
+        return data.Value.ToString("MMMM/yyyy", new System.Globalization.CultureInfo("pt-BR"));
+    }
+
+    private string FormatarData(object? data)
+    {
+        if (data == null)
+            return "-";
+
+        if (data is DateTime dt)
+            return dt.ToString("dd/MM/yyyy");
+
+        if (data is TimeOnly time)
+            return time.ToString("HH:mm");
+
+        return data.ToString() ?? "-";
+    }
+}

@@ -1,0 +1,2251 @@
+@page "/agendas"
+@using EvolutCRM.Models
+@using System
+@using System.Linq
+@using System.Globalization
+@inject EvolutCRM.Services.CardService CardService
+@inject EvolutCRM.Services.UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject EvolutCRM.Services.AdminService AdminService
+@inject EvolutCRM.Services.AgendaService AgendaService
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+    :root {
+        --bg: #f0f4f9;
+        --surface: #ffffff;
+        --surface-2: #f7f9fc;
+        --border: #e2e8f0;
+        --border-focus: #3b82f6;
+        --text: #0f172a;
+        --text-2: #475569;
+        --text-3: #94a3b8;
+        --blue: #2563eb;
+        --blue-d: #1e3a8a;
+        --blue-l: #eff6ff;
+        --green: #16a34a;
+        --red: #dc2626;
+        --amber: #d97706;
+        --purple: #7c3aed;
+        --sky: #0284c7;
+        --radius: 12px;
+        --radius-sm: 8px;
+        --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.06);
+        --shadow-md: 0 4px 16px rgba(0,0,0,.10), 0 1px 4px rgba(0,0,0,.06);
+        --font: 'DM Sans', sans-serif;
+        --mono: 'DM Mono', monospace;
+        --hour-h: 68px;
+    }
+
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* ── Page shell ──────────────────────────────────────── */
+    .ag-page {
+        min-height: 100vh;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        font-family: var(--font);
+        color: var(--text);
+        overflow: hidden;
+    }
+
+    /* ── Topbar ──────────────────────────────────────────── */
+    .ag-topbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        z-index: 20;
+        flex-wrap: wrap;
+    }
+
+    .ag-logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-right: 4px;
+        flex: 0 0 auto;
+    }
+
+    .ag-logo-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, var(--blue), var(--blue-d));
+        display: grid;
+        place-items: center;
+        font-size: .9rem;
+        box-shadow: 0 2px 6px rgba(37,99,235,.35);
+    }
+
+    .ag-logo h2 {
+        font-size: .95rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -.02em;
+    }
+
+    .ag-logo-sub {
+        font-size: .72rem;
+        color: var(--text-2);
+        font-weight: 500;
+        margin-top: 1px;
+    }
+
+    /* ── KPI pills ───────────────────────────────────────── */
+    .ag-kpis {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+    }
+
+    .ag-kpi {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: .72rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+        white-space: nowrap;
+    }
+
+    .ag-kpi-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        flex: 0 0 auto;
+    }
+
+    .ag-kpi.open {
+        background: #eff6ff;
+        color: var(--blue);
+        border-color: #bfdbfe;
+    }
+
+    .ag-kpi.done {
+        background: #f0fdf4;
+        color: var(--green);
+        border-color: #bbf7d0;
+    }
+
+    .ag-kpi.late {
+        background: #fff1f2;
+        color: var(--red);
+        border-color: #fecaca;
+    }
+
+    .ag-kpi.crm {
+        background: #f0f9ff;
+        color: var(--sky);
+        border-color: #bae6fd;
+    }
+
+    .ag-kpi.ticket {
+        background: #faf5ff;
+        color: var(--purple);
+        border-color: #e9d5ff;
+    }
+
+    .ag-kpi-dot.open {
+        background: var(--blue);
+    }
+
+    .ag-kpi-dot.done {
+        background: var(--green);
+    }
+
+    .ag-kpi-dot.late {
+        background: var(--red);
+    }
+
+    .ag-kpi-dot.crm {
+        background: var(--sky);
+    }
+
+    .ag-kpi-dot.ticket {
+        background: var(--purple);
+    }
+
+    /* ── Topbar actions ──────────────────────────────────── */
+    .ag-topbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+    }
+
+    .ag-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 13px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font);
+        font-size: .78rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all .14s ease;
+        white-space: nowrap;
+    }
+
+        .ag-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+        }
+
+        .ag-btn:active {
+            transform: none;
+        }
+
+        .ag-btn.ghost {
+            background: transparent;
+            color: var(--text-2);
+            border-color: var(--border);
+        }
+
+            .ag-btn.ghost:hover {
+                background: var(--surface-2);
+                color: var(--text);
+            }
+
+        .ag-btn.primary {
+            background: var(--blue);
+            color: #fff;
+            border-color: var(--blue);
+            box-shadow: 0 2px 6px rgba(37,99,235,.28);
+        }
+
+            .ag-btn.primary:hover {
+                background: #1d4ed8;
+            }
+
+        .ag-btn.today {
+            background: var(--blue-l);
+            color: var(--blue);
+            border-color: #bfdbfe;
+        }
+
+            .ag-btn.today:hover {
+                background: #dbeafe;
+            }
+
+    /* ── Subbar (filters + week nav) ─────────────────────── */
+    .ag-subbar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        flex-wrap: wrap;
+    }
+
+    .ag-week-nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex: 0 0 auto;
+    }
+
+    .ag-week-label {
+        padding: 0 10px;
+        font-size: .78rem;
+        font-weight: 600;
+        color: var(--text);
+        min-width: 130px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .ag-filters {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+    }
+
+    .ag-filter-group {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .ag-filter-label {
+        font-size: .70rem;
+        font-weight: 600;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        white-space: nowrap;
+    }
+
+    .ag-select, .ag-input-date {
+        height: 32px;
+        padding: 0 8px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: .78rem;
+        font-weight: 500;
+        outline: none;
+        transition: border .14s;
+        cursor: pointer;
+    }
+
+        .ag-select:focus, .ag-input-date:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+        }
+
+    /* ── Main content ────────────────────────────────────── */
+    .ag-main {
+        flex: 1 1 0;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0,1fr) 260px;
+        gap: 0;
+        overflow: hidden;
+    }
+
+    /* ── Calendar panel ──────────────────────────────────── */
+    .ag-cal-wrap {
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--border);
+    }
+
+    .ag-cal-scroll {
+        flex: 1 1 0;
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .ag-grid {
+        display: grid;
+        /* columns defined inline via style binding */
+        min-width: 0;
+    }
+
+    /* ── Grid header ─────────────────────────────────────── */
+    .ag-grid-header-row {
+        display: contents;
+    }
+
+    .ag-col-time-head {
+        position: sticky;
+        top: 0;
+        left: 0;
+        z-index: 10;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        border-right: 1px solid var(--border);
+        width: 52px;
+    }
+
+    .ag-col-day-head {
+        position: sticky;
+        top: 0;
+        z-index: 9;
+        background: var(--surface);
+        border-bottom: 2px solid var(--border);
+        border-right: 1px solid var(--border);
+        padding: 8px 6px;
+        text-align: center;
+        min-width: 0;
+    }
+
+        .ag-col-day-head.is-today {
+            background: var(--blue-l);
+            border-bottom-color: var(--blue);
+        }
+
+    .ag-day-name {
+        font-size: .62rem;
+        font-weight: 700;
+        color: var(--text-3);
+        letter-spacing: .07em;
+        text-transform: uppercase;
+    }
+
+    .ag-day-num {
+        font-size: .88rem;
+        font-weight: 700;
+        color: var(--text);
+        margin-top: 2px;
+    }
+
+    .ag-col-day-head.is-today .ag-day-num {
+        color: var(--blue);
+    }
+
+    /* ── Grid body ───────────────────────────────────────── */
+    .ag-col-time {
+        position: sticky;
+        left: 0;
+        z-index: 5;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        width: 52px;
+    }
+
+    .ag-time-slot {
+        height: var(--hour-h);
+        padding: 5px 6px 0 0;
+        text-align: right;
+        font-size: .65rem;
+        font-weight: 500;
+        color: var(--text-3);
+        font-family: var(--mono);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .ag-col-day {
+        position: relative;
+        border-right: 1px solid var(--border);
+        background: repeating-linear-gradient( to bottom, var(--surface) 0, var(--surface) calc(var(--hour-h) - 1px), var(--border) calc(var(--hour-h) - 1px), var(--border) var(--hour-h) );
+        min-height: calc(var(--hour-h) * 11);
+    }
+
+        .ag-col-day.is-today {
+            background: repeating-linear-gradient( to bottom, #f8fbff 0, #f8fbff calc(var(--hour-h) - 1px), #dbeafe calc(var(--hour-h) - 1px), #dbeafe var(--hour-h) );
+        }
+
+    /* ── Events ──────────────────────────────────────────── */
+    .ag-event {
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        border-radius: 9px;
+        padding: 6px 8px;
+        cursor: pointer;
+        overflow: hidden;
+        transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+        border-left: 3px solid rgba(255,255,255,.4);
+        box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+
+        .ag-event:hover {
+            transform: translateY(-1px) scale(1.015);
+            box-shadow: 0 6px 16px rgba(0,0,0,.18);
+            filter: brightness(1.04);
+            z-index: 10;
+        }
+
+        .ag-event.is-crm {
+            background: linear-gradient(145deg,#0284c7,#38bdf8);
+            color: #fff;
+        }
+
+        .ag-event.is-client {
+            background: linear-gradient(145deg,#d97706,#f59e0b);
+            color: #fff;
+        }
+
+        .ag-event.is-ticket {
+            background: linear-gradient(145deg,#7c3aed,#a78bfa);
+            color: #fff;
+        }
+
+        .ag-event.is-evolut {
+            background: linear-gradient(145deg,#15803d,#22c55e);
+            color: #fff;
+        }
+
+        .ag-event.is-late {
+            background: linear-gradient(145deg,#b91c1c,#ef4444);
+            color: #fff;
+        }
+
+        .ag-event.is-done {
+            background: #e2e8f0;
+            color: var(--text-2);
+            border-left-color: #cbd5e1;
+            box-shadow: none;
+        }
+
+        .ag-event.is-group {
+            background: linear-gradient(145deg,#334155,#475569);
+            color: #fff;
+            border-style: dashed;
+            border-color: rgba(255,255,255,.4);
+        }
+
+    .ag-event-time {
+        font-size: .62rem;
+        font-weight: 700;
+        font-family: var(--mono);
+        opacity: .85;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .ag-event-late-badge {
+        font-size: .55rem;
+        font-weight: 700;
+        background: rgba(0,0,0,.2);
+        border-radius: 3px;
+        padding: 1px 4px;
+        letter-spacing: .04em;
+    }
+
+    .ag-event-title {
+        font-size: .72rem;
+        font-weight: 600;
+        line-height: 1.2;
+        margin-top: 3px;
+        word-break: break-word;
+    }
+
+    .ag-event-client {
+        font-size: .67rem;
+        font-weight: 500;
+        opacity: .82;
+        margin-top: 2px;
+        word-break: break-word;
+    }
+
+    .ag-event-actions {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        display: flex;
+        gap: 3px;
+        z-index: 3;
+    }
+
+    .ag-mini-btn {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        border: none;
+        background: rgba(255,255,255,.92);
+        cursor: pointer;
+        font-size: .6rem;
+        display: grid;
+        place-items: center;
+        box-shadow: 0 1px 4px rgba(0,0,0,.15);
+        transition: transform .1s, background .1s;
+        line-height: 1;
+        padding: 0;
+    }
+
+        .ag-mini-btn:hover {
+            background: #fff;
+            transform: scale(1.1);
+        }
+
+    /* ── Side panel ──────────────────────────────────────── */
+    .ag-side {
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--surface-2);
+    }
+
+    .ag-side-section {
+        flex: 1 1 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border-bottom: 1px solid var(--border);
+        overflow: hidden;
+    }
+
+        .ag-side-section:last-child {
+            border-bottom: none;
+        }
+
+    .ag-side-head {
+        flex: 0 0 auto;
+        padding: 10px 12px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+    }
+
+    .ag-side-title {
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--text-2);
+    }
+
+    .ag-side-count {
+        font-size: .68rem;
+        font-weight: 700;
+        background: var(--blue-l);
+        color: var(--blue);
+        border-radius: 999px;
+        padding: 2px 7px;
+    }
+
+        .ag-side-count.red {
+            background: #fff1f2;
+            color: var(--red);
+        }
+
+    .ag-side-list {
+        flex: 1 1 0;
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+
+    .ag-side-item {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px 10px;
+        cursor: pointer;
+        transition: background .12s, transform .12s, box-shadow .12s;
+    }
+
+        .ag-side-item:hover {
+            background: var(--blue-l);
+            border-color: #bfdbfe;
+            transform: translateX(2px);
+            box-shadow: var(--shadow);
+        }
+
+        .ag-side-item.late {
+            border-left: 3px solid var(--red);
+            background: #fff8f8;
+        }
+
+            .ag-side-item.late:hover {
+                background: #fff1f2;
+                border-color: #fecaca;
+            }
+
+    .ag-side-item-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+    }
+
+    .ag-side-item-time {
+        font-size: .65rem;
+        font-weight: 700;
+        font-family: var(--mono);
+        color: var(--blue);
+    }
+
+    .ag-side-item.late .ag-side-item-time {
+        color: var(--red);
+    }
+
+    .ag-side-item-tag {
+        font-size: .60rem;
+        font-weight: 700;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .ag-side-item-title {
+        font-size: .75rem;
+        font-weight: 600;
+        color: var(--text);
+        line-height: 1.2;
+    }
+
+    .ag-side-item-client {
+        font-size: .68rem;
+        font-weight: 500;
+        color: var(--text-2);
+        margin-top: 2px;
+    }
+
+    .ag-empty-side {
+        padding: 16px 10px;
+        text-align: center;
+        font-size: .74rem;
+        font-weight: 500;
+        color: var(--text-3);
+    }
+
+    /* ── Legend ──────────────────────────────────────────── */
+    .ag-legend {
+        flex: 0 0 auto;
+        padding: 10px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+    }
+
+    .ag-legend-title {
+        font-size: .63rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--text-3);
+        margin-bottom: 2px;
+    }
+
+    .ag-legend-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+    }
+
+    .ag-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: .68rem;
+        font-weight: 500;
+        color: var(--text-2);
+    }
+
+    .ag-legend-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        flex: 0 0 auto;
+    }
+
+        .ag-legend-dot.crm {
+            background: #0284c7;
+        }
+
+        .ag-legend-dot.client {
+            background: #d97706;
+        }
+
+        .ag-legend-dot.ticket {
+            background: #7c3aed;
+        }
+
+        .ag-legend-dot.evolut {
+            background: #16a34a;
+        }
+
+        .ag-legend-dot.late {
+            background: #dc2626;
+        }
+
+    /* ── Empty state ─────────────────────────────────────── */
+    .ag-empty-grid {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: var(--text-3);
+        font-size: .84rem;
+        font-weight: 500;
+        padding: 40px;
+    }
+
+    .ag-empty-icon {
+        font-size: 2rem;
+    }
+
+    /* ── Mobile list ─────────────────────────────────────── */
+    .ag-mobile-list {
+        display: none;
+    }
+
+    /* ── Modals ──────────────────────────────────────────── */
+    .ag-modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15,23,42,.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        padding: 20px;
+        backdrop-filter: blur(3px);
+    }
+
+    .ag-modal {
+        width: 540px;
+        max-width: 96vw;
+        max-height: 90vh;
+        overflow-y: auto;
+        background: var(--surface);
+        border-radius: 16px;
+        box-shadow: 0 24px 64px rgba(0,0,0,.30);
+        animation: modalIn .16s ease-out;
+        border: 1px solid var(--border);
+    }
+
+    .ag-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--border);
+    }
+
+        .ag-modal-header h3 {
+            font-size: .95rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+    .ag-modal-close {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text-2);
+        cursor: pointer;
+        font-size: .8rem;
+        display: grid;
+        place-items: center;
+    }
+
+        .ag-modal-close:hover {
+            background: #fee2e2;
+            color: var(--red);
+            border-color: #fca5a5;
+        }
+
+    .ag-modal-body {
+        padding: 16px 18px;
+    }
+
+    .ag-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 18px;
+        border-top: 1px solid var(--border);
+        background: var(--surface-2);
+        border-radius: 0 0 16px 16px;
+    }
+
+    @@keyframes modalIn {
+        from {
+            opacity: 0;
+            transform: translateY(8px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: none;
+        }
+    }
+
+    .ag-field-label {
+        display: block;
+        font-size: .70rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        color: var(--text-2);
+        margin-bottom: 4px;
+        margin-top: 12px;
+    }
+
+        .ag-field-label:first-of-type {
+            margin-top: 0;
+        }
+
+    .ag-modal-input {
+        width: 100%;
+        height: 36px;
+        padding: 0 10px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: .82rem;
+        outline: none;
+        transition: border .14s;
+    }
+
+        .ag-modal-input:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+            background: #fff;
+        }
+
+    .ag-modal-2col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .ag-modal-error {
+        background: #fff1f2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+        padding: 8px 12px;
+        border-radius: var(--radius-sm);
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+    }
+
+    .ag-repetir {
+        margin-top: 12px;
+        padding: 12px;
+        background: var(--surface-2);
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .ag-radio-group {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+        .ag-radio-group label {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .78rem;
+            font-weight: 500;
+            cursor: pointer;
+            color: var(--text-2);
+        }
+
+    .ag-check-group {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+        .ag-check-group label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: .76rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--text-2);
+        }
+
+    .ag-autocomplete {
+        position: relative;
+    }
+
+    .ag-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-md);
+        z-index: 200;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .ag-dropdown-item {
+        padding: 9px 12px;
+        font-size: .80rem;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--text);
+    }
+
+        .ag-dropdown-item:hover {
+            background: var(--blue-l);
+        }
+
+        .ag-dropdown-item small {
+            color: var(--text-3);
+            font-size: .72rem;
+        }
+
+    /* ── Group modal items ───────────────────────────────── */
+    .ag-group-item {
+        position: relative;
+        padding: 11px 90px 11px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        margin-bottom: 6px;
+        cursor: pointer;
+        background: var(--surface-2);
+        transition: background .12s, transform .12s;
+    }
+
+        .ag-group-item:hover {
+            background: var(--blue-l);
+            transform: translateX(2px);
+        }
+
+    .ag-group-item-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+    }
+
+    .ag-group-item-time {
+        font-size: .70rem;
+        font-weight: 700;
+        font-family: var(--mono);
+        color: var(--blue);
+    }
+
+    .ag-group-item-tag {
+        font-size: .62rem;
+        font-weight: 700;
+        color: var(--text-3);
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .ag-group-item-title {
+        font-size: .82rem;
+        font-weight: 600;
+        color: var(--text);
+        line-height: 1.2;
+    }
+
+    .ag-group-item-client {
+        font-size: .72rem;
+        color: var(--text-2);
+        margin-top: 2px;
+    }
+
+    .ag-group-item-actions {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        gap: 5px;
+    }
+
+    /* ── Responsive ──────────────────────────────────────── */
+    @@media (max-width: 900px) {
+        .ag-main {
+            grid-template-columns: 1fr;
+        }
+
+        .ag-side {
+            display: none;
+        }
+    }
+
+    @@media (max-width: 640px) {
+        .ag-page {
+            height: auto;
+            overflow: auto;
+        }
+
+        .ag-kpis {
+            display: none;
+        }
+
+        .ag-cal-wrap {
+            display: none;
+        }
+
+        .ag-mobile-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+        }
+
+        .ag-topbar {
+            gap: 8px;
+            padding: 8px 12px;
+        }
+
+        .ag-topbar-actions {
+            flex-wrap: wrap;
+        }
+
+        .ag-mobile-day {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .ag-mobile-day-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 9px 12px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+
+            .ag-mobile-day-head.is-today {
+                background: var(--blue-l);
+            }
+
+            .ag-mobile-day-head span {
+                font-size: .68rem;
+                font-weight: 700;
+                color: var(--text-3);
+                letter-spacing: .06em;
+                text-transform: uppercase;
+            }
+
+            .ag-mobile-day-head strong {
+                font-size: .85rem;
+                font-weight: 700;
+                color: var(--text);
+            }
+
+        .ag-mobile-events {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+        }
+
+        .ag-mobile-event {
+            position: relative;
+            padding: 10px 10px 10px 12px;
+            border-radius: var(--radius-sm);
+            color: #fff;
+            border-left: 4px solid rgba(255,255,255,.4);
+            box-shadow: 0 2px 8px rgba(0,0,0,.10);
+            cursor: pointer;
+        }
+
+            .ag-mobile-event.is-crm {
+                background: linear-gradient(145deg,#0284c7,#38bdf8);
+            }
+
+            .ag-mobile-event.is-client {
+                background: linear-gradient(145deg,#d97706,#f59e0b);
+            }
+
+            .ag-mobile-event.is-ticket {
+                background: linear-gradient(145deg,#7c3aed,#a78bfa);
+            }
+
+            .ag-mobile-event.is-evolut {
+                background: linear-gradient(145deg,#15803d,#22c55e);
+            }
+
+            .ag-mobile-event.is-late {
+                background: linear-gradient(145deg,#b91c1c,#ef4444);
+            }
+
+            .ag-mobile-event.is-done {
+                background: #e2e8f0;
+                color: var(--text-2);
+            }
+
+        .ag-mobile-event-top {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
+        }
+
+            .ag-mobile-event-top strong {
+                font-size: .72rem;
+                font-weight: 700;
+                font-family: var(--mono);
+            }
+
+            .ag-mobile-event-top span {
+                font-size: .60rem;
+                font-weight: 700;
+                background: rgba(255,255,255,.22);
+                border-radius: 3px;
+                padding: 1px 5px;
+            }
+
+        .ag-mobile-event-title {
+            font-size: .78rem;
+            font-weight: 600;
+            line-height: 1.2;
+            margin-bottom: 3px;
+        }
+
+        .ag-mobile-event-client {
+            font-size: .72rem;
+            opacity: .82;
+        }
+
+        .ag-mobile-event-acts {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: flex;
+            gap: 4px;
+        }
+    }
+</style>
+
+@{
+    var totalTela = agendasFiltradas.Count;
+    var totalAbertas = agendasFiltradas.Count(a => a.Status != "RESOLVIDO");
+    var totalResolvidas = agendasFiltradas.Count(a => a.Status == "RESOLVIDO");
+    var totalCrm = agendasFiltradas.Count(a => (a.Origem ?? "").ToUpper() == "CRM");
+    var totalTickets = agendasFiltradas.Count(a => (a.Origem ?? "").ToUpper() == "TICKET");
+    var totalAtrasadas = agendasFiltradas.Count(a =>
+        a.Status != "RESOLVIDO" &&
+        a.DataAgendamento.Date.Add(a.HoraAgendamento) < DateTime.Now);
+
+    var proximasAgendas = agendasFiltradas
+        .Where(a => a.Status != "RESOLVIDO" &&
+                    a.DataAgendamento.Date.Add(a.HoraAgendamento) >= DateTime.Now)
+        .OrderBy(a => a.DataAgendamento).ThenBy(a => a.HoraAgendamento)
+        .Take(10).ToList();
+
+    var agendasAtrasadasResumo = agendasFiltradas
+        .Where(a => a.Status != "RESOLVIDO" &&
+                    a.DataAgendamento.Date.Add(a.HoraAgendamento) < DateTime.Now)
+        .OrderBy(a => a.DataAgendamento).ThenBy(a => a.HoraAgendamento)
+        .Take(10).ToList();
+
+    // Grid column definition: 52px time col + 1 col per day
+    var gridCols = $"52px repeat({diasGrade.Count}, minmax(120px, 1fr))";
+}
+
+<div class="ag-page">
+
+    <!-- ── TOP BAR ───────────────────────────────────────── -->
+    <header class="ag-topbar">
+        <div class="ag-logo">
+            <div class="ag-logo-icon">📅</div>
+            <div>
+                <h2>Agenda</h2>
+                <div class="ag-logo-sub">@totalTela agendamento(s) no período</div>
+            </div>
+        </div>
+
+        <div class="ag-kpis">
+            <span class="ag-kpi open">
+                <span class="ag-kpi-dot open"></span>
+                @totalAbertas aberta(s)
+            </span>
+            <span class="ag-kpi done">
+                <span class="ag-kpi-dot done"></span>
+                @totalResolvidas resolvida(s)
+            </span>
+            <span class="ag-kpi late">
+                <span class="ag-kpi-dot late"></span>
+                @totalAtrasadas atrasada(s)
+            </span>
+            <span class="ag-kpi crm">
+                <span class="ag-kpi-dot crm"></span>
+                @totalCrm CRM
+            </span>
+            <span class="ag-kpi ticket">
+                <span class="ag-kpi-dot ticket"></span>
+                @totalTickets ticket(s)
+            </span>
+        </div>
+
+        <div class="ag-topbar-actions">
+            @if (PodeCriarAgendas)
+            {
+                <button class="ag-btn primary" @onclick="AbrirModalNovaAgenda">+ Novo</button>
+            }
+        </div>
+    </header>
+
+    <!-- ── SUBBAR (nav + filtros) ────────────────────────── -->
+    <div class="ag-subbar">
+        <div class="ag-week-nav">
+            <button class="ag-btn ghost" @onclick="SemanaAnterior" title="Semana anterior">←</button>
+            <span class="ag-week-label">
+                @((filtroDataInicio ?? DateTime.Today).ToString("dd/MM")) – @((filtroDataFim ?? DateTime.Today.AddDays(6)).ToString("dd/MM"))
+            </span>
+            <button class="ag-btn ghost" @onclick="ProximaSemana" title="Próxima semana">→</button>
+            <button class="ag-btn today" @onclick="IrParaHoje">Hoje</button>
+        </div>
+
+        <div class="ag-filters">
+            <div class="ag-filter-group">
+                <span class="ag-filter-label">Status</span>
+                <select class="ag-select" @bind="filtroStatus">
+                    <option value="PENDENTE">Em aberto</option>
+                    <option value="RESOLVIDO">Resolvidos</option>
+                    @if (PodeVerTodasAgendas)
+                    {
+                        <option value="TODOS">Todos</option>
+                    }
+                </select>
+            </div>
+
+            <div class="ag-filter-group">
+                <span class="ag-filter-label">Usuário</span>
+                <select class="ag-select" @bind="filtroUsuario">
+                    <option value="">Meu usuário</option>
+                    @if (PodeVerTodasAgendas)
+                    {
+                        <option value="TODOS">Todos</option>
+                    }
+                    @foreach (var u in usuarios)
+                    {
+                        <option value="@u.Username">@u.Username</option>
+                    }
+                </select>
+            </div>
+
+            <div class="ag-filter-group">
+                <span class="ag-filter-label">De</span>
+                <input type="date" class="ag-input-date" @bind="filtroDataInicio" />
+            </div>
+
+            <div class="ag-filter-group">
+                <span class="ag-filter-label">Até</span>
+                <input type="date" class="ag-input-date" @bind="filtroDataFim" />
+            </div>
+
+            <button class="ag-btn ghost" @onclick="AplicarFiltro">🔍 Filtrar</button>
+        </div>
+    </div>
+
+    <!-- ── MAIN ──────────────────────────────────────────── -->
+    <main class="ag-main">
+
+        <!-- ── CALENDAR ──────────────────────────────────── -->
+        <div class="ag-cal-wrap">
+
+            @if (!agendasFiltradas.Any())
+            {
+                <div class="ag-empty-grid">
+                    <div class="ag-empty-icon">🗓️</div>
+                    <span>Nenhum agendamento no período selecionado.</span>
+                </div>
+            }
+            else
+            {
+                <!-- Desktop grid -->
+                <div class="ag-cal-scroll desktop-view" style="display:block;">
+                    <div class="ag-grid" style="grid-template-columns:@gridCols;">
+
+                        <!-- Header row -->
+                        <div class="ag-col-time-head"></div>
+                        @foreach (var dia in diasGrade)
+                        {
+                            <div class="ag-col-day-head @(dia.Date == DateTime.Today ? "is-today" : "")">
+                                <div class="ag-day-name">@DiaSemanaCurto(dia)</div>
+                                <div class="ag-day-num">@dia.ToString("dd/MM")</div>
+                            </div>
+                        }
+
+                        <!-- Time + day columns -->
+                        <div class="ag-col-time">
+                            @foreach (var hora in horasGrade)
+                            {
+                                <div class="ag-time-slot">@hora.ToString("00"):00</div>
+                            }
+                        </div>
+
+                        @foreach (var dia in diasGrade)
+                        {
+                            <div class="ag-col-day @(dia.Date == DateTime.Today ? "is-today" : "")">
+                                @foreach (var grupo in GruposAgendaDoDia(dia))
+                                {
+                                    var lista = grupo.OrderBy(a => a.HoraAgendamento)
+                                                     .ThenBy(a => a.Codigo).ToList();
+
+                                    if (lista.Count == 1)
+                                    {
+                                        var ag = lista.First();
+                                        <div class="ag-event @GetClasseOrigem(ag)"
+                                             style="@GetEventStyle(ag)"
+                                             title="@ag.Descricao"
+                                             @onclick="() => AbrirAgendaNaGrade(ag)">
+
+                                            <div class="ag-event-time">
+                                                @ag.HoraAgendamento.ToString(@"hh\:mm")
+                                                @if (ag.Status != "RESOLVIDO" &&
+                                                     ag.DataAgendamento.Date.Add(ag.HoraAgendamento) < DateTime.Now)
+                                                {
+                                                    <span class="ag-event-late-badge">ATRASADA</span>
+                                                }
+                                            </div>
+                                            <div class="ag-event-title">@ag.Descricao</div>
+                                            <div class="ag-event-client">
+                                                @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
+                                            </div>
+
+                                            @if (ag.Status != "RESOLVIDO")
+                                            {
+                                                <div class="ag-event-actions" @onclick:stopPropagation="true">
+                                                    @if (ag.Origem != "TICKET" && PodeCriarAgendas)
+                                                    {
+                                                        <button class="ag-mini-btn" title="Editar" @onclick="() => AbrirModalEditarAgenda(ag)">✏️</button>
+                                                    }
+                                                    @if (PodeFinalizarAgendas && ag.Origem != "TICKET")
+                                                    {
+                                                        <button class="ag-mini-btn" title="Finalizar" @onclick="() => ResolverAgenda(ag)">✅</button>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(ag.NumeroTelefone))
+                                                    {
+                                                        <button class="ag-mini-btn" title="WhatsApp" @onclick="() => AbrirWhatsApp(ag.NumeroTelefone)">📱</button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="ag-event is-group"
+                                             style="@GetGroupStyle(grupo.Key)"
+                                             @onclick="() => AbrirGrupoAgenda(lista)">
+                                            <div class="ag-event-time">@grupo.Key.ToString("00"):00</div>
+                                            <div class="ag-event-title">📌 @lista.Count agendamentos</div>
+                                            <div class="ag-event-client">Toque para ver</div>
+                                        </div>
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Mobile list -->
+                <div class="ag-mobile-list">
+                    @foreach (var dia in diasGrade)
+                    {
+                        var agendasDia = AgendasDoDia(dia);
+                        if (agendasDia.Any())
+                        {
+                            <div class="ag-mobile-day">
+                                <div class="ag-mobile-day-head @(dia.Date == DateTime.Today ? "is-today" : "")">
+                                    <span>@DiaSemanaCurto(dia)</span>
+                                    <strong>@dia.ToString("dd/MM")</strong>
+                                </div>
+                                <div class="ag-mobile-events">
+                                    @foreach (var ag in agendasDia)
+                                    {
+                                        <div class="ag-mobile-event @GetClasseOrigem(ag)" @onclick="() => AbrirAgendaNaGrade(ag)">
+                                            <div class="ag-mobile-event-top">
+                                                <strong>@ag.HoraAgendamento.ToString(@"hh\:mm")</strong>
+                                                <span>@GetNomeOrigem(ag)</span>
+                                                @if (ag.Status != "RESOLVIDO" &&
+                                                     ag.DataAgendamento.Date.Add(ag.HoraAgendamento) < DateTime.Now)
+                                                {
+                                                    <span>⚠ ATRASADA</span>
+                                                }
+                                            </div>
+                                            <div class="ag-mobile-event-title">@ag.Descricao</div>
+                                            <div class="ag-mobile-event-client">
+                                                @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
+                                            </div>
+                                            @if (ag.Status != "RESOLVIDO")
+                                            {
+                                                <div class="ag-mobile-event-acts" @onclick:stopPropagation="true">
+                                                    @if (ag.Origem != "TICKET" && PodeCriarAgendas)
+                                                    {
+                                                        <button class="ag-mini-btn" @onclick="() => AbrirModalEditarAgenda(ag)">✏️</button>
+                                                    }
+                                                    @if (PodeFinalizarAgendas && ag.Origem != "TICKET")
+                                                    {
+                                                        <button class="ag-mini-btn" @onclick="() => ResolverAgenda(ag)">✅</button>
+                                                    }
+                                                    @if (!string.IsNullOrWhiteSpace(ag.NumeroTelefone))
+                                                    {
+                                                        <button class="ag-mini-btn" @onclick="() => AbrirWhatsApp(ag.NumeroTelefone)">📱</button>
+                                                    }
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- ── SIDE PANEL ────────────────────────────────── -->
+        <aside class="ag-side">
+
+            <!-- Próximos -->
+            <div class="ag-side-section">
+                <div class="ag-side-head">
+                    <span class="ag-side-title">Próximos</span>
+                    <span class="ag-side-count">@proximasAgendas.Count</span>
+                </div>
+                <div class="ag-side-list">
+                    @if (!proximasAgendas.Any())
+                    {
+                        <div class="ag-empty-side">Nenhum próximo evento.</div>
+                    }
+                    else
+                    {
+                        @foreach (var ag in proximasAgendas)
+                        {
+                            <div class="ag-side-item" @onclick="() => AbrirAgendaNaGrade(ag)">
+                                <div class="ag-side-item-meta">
+                                    <span class="ag-side-item-time">@ag.DataAgendamento.ToString("dd/MM") @ag.HoraAgendamento.ToString(@"hh\:mm")</span>
+                                    <span class="ag-side-item-tag">@GetNomeOrigem(ag)</span>
+                                </div>
+                                <div class="ag-side-item-title">@ag.Descricao</div>
+                                <div class="ag-side-item-client">
+                                    @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <!-- Atrasadas -->
+            <div class="ag-side-section">
+                <div class="ag-side-head">
+                    <span class="ag-side-title">⚠ Atrasadas</span>
+                    <span class="ag-side-count red">@agendasAtrasadasResumo.Count</span>
+                </div>
+                <div class="ag-side-list">
+                    @if (!agendasAtrasadasResumo.Any())
+                    {
+                        <div class="ag-empty-side">Nenhuma agenda atrasada.</div>
+                    }
+                    else
+                    {
+                        @foreach (var ag in agendasAtrasadasResumo)
+                        {
+                            <div class="ag-side-item late" @onclick="() => AbrirAgendaNaGrade(ag)">
+                                <div class="ag-side-item-meta">
+                                    <span class="ag-side-item-time">@ag.DataAgendamento.ToString("dd/MM") @ag.HoraAgendamento.ToString(@"hh\:mm")</span>
+                                    <span class="ag-side-item-tag">@GetNomeOrigem(ag)</span>
+                                </div>
+                                <div class="ag-side-item-title">@ag.Descricao</div>
+                                <div class="ag-side-item-client">
+                                    @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <!-- Legenda -->
+            <div class="ag-legend">
+                <div class="ag-legend-title">Legenda</div>
+                <div class="ag-legend-grid">
+                    <span class="ag-legend-item"><span class="ag-legend-dot crm"></span>CRM / Lead</span>
+                    <span class="ag-legend-item"><span class="ag-legend-dot client"></span>Cliente</span>
+                    <span class="ag-legend-item"><span class="ag-legend-dot ticket"></span>Ticket</span>
+                    <span class="ag-legend-item"><span class="ag-legend-dot evolut"></span>EvolutTech</span>
+                    <span class="ag-legend-item"><span class="ag-legend-dot late"></span>Atrasada</span>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- ── MODAL: NOVA / EDITAR AGENDA ───────────────────── -->
+    @if (mostrarModal)
+    {
+        <div class="ag-modal-overlay" @onclick="FecharModal">
+            <div class="ag-modal" @onclick:stopPropagation="true">
+                <div class="ag-modal-header">
+                    <h3>@(modoEdicao ? "✏️ Editar Agendamento" : "📅 Novo Agendamento")</h3>
+                    <button class="ag-modal-close" @onclick="FecharModal">✕</button>
+                </div>
+                <div class="ag-modal-body">
+                    @if (!string.IsNullOrEmpty(mensagemErro))
+                    {
+                        <div class="ag-modal-error">@mensagemErro</div>
+                    }
+
+                    <label class="ag-field-label">Tipo de Agendamento</label>
+                    <select class="ag-modal-input" @bind="tipoAgendamento">
+                        <option value="">Selecione...</option>
+                        <option value="CRM">CRM / Lead</option>
+                        <option value="CLIENTE">Cliente</option>
+                        <option value="Evolut">EvolutTech</option>
+                    </select>
+
+                    <label class="ag-field-label">Descrição</label>
+                    <input class="ag-modal-input" @bind="agendaModel.Descricao" placeholder="Descreva o agendamento..." />
+
+                    <div class="ag-modal-2col">
+                        <div>
+                            <label class="ag-field-label">Data</label>
+                            <input type="date" class="ag-modal-input" @bind="agendaData" />
+                        </div>
+                        <div>
+                            <label class="ag-field-label">Hora</label>
+                            <input type="time" class="ag-modal-input" @bind="agendaHora" />
+                        </div>
+                    </div>
+
+                    <label class="ag-field-label">Responsável</label>
+                    <select class="ag-modal-input" @bind="agendaModel.Usuario">
+                        <option value="">Selecione...</option>
+                        @foreach (var u in usuarios)
+                        {
+                            <option value="@u.Username">@u.Username</option>
+                        }
+                    </select>
+
+                    @if (tipoAgendamento == "CRM")
+                    {
+                        <label class="ag-field-label">Vincular ao Card (CRM)</label>
+                        <div class="ag-autocomplete">
+                            <input class="ag-modal-input" placeholder="Nome do cliente ou card..." @bind="buscaCard" @oninput="BuscarCards" />
+                            @if (cardsEncontrados.Any())
+                            {
+                                <div class="ag-dropdown">
+                                    @foreach (var c in cardsEncontrados)
+                                    {
+                                        <div class="ag-dropdown-item" @onclick="() => SelecionarCard(c)">
+                                            <span>@c.Descricao</span>
+                                            <small>#@c.Codigo</small>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (tipoAgendamento == "CLIENTE")
+                    {
+                        <label class="ag-field-label">Cliente</label>
+                        <div class="ag-autocomplete">
+                            <input class="ag-modal-input" placeholder="Nome do cliente..." value="@buscaCliente" @oninput="OnBuscaClienteInput" />
+                            @if (clientesEncontrados.Any())
+                            {
+                                <div class="ag-dropdown">
+                                    @foreach (var c in clientesEncontrados)
+                                    {
+                                        <div class="ag-dropdown-item" @onclick="() => SelecionarCliente(c)">
+                                            <span>@c.Nome</span>
+                                            <small>@c.Apelido</small>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (tipoAgendamento == "Evolut")
+                    {
+                        <div class="ag-repetir">
+                            <div class="ag-radio-group">
+                                <InputRadioGroup @bind-Value="tipoRepeticao">
+                                    <label><InputRadio Value="TipoRepeticao.UmaVez" /> Uma vez</label>
+                                    <label><InputRadio Value="TipoRepeticao.PorTempo" /> Por tempo</label>
+                                    <label><InputRadio Value="TipoRepeticao.Sempre" /> Sempre</label>
+                                </InputRadioGroup>
+                            </div>
+
+                            <div>
+                                <label class="ag-field-label" style="margin-top:0;">Repetir a cada</label>
+                                <select class="ag-modal-input" @bind="frequenciaRepeticao">
+                                    <option value="DIARIO">Diariamente</option>
+                                    <option value="SEMANAL">Semanalmente</option>
+                                    <option value="MENSAL">Mensalmente</option>
+                                </select>
+                            </div>
+
+                            @if (tipoRepeticao == TipoRepeticao.PorTempo)
+                            {
+                                <div>
+                                    <label class="ag-field-label" style="margin-top:0;">Repetir até</label>
+                                    <input type="date" class="ag-modal-input" @bind="dataFimRepeticao" />
+                                </div>
+                            }
+
+                            @if (frequenciaRepeticao == "SEMANAL")
+                            {
+                                <div>
+                                    <label class="ag-field-label" style="margin-top:0;">Dias da semana</label>
+                                    <div class="ag-check-group">
+                                        <label><input type="checkbox" @bind="repetirSegunda" /> Seg</label>
+                                        <label><input type="checkbox" @bind="repetirTerca" /> Ter</label>
+                                        <label><input type="checkbox" @bind="repetirQuarta" /> Qua</label>
+                                        <label><input type="checkbox" @bind="repetirQuinta" /> Qui</label>
+                                        <label><input type="checkbox" @bind="repetirSexta" /> Sex</label>
+                                        <label><input type="checkbox" @bind="repetirSabado" /> Sáb</label>
+                                        <label><input type="checkbox" @bind="repetirDomingo" /> Dom</label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="ag-modal-footer">
+                    <button class="ag-btn ghost" @onclick="FecharModal">Cancelar</button>
+                    <button class="ag-btn primary" @onclick="SalvarAgenda">💾 Salvar</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── MODAL: GRUPO DE AGENDAS ───────────────────────── -->
+    @if (mostrarModalGrupoAgenda)
+    {
+        <div class="ag-modal-overlay" @onclick="FecharModalGrupoAgenda">
+            <div class="ag-modal" @onclick:stopPropagation="true">
+                <div class="ag-modal-header">
+                    <h3>📌 Agendamentos do horário</h3>
+                    <button class="ag-modal-close" @onclick="FecharModalGrupoAgenda">✕</button>
+                </div>
+                <div class="ag-modal-body">
+                    @foreach (var ag in agendasGrupoSelecionado)
+                    {
+                        <div class="ag-group-item" @onclick="() => AbrirAgendaDoGrupo(ag)">
+                            <div class="ag-group-item-meta">
+                                <span class="ag-group-item-time">@ag.HoraAgendamento.ToString(@"hh\:mm")</span>
+                                <span class="ag-group-item-tag">@GetNomeOrigem(ag)</span>
+                            </div>
+                            <div class="ag-group-item-title">@ag.Descricao</div>
+                            <div class="ag-group-item-client">
+                                @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
+                            </div>
+                            @if (ag.Status != "RESOLVIDO" && ag.Origem != "TICKET")
+                            {
+                                <div class="ag-group-item-actions" @onclick:stopPropagation="true">
+                                    @if (PodeCriarAgendas)
+                                    {
+                                        <button class="ag-mini-btn" title="Editar" @onclick="() => EditarAgendaDoGrupo(ag)">✏️</button>
+                                    }
+                                    @if (PodeFinalizarAgendas)
+                                    {
+                                        <button class="ag-mini-btn" title="Finalizar" @onclick="() => ResolverAgendaDoGrupo(ag)">✅</button>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="ag-modal-footer">
+                    <button class="ag-btn ghost" @onclick="FecharModalGrupoAgenda">Fechar</button>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private async Task EditarAgendaDoGrupo(AgendaModel ag)
+    {
+        FecharModalGrupoAgenda();
+        await AbrirModalEditarAgenda(ag);
+    }
+
+    private List<TicketChamadoDModel> agendasTickets = new();
+    private bool PodeVerAgendas = false;
+    private bool PodeCriarAgendas = false;
+    private bool PodeFinalizarAgendas = false;
+    private bool PodeVerTodasAgendas = false;
+    private string frequenciaRepeticao = "DIARIO";
+    private DateTime? dataFimRepeticao;
+    private bool repetirSegunda, repetirTerca, repetirQuarta, repetirQuinta, repetirSexta, repetirSabado, repetirDomingo;
+    private TipoRepeticao tipoRepeticao = TipoRepeticao.UmaVez;
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+
+    enum TipoRepeticao { UmaVez, PorTempo, Sempre }
+
+    private string buscaCliente = "";
+    private string buscaCard = "";
+    private string ClienteMsg = "";
+
+    private List<AgendaModel> agendas = new();
+    private List<AgendaModel> agendasExpandidas = new();
+
+    private string filtroUsuario = "";
+    private string filtroStatus = "PENDENTE";
+    private DateTime? filtroDataInicio = null;
+    private DateTime? filtroDataFim = null;
+    private bool filtroManualAplicado = false;
+
+    private List<UserItem> usuarios = new();
+    private List<ClienteModel> clientesEncontrados = new();
+    private List<CardModels> cardsEncontrados = new();
+
+    private bool mostrarModal;
+    private bool modoEdicao;
+    private bool mostrarModalGrupoAgenda = false;
+    private List<AgendaModel> agendasGrupoSelecionado = new();
+    private string tipoAgendamento = "";
+    private string mensagemErro;
+
+    private AgendaModel agendaModel = new();
+    private DateTime agendaData = DateTime.Today;
+    private TimeOnly agendaHora = new(9, 0);
+    string NumeroTelefone = "";
+    string Mensagem = "";
+    bool Sucesso;
+
+    private readonly int horaInicioGrade = 8;
+    private readonly int horaFimGrade = 18;
+    private readonly int pixelsPorHora = 68;
+
+    private List<DateTime> diasGrade => GerarDiasGrade();
+
+    private List<AgendaModel> agendasFiltradas =>
+        todasAgendasTela
+            .Where(a =>
+                (filtroUsuario == "TODOS"
+                 || (string.IsNullOrEmpty(filtroUsuario) && (a.Usuario ?? "").ToUpper() == UserState.CurrentUser.ToUpper())
+                 || (a.Usuario ?? "").ToUpper() == filtroUsuario.ToUpper())
+                &&
+                (filtroStatus == "TODOS"
+                 || (filtroStatus == "PENDENTE" && a.Status != "RESOLVIDO")
+                 || (filtroStatus == "RESOLVIDO" && a.Status == "RESOLVIDO"))
+                &&
+                (!filtroDataInicio.HasValue || a.DataAgendamento.Date >= filtroDataInicio.Value.Date)
+                &&
+                (!filtroDataFim.HasValue || a.DataAgendamento.Date <= filtroDataFim.Value.Date)
+            )
+            .OrderBy(a => a.DataAgendamento)
+            .ThenBy(a => a.HoraAgendamento)
+            .ToList();
+
+    private List<AgendaModel> agendasAbertas =>
+        agendasFiltradas.Where(a => a.Status != "RESOLVIDO").ToList();
+
+    private async Task ResolverAgenda(AgendaModel agenda)
+    {
+        try
+        {
+            if (agenda.Origem == "TICKET") return;
+            await AgendaService.FinalizarAgendaAsync(agenda, agendas);
+            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
+            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
+            AtualizarAgendasExpandidas();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao finalizar agenda: {ex.Message}";
+        }
+    }
+
+    private async Task AbrirModalEditarAgenda(AgendaModel agenda)
+    {
+        if (agenda.EhOcorrenciaGerada && agenda.AgendaPaiCodigo.HasValue)
+        {
+            try
+            {
+                agenda = await AgendaService.MaterializarOcorrenciaSeNecessarioAsync(agenda, agendas);
+                agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
+                AtualizarAgendasExpandidas();
+                if (agenda == null) return;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erro ao materializar ocorrência: {ex.Message}");
+                return;
+            }
+        }
+
+        modoEdicao = true;
+
+        agendaModel = new AgendaModel
+        {
+            Codigo = agenda.Codigo,
+            Descricao = agenda.Descricao,
+            Usuario = agenda.Usuario,
+            CodEmp = agenda.CodEmp,
+            CodCRMC = agenda.CodCRMC,
+            CodCliente = agenda.CodCliente,
+            NomeCliente = agenda.NomeCliente,
+            ApelidoCliente = agenda.ApelidoCliente,
+            Origem = agenda.Origem,
+            Status = agenda.Status,
+            TipoRepeticao = agenda.TipoRepeticao,
+            FrequenciaRepeticao = agenda.FrequenciaRepeticao,
+            DataFimRepeticao = agenda.DataFimRepeticao,
+            DiasRepeticao = agenda.DiasRepeticao,
+            NumeroTelefone = agenda.NumeroTelefone,
+            AgendaPaiCodigo = agenda.AgendaPaiCodigo
+        };
+
+        agendaData = agenda.DataAgendamento;
+        agendaHora = TimeOnly.FromTimeSpan(agenda.HoraAgendamento);
+        tipoAgendamento = agenda.Origem;
+
+        tipoRepeticao = TipoRepeticao.UmaVez;
+        frequenciaRepeticao = "DIARIO";
+        dataFimRepeticao = null;
+        repetirDomingo = repetirSegunda = repetirTerca = repetirQuarta = repetirQuinta = repetirSexta = repetirSabado = false;
+
+        if (!string.IsNullOrEmpty(agenda.TipoRepeticao))
+        {
+            tipoRepeticao = Enum.TryParse<TipoRepeticao>(agenda.TipoRepeticao, out var tipo) ? tipo : TipoRepeticao.UmaVez;
+            frequenciaRepeticao = agenda.FrequenciaRepeticao ?? "DIARIO";
+            dataFimRepeticao = agenda.DataFimRepeticao;
+            if (!string.IsNullOrEmpty(agenda.DiasRepeticao))
+            {
+                var dias = AgendaService.ParseDiasSemana(agenda.DiasRepeticao);
+                repetirDomingo = dias.Contains(0);
+                repetirSegunda = dias.Contains(1);
+                repetirTerca = dias.Contains(2);
+                repetirQuarta = dias.Contains(3);
+                repetirQuinta = dias.Contains(4);
+                repetirSexta = dias.Contains(5);
+                repetirSabado = dias.Contains(6);
+            }
+        }
+
+        mostrarModal = true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            int tentativas = 0;
+            while (!UserState.IsReady && tentativas < 100)
+            {
+                await Task.Delay(50);
+                tentativas++;
+            }
+
+            if (!UserState.IsReady)
+            {
+                mensagemErro = "Usuário ainda não carregado. Tente atualizar a página.";
+                return;
+            }
+
+            PodeVerAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_VISUALIZAR");
+            PodeCriarAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_CRIAR");
+            PodeFinalizarAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_FINALIZAR");
+            PodeVerTodasAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_VER_TODAS");
+
+            if (!PodeVerAgendas) { Nav.NavigateTo("/dashboard"); return; }
+            if (!PodeVerTodasAgendas && filtroUsuario == "TODOS") filtroUsuario = "";
+
+            DefinirSemanaAtual();
+
+            usuarios = await CardService.GetUsuariosAsync(UserState.CurrentCompanyId);
+            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
+            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
+            agendas = await AgendaService.MaterializarOcorrenciasHojeAsync(agendas, UserState.CurrentCompanyId);
+
+            AtualizarAgendasExpandidas();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao carregar agendas: {ex.Message}";
+        }
+    }
+
+    private void AbrirModalNovaAgenda()
+    {
+        modoEdicao = false;
+        tipoAgendamento = "";
+        buscaCliente = ""; buscaCard = "";
+        clientesEncontrados.Clear(); cardsEncontrados.Clear();
+        tipoRepeticao = TipoRepeticao.UmaVez;
+        frequenciaRepeticao = "DIARIO"; dataFimRepeticao = null;
+        repetirSegunda = repetirTerca = repetirQuarta = repetirQuinta = repetirSexta = repetirSabado = repetirDomingo = false;
+        agendaModel = new AgendaModel { Usuario = UserState.CurrentUser, CodEmp = UserState.CurrentCompanyId };
+        agendaData = DateTime.Today;
+        agendaHora = new TimeOnly(9, 0);
+        mostrarModal = true;
+    }
+
+    private void AtualizarAgendasExpandidas()
+    {
+        agendasExpandidas = AgendaService.ExpandirAgendasRepetitivas(agendas);
+    }
+
+    private async Task SalvarAgenda()
+    {
+        try
+        {
+            mensagemErro = "";
+            if (string.IsNullOrWhiteSpace(agendaModel.Descricao)) { mensagemErro = "Descrição é obrigatória"; return; }
+            if (string.IsNullOrWhiteSpace(tipoAgendamento)) { mensagemErro = "Tipo de agendamento é obrigatório"; return; }
+            if (string.IsNullOrWhiteSpace(agendaModel.Usuario)) { mensagemErro = "Responsável é obrigatório"; return; }
+
+            agendaModel.DataAgendamento = agendaData.Date;
+            agendaModel.HoraAgendamento = new TimeSpan(agendaHora.Hour, agendaHora.Minute, 0);
+            agendaModel.Origem = tipoAgendamento;
+            agendaModel.CodEmp = UserState.CurrentCompanyId;
+
+            var conflito = AgendaService.ValidarConflitoAgenda(agendaModel, todasAgendasTela, modoEdicao);
+            if (!string.IsNullOrWhiteSpace(conflito)) { mensagemErro = conflito; return; }
+
+            if (tipoAgendamento == "Evolut")
+            {
+                agendaModel.TipoRepeticao = tipoRepeticao.ToString();
+                agendaModel.FrequenciaRepeticao = frequenciaRepeticao;
+                agendaModel.DataFimRepeticao = dataFimRepeticao;
+                if (frequenciaRepeticao == "SEMANAL")
+                {
+                    var dias = new List<int>();
+                    if (repetirDomingo) dias.Add(0); if (repetirSegunda) dias.Add(1);
+                    if (repetirTerca) dias.Add(2); if (repetirQuarta) dias.Add(3);
+                    if (repetirQuinta) dias.Add(4); if (repetirSexta) dias.Add(5);
+                    if (repetirSabado) dias.Add(6);
+                    agendaModel.DiasRepeticao = string.Join(",", dias);
+                }
+                else { agendaModel.DiasRepeticao = null; }
+            }
+            else
+            {
+                agendaModel.TipoRepeticao = "UmaVez";
+                agendaModel.FrequenciaRepeticao = null;
+                agendaModel.DataFimRepeticao = null;
+                agendaModel.DiasRepeticao = null;
+            }
+
+            await AgendaService.SalvarAgendaAsync(agendaModel, modoEdicao);
+            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
+            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
+            AtualizarAgendasExpandidas();
+            FecharModal();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao salvar: {ex.Message}";
+        }
+    }
+
+    private void FecharModal() { mostrarModal = false; mensagemErro = ""; }
+
+    private void AplicarFiltro()
+    {
+        if (filtroDataInicio.HasValue && filtroDataFim.HasValue && filtroDataInicio.Value.Date > filtroDataFim.Value.Date)
+        {
+            var tmp = filtroDataInicio.Value;
+            filtroDataInicio = filtroDataFim;
+            filtroDataFim = tmp;
+        }
+        filtroManualAplicado = true;
+    }
+
+    private void DefinirSemanaAtual()
+    {
+        var hoje = DateTime.Today;
+        var diff = (7 + (hoje.DayOfWeek - DayOfWeek.Monday)) % 7;
+        filtroDataInicio = hoje.AddDays(-diff);
+        filtroDataFim = filtroDataInicio.Value.AddDays(6);
+        filtroManualAplicado = true;
+    }
+
+    private void SemanaAnterior()
+    {
+        filtroDataInicio = (filtroDataInicio ?? DateTime.Today).AddDays(-7);
+        filtroDataFim = (filtroDataFim ?? filtroDataInicio.Value.AddDays(6)).AddDays(-7);
+        filtroManualAplicado = true;
+    }
+
+    private void ProximaSemana()
+    {
+        filtroDataInicio = (filtroDataInicio ?? DateTime.Today).AddDays(7);
+        filtroDataFim = (filtroDataFim ?? filtroDataInicio.Value.AddDays(6)).AddDays(7);
+        filtroManualAplicado = true;
+    }
+
+    private void IrParaHoje() { DefinirSemanaAtual(); }
+
+    private List<DateTime> GerarDiasGrade()
+    {
+        var inicio = (filtroDataInicio ?? DateTime.Today).Date;
+        var fim = (filtroDataFim ?? inicio.AddDays(6)).Date;
+        if (fim < inicio) fim = inicio;
+        var total = Math.Min((fim - inicio).Days + 1, 31);
+        return Enumerable.Range(0, total).Select(i => inicio.AddDays(i)).ToList();
+    }
+
+    private IEnumerable<int> horasGrade =>
+        Enumerable.Range(horaInicioGrade, horaFimGrade - horaInicioGrade + 1);
+
+    private List<AgendaModel> AgendasDoDia(DateTime dia) =>
+        agendasFiltradas
+            .Where(a => a.DataAgendamento.Date == dia.Date)
+            .OrderBy(a => a.HoraAgendamento)
+            .ToList();
+
+    private string GetEventStyle(AgendaModel ag)
+    {
+        var hora = ag.HoraAgendamento;
+        var minutosDesdeInicio = ((int)hora.TotalHours - horaInicioGrade) * 60 + hora.Minutes;
+        if (minutosDesdeInicio < 0) minutosDesdeInicio = 0;
+        var top = (minutosDesdeInicio / 60.0) * pixelsPorHora;
+
+        var cliente = string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente;
+        var linhasDesc = Math.Max(1, (int)Math.Ceiling((ag.Descricao?.Length ?? 0) / 18.0));
+        var linhasClient = Math.Max(1, (int)Math.Ceiling((cliente?.Length ?? 0) / 15.0));
+        var height = Math.Min(Math.Max(52 + linhasDesc * 11 + linhasClient * 11, 86), 180);
+
+        return $"top:{top:0}px;height:{height}px;";
+    }
+
+    private string GetClasseOrigem(AgendaModel ag)
+    {
+        if (ag.Status?.ToUpper() == "RESOLVIDO") return "is-done";
+        var dataHora = ag.DataAgendamento.Date.Add(ag.HoraAgendamento);
+        if (ag.Status?.ToUpper() != "RESOLVIDO" && dataHora < DateTime.Now) return "is-late";
+        return ag.Origem?.ToUpper() switch
+        {
+            "CRM" => "is-crm",
+            "EVOLUT" => "is-evolut",
+            "TICKET" => "is-ticket",
+            "CLIENTE" => "is-client",
+            _ => "is-client"
+        };
+    }
+
+    private string DiaSemanaCurto(DateTime data) =>
+        data.ToString("ddd", new CultureInfo("pt-BR")).ToUpper().Replace(".", "");
+
+    private async Task AbrirAgendaNaGrade(AgendaModel ag)
+    {
+        if (ag.Origem == "TICKET" && ag.AgendaPaiCodigo.HasValue)
+        {
+            AbrirTicket(ag.AgendaPaiCodigo.Value); return;
+        }
+        if (ag.CodCRMC.HasValue && ag.CodCRMC > 0)
+        {
+            AbrirCard(ag.CodCRMC.Value); return;
+        }
+        if (ag.Status != "RESOLVIDO" && PodeCriarAgendas)
+        {
+            await AbrirModalEditarAgenda(ag);
+        }
+    }
+
+    private void AbrirCard(int codigo) => Nav.NavigateTo($"/card/{codigo}");
+    private void AbrirTicket(int codigo) => Nav.NavigateTo($"/ticket/{codigo}");
+
+    private async Task BuscarCards(ChangeEventArgs e)
+    {
+        buscaCard = e.Value?.ToString() ?? "";
+        if (buscaCard.Length < 3) { cardsEncontrados.Clear(); return; }
+        try { cardsEncontrados = await CardService.BuscarCardsAsync(buscaCard, UserState.CurrentUser, UserState.CurrentCompanyId); }
+        catch (Exception ex) { Console.WriteLine($"ERRO: {ex.Message}"); }
+    }
+
+    private async Task OnBuscaClienteInput(ChangeEventArgs e)
+    {
+        buscaCliente = e.Value?.ToString() ?? "";
+        if (buscaCliente.Length < 3) { clientesEncontrados.Clear(); return; }
+        try { clientesEncontrados = await CardService.BuscarClientesAsync(buscaCliente, UserState.CurrentCompanyId); }
+        catch (Exception ex) { ClienteMsg = $"ERRO: {ex.Message}"; }
+    }
+
+    private void SelecionarCliente(ClienteModel cliente)
+    {
+        agendaModel.CodCliente = cliente.Codigo;
+        agendaModel.NomeCliente = cliente.Nome;
+        agendaModel.ApelidoCliente = cliente.Apelido;
+        clientesEncontrados.Clear();
+        buscaCliente = cliente.Nome;
+        StateHasChanged();
+    }
+
+    private void SelecionarCard(CardModels card)
+    {
+        agendaModel.CodCRMC = card.Codigo;
+        cardsEncontrados.Clear();
+        buscaCard = card.Descricao;
+        StateHasChanged();
+    }
+
+    private async Task AbrirWhatsApp(string? telefone)
+    {
+        var raw = telefone ?? "";
+        if (string.IsNullOrWhiteSpace(raw)) return;
+        var numero = new string(raw.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(numero)) return;
+        if (numero.StartsWith("0")) numero = numero[1..];
+        await JS.InvokeVoidAsync("open", $"https://wa.me/55{numero}", "_blank");
+    }
+
+    private List<AgendaModel> todasAgendasTela =>
+        AgendaService.MontarTodasAgendasTela(agendasExpandidas, agendasTickets);
+
+    private List<IGrouping<int, AgendaModel>> GruposAgendaDoDia(DateTime dia) =>
+        AgendasDoDia(dia)
+            .GroupBy(a => a.HoraAgendamento.Hours)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+    private string GetGroupStyle(int hora)
+    {
+        var min = (hora - horaInicioGrade) * 60;
+        if (min < 0) min = 0;
+        var top = (min / 60.0) * pixelsPorHora;
+        return $"top:{top:0}px;height:86px;";
+    }
+
+    private void AbrirGrupoAgenda(List<AgendaModel> lista)
+    {
+        agendasGrupoSelecionado = lista
+            .OrderBy(a => a.HoraAgendamento).ThenBy(a => a.Codigo).ToList();
+        mostrarModalGrupoAgenda = true;
+    }
+
+    private void FecharModalGrupoAgenda()
+    {
+        mostrarModalGrupoAgenda = false;
+        agendasGrupoSelecionado.Clear();
+    }
+
+    private async Task AbrirAgendaDoGrupo(AgendaModel ag)
+    {
+        FecharModalGrupoAgenda();
+        await AbrirAgendaNaGrade(ag);
+    }
+
+    private string GetNomeOrigem(AgendaModel ag) =>
+        ag.Origem?.ToUpper() switch
+        {
+            "CRM" => "CRM",
+            "EVOLUT" => "Evolut",
+            "TICKET" => "Ticket",
+            "CLIENTE" => "Cliente",
+            _ => "Agenda"
+        };
+
+    private async Task ResolverAgendaDoGrupo(AgendaModel ag)
+    {
+        await ResolverAgenda(ag);
+        agendasGrupoSelecionado = agendasGrupoSelecionado
+            .Where(x => !(x.Codigo == ag.Codigo && x.Origem == ag.Origem))
+            .ToList();
+        if (!agendasGrupoSelecionado.Any()) FecharModalGrupoAgenda();
+        StateHasChanged();
+    }
+}
