@@ -8,14 +8,11 @@
 
         this.chunks = [];
 
-        // Escolhe o melhor formato suportado pelo navegador
-        // O WhatsApp aceita: audio/ogg;codecs=opus (Firefox)
-        // ou audio/webm;codecs=opus (Chrome) — ambos funcionam no mobile
         const mimePreferido = [
-            'audio/ogg;codecs=opus',
-            'audio/ogg',
             'audio/webm;codecs=opus',
-            'audio/webm'
+            'audio/webm',
+            'audio/ogg;codecs=opus',
+            'audio/ogg'
         ].find(m => MediaRecorder.isTypeSupported(m)) || '';
 
         const options = mimePreferido ? { mimeType: mimePreferido } : {};
@@ -34,8 +31,7 @@
         return new Promise(resolve => {
             this.recorder.onstop = async () => {
 
-                // Usa o mimeType real que o recorder escolheu
-                const mimeType = this.recorder.mimeType || 'audio/ogg';
+                const mimeType = this.recorder.mimeType || 'audio/webm';
 
                 const blob = new Blob(this.chunks, { type: mimeType });
 
@@ -50,7 +46,7 @@
 
                 resolve({
                     base64: btoa(binary),
-                    mimeType: mimeType
+                    mimeType: 'audio/ogg; codecs=opus'  // sempre reporta OGG/Opus para o banco
                 });
             };
 

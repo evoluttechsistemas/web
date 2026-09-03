@@ -1,6 +1,8 @@
 @echo off
 cd /d "%~dp0"
 
+git config core.autocrlf true
+
 echo ================================
 echo        GIT - EVOLUT HELP
 echo ================================
