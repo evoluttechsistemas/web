@@ -452,23 +452,15 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
                 var paramNomes = variantes.Select((_, i) => "@T" + i).ToList();
 
                 using var cmdBusca = new SqlCommand($@"
-        WITH Candidatos AS (
-            SELECT
-                CodCliente,
-                Codigo,
-                COUNT(DISTINCT CodCliente) OVER () AS QtdClientesDistintos
-            FROM TicketChamadoC
-            WHERE CodEmp = @CodEmp
-              AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-                      ISNULL(TelefoneWhatsApp,''),
-                  '(',''),')',''),'-',''),' ',''),'+','')
-                  IN ({string.Join(",", paramNomes)})
-              AND ISNULL(CodCliente,0) > 0
-        )
-        SELECT TOP 1 CodCliente
-        FROM Candidatos
-        WHERE QtdClientesDistintos = 1   -- só confia se o número aponta para UM cliente
-        ORDER BY Codigo DESC", con);
+    SELECT TOP 1 CodCliente
+    FROM TicketChamadoC
+    WHERE CodEmp = @CodEmp
+      AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+              ISNULL(TelefoneWhatsApp,''),
+          '(',''),')',''),'-',''),' ',''),'+','')
+          IN ({string.Join(",", paramNomes)})
+      AND ISNULL(CodCliente,0) > 0
+    ORDER BY Codigo DESC", con);
 
                 AddCodEmp(cmdBusca, codEmpMensagem);
                 for (int i = 0; i < variantes.Count; i++)
@@ -2726,36 +2718,37 @@ VALUES
             await conn.OpenAsync();
 
             using var cmd = new SqlCommand(@"
-        SELECT DISTINCT TOP 20
-            -- Prefere UsuarioAbertura se parecer nome de contato
-            -- (não é usuário interno do sistema)
+        SELECT
             ISNULL(
                 NULLIF(
                     CASE
-                        -- Se UsuarioAbertura existe e NÃO é um usuário interno,
-                        -- usa como nome do contato
                         WHEN LTRIM(RTRIM(ISNULL(UsuarioAbertura,''))) <> ''
                          AND NOT EXISTS (
-    SELECT 1 FROM Usuario U
-    WHERE U.CodEmp = @CodEmp
-      AND UPPER(LTRIM(RTRIM(U.Usuario))) 
-        = UPPER(LTRIM(RTRIM(UsuarioAbertura)))
-      AND ISNULL(U.Inativo,'N') = 'N'
-      AND ISNULL(U.Help,'N') = 'S'
-)
+                            SELECT 1 FROM Usuario U
+                            WHERE U.CodEmp = @CodEmp
+                              AND UPPER(LTRIM(RTRIM(U.Usuario)))
+                                = UPPER(LTRIM(RTRIM(UsuarioAbertura)))
+                              AND ISNULL(U.Inativo,'N') = 'N'
+                              AND ISNULL(U.Help,'N') = 'S'
+                         )
                         THEN LTRIM(RTRIM(UsuarioAbertura))
                         ELSE NULL
                     END
                 ,''),
                 'Contato'
             ) AS Nome,
-            TelefoneWhatsApp
+            TelefoneWhatsApp,
+            MAX(ISNULL(DataHoraUltimaGravacao, DataHoraAbertura)) AS UltimaData
         FROM TicketChamadoC
         WHERE CodEmp = @CodEmp
           AND CodCliente = @CodCliente
           AND ISNULL(TelefoneWhatsApp,'') <> ''
-        ORDER BY 1", conn);
+        GROUP BY
+            TelefoneWhatsApp,
+            UsuarioAbertura
+        ORDER BY UltimaData DESC", conn);
 
+            AddCodEmp(cmd);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@CodCliente", codCliente);
 
@@ -2766,6 +2759,7 @@ VALUES
                     Nome = rd[0]?.ToString() ?? "",
                     Telefone = rd[1]?.ToString() ?? ""
                 });
+
             return lista;
         }
 
@@ -3289,14 +3283,14 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn);
 
             // 1. Vincula tickets órfãos com o mesmo número
             using (var cmdUpd = new SqlCommand($@"
-        UPDATE TicketChamadoC
-        SET CodCliente = @CodCliente
-        WHERE CodEmp = @CodEmp
-          AND ISNULL(CodCliente,0) = 0
-          AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-                  ISNULL(TelefoneWhatsApp,''),
-              '(',''),')',''),'-',''),' ',''),'+','')
-              IN ({string.Join(",", pn)})", con))
+    UPDATE TicketChamadoC
+    SET CodCliente = @CodCliente
+    WHERE CodEmp = @CodEmp
+      AND ISNULL(CodCliente,0) <> @CodCliente
+      AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+              ISNULL(TelefoneWhatsApp,''),
+          '(',''),')',''),'-',''),' ',''),'+','')
+          IN ({string.Join(",", pn)})", con))
             {
                 AddCodEmp(cmdUpd);
                 cmdUpd.Parameters.AddWithValue("@CodCliente", codCliente);
@@ -3313,6 +3307,18 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn);
             // 2. REMOVIDO: o UPDATE que reescrevia TelefoneWhatsApp com o número
             //    normalizado. Ele destruía o JID real da conversa e as respostas
             //    passavam a não chegar. As variantes já cobrem a busca.
+
+            using (var cmdAtual = new SqlCommand(@"
+    UPDATE TicketChamadoC
+    SET CodCliente = @CodCliente
+    WHERE CodEmp = @CodEmp
+      AND Codigo = @CodTicket", con))
+            {
+                AddCodEmp(cmdAtual);
+                cmdAtual.Parameters.AddWithValue("@CodCliente", codCliente);
+                cmdAtual.Parameters.AddWithValue("@CodTicket", codTicket);
+                await cmdAtual.ExecuteNonQueryAsync();
+            }
 
             // 3. Grava o celular no cadastro só se estiver vazio
             using (var cmdCli = new SqlCommand(@"
@@ -3417,6 +3423,65 @@ ORDER BY D.DataHora ASC", conn);
             return lista;
         }
 
+        /// <summary>
+        /// Busca contatos WhatsApp já usados anteriormente (nome + telefone),
+        /// independente de cliente vinculado. Usado no dropdown de novo ticket.
+        /// </summary>
+        public async Task<List<WhatsAppContatoDto>> BuscarContatosWhatsAppGlobaisAsync(int codCliente = 0, string? termoBusca = null)
+        {
+            var lista = new List<WhatsAppContatoDto>();
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+        SELECT
+            ISNULL(NULLIF(LTRIM(RTRIM(UsuarioAbertura)),''), 'Contato') AS Nome,
+            TelefoneWhatsApp
+        FROM TicketChamadoC
+        WHERE CodEmp = @CodEmp
+          AND ISNULL(TelefoneWhatsApp,'') <> ''
+          AND (@CodCliente = 0 OR CodCliente = @CodCliente)
+          AND LTRIM(RTRIM(ISNULL(UsuarioAbertura,''))) <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM Usuario U
+              WHERE U.CodEmp = @CodEmp
+                AND UPPER(LTRIM(RTRIM(U.Usuario)))
+                    = UPPER(LTRIM(RTRIM(TicketChamadoC.UsuarioAbertura)))
+                AND ISNULL(U.Inativo,'N') = 'N'
+                AND ISNULL(U.Help,'N') = 'S'
+          )
+          AND (
+              @Termo = ''
+              OR LTRIM(RTRIM(ISNULL(UsuarioAbertura,''))) LIKE @Busca
+              OR TelefoneWhatsApp LIKE @Busca
+          )
+          AND Codigo = (
+              SELECT MAX(T2.Codigo)
+              FROM TicketChamadoC T2
+              WHERE T2.CodEmp = TicketChamadoC.CodEmp
+                AND T2.TelefoneWhatsApp = TicketChamadoC.TelefoneWhatsApp
+                AND (@CodCliente = 0 OR T2.CodCliente = @CodCliente)
+          )
+        ORDER BY Nome", conn);
+
+            AddCodEmp(cmd);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+            var termo = (termoBusca ?? "").Trim();
+            cmd.Parameters.AddWithValue("@Termo", termo);
+            cmd.Parameters.AddWithValue("@Busca", "%" + termo + "%");
+
+            using var rd = await cmd.ExecuteReaderAsync();
+            while (await rd.ReadAsync())
+                lista.Add(new WhatsAppContatoDto
+                {
+                    Nome = rd[0]?.ToString() ?? "",
+                    Telefone = rd[1]?.ToString() ?? ""
+                });
+
+            return lista;
+        }
+
         private static string SoDigitos(string? s) =>
             new string((s ?? "").Where(char.IsDigit).ToArray());
 
@@ -3447,11 +3512,3 @@ ORDER BY D.DataHora ASC", conn);
         //}
     }
 }
-
-
-
-
-
-
-
-

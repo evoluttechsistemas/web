@@ -2742,9 +2742,21 @@ else if (EhNovo)
                             <label>Contato WhatsApp</label>
                             <select @onchange="SelecionarTelefoneWhatsApp">
                                 <option value="">Selecione um contato</option>
-                                @foreach (var contato in TelefonesWhatsAppCliente)
+                                @if (CodCliente > 0)
                                 {
-                                    <option value="@contato.Telefone">@contato.Nome - @contato.Telefone</option>
+                                    @* Cliente selecionado: mostra só os contatos dele *@
+                                    @foreach (var contato in TelefonesWhatsAppCliente)
+                                    {
+                                        <option value="@contato.Telefone">@contato.Nome - @contato.Telefone</option>
+                                    }
+                                }
+                                else
+                                {
+                                    @* Sem cliente: mostra todos os já usados *@
+                                    @foreach (var contato in ContatosWhatsAppGlobais)
+                                    {
+                                        <option value="@contato.Telefone">@contato.Nome - @contato.Telefone</option>
+                                    }
                                 }
                             </select>
                         </div>
@@ -4488,6 +4500,7 @@ else
     string NomeWhatsApp = "";
     string TelefoneWhatsApp = "";
     List<WhatsAppContatoDto> TelefonesWhatsAppCliente = new();
+    private List<WhatsAppContatoDto> ContatosWhatsAppGlobais = new();
     List<TicketVisualizacaoUsuarioModel> VisualizadoresTicket = new();
     private List<TicketSituacaoCadastroModel> SituacoesTicket = new();
     private List<TicketTipoCadastroModel> TiposTicket = new();
@@ -5105,6 +5118,9 @@ else
     .ToList();
 
         UsuarioSelecionado = usuarioLogado;
+
+        if (EhNovo)
+            ContatosWhatsAppGlobais = await TicketService.BuscarContatosWhatsAppGlobaisAsync();
 
         _ = AtualizarAutomaticamente();
         IniciarTimerAgenda();
@@ -6792,13 +6808,15 @@ CodTipo == 5 ? NomeWhatsApp : null
 });
     }
 
+    // SUBSTITUA o método inteiro:
     private async Task CarregarTelefonesWhatsAppCliente()
     {
         TelefonesWhatsAppCliente.Clear();
 
-        if (CodCliente <= 0)
-            return;
-        TelefonesWhatsAppCliente = await TicketService.BuscarTelefonesWhatsAppClienteAsync(CodCliente);
+        if (CodCliente > 0)
+            TelefonesWhatsAppCliente = await TicketService.BuscarTelefonesWhatsAppClienteAsync(CodCliente);
+
+        ContatosWhatsAppGlobais = await TicketService.BuscarContatosWhatsAppGlobaisAsync(CodCliente);
     }
 
     private void SelecionarTelefoneWhatsApp(ChangeEventArgs e)
