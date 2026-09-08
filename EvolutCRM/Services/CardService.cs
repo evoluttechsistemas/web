@@ -266,7 +266,7 @@ WHERE Codigo = @Codigo;";
             Console.WriteLine("===================\n");
 #endif
         }
-        public async Task SalvarAnotacoesAsync(int codCrm, List<AnotacaoModel> anotacoes, string usuario)
+        public async Task SalvarAnotacoesAsync(int codCrm, List<AnotacaoModel> anotacoes, string usuario, int codEmp, int codInstancia)
         {
             if (anotacoes == null || anotacoes.Count == 0)
                 return;
@@ -285,7 +285,8 @@ INSERT INTO CRMAnotacao
     LidoCliente, LidoSuporte, Alterado, MensagemExcluida,
     EnvioCliente, StatusWhatsApp,
     Imagem, NomeImagem,
-    Audio, AudioMimeType
+    Audio, AudioMimeType,
+    CodEmp, CodInstancia
 )
 VALUES 
 (
@@ -293,7 +294,8 @@ VALUES
     'N', 'S', 'N', 'N',
     @EnvioCliente, @StatusWhatsApp,
     @Imagem, @NomeImagem,
-    @Audio, @AudioMimeType
+    @Audio, @AudioMimeType,
+    @CodEmp, @CodInstancia
 )";
 
                     using var cmd = new SqlCommand(sql, conn);
@@ -303,6 +305,9 @@ VALUES
                     cmd.Parameters.AddWithValue("@Funil", anot.Funil ?? "");
                     cmd.Parameters.AddWithValue("@Usuario", usuario ?? "");
                     cmd.Parameters.AddWithValue("@EnvioCliente", anot.EnvioCliente ?? "N");
+                    cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+                    cmd.Parameters.Add("@CodInstancia", SqlDbType.Int).Value =
+    codInstancia > 0 ? codInstancia : (object)DBNull.Value;
                     cmd.Parameters.Add(new SqlParameter("@StatusWhatsApp", SqlDbType.VarChar)
                     {
                         Value = string.IsNullOrWhiteSpace(anot.StatusWhatsApp)
@@ -975,20 +980,26 @@ ORDER BY Nome";
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public async Task<int> GetQuantidadeCardsNovosAsync(int codEmp)
+        // CORRIGIDO — filtra pelo usuário logado
+        public async Task<int> GetQuantidadeCardsNovosAsync(int codEmp, string usuario)
         {
             string sql = @"
 SELECT COUNT(1)
 FROM CRMC WITH (NOLOCK)
 WHERE ISNULL(Novo, 'N') = 'S'
   AND ISNULL(Status, 'ABERTO') = 'ABERTO'
-  AND CodEmp = @CodEmp";
+  AND CodEmp = @CodEmp
+  AND (
+      UPPER(ISNULL(UsuarioCard, '')) = @Usuario
+      OR UPPER(ISNULL(UsuarioCard, '')) = 'NOVO'
+  )";
 
             using var con = new SqlConnection(_connection);
             await con.OpenAsync();
 
             using var cmd = new SqlCommand(sql, con);
             cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+            cmd.Parameters.AddWithValue("@Usuario", usuario.Trim().ToUpper());
 
             return Convert.ToInt32(await cmd.ExecuteScalarAsync());
         }

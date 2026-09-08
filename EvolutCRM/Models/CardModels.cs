@@ -4,6 +4,7 @@
     {
         public List<AgendaModel> Agendas { get; set; } = new();
         public int Codigo { get; set; }
+        public int CodInstanciaWhatsApp { get; set; }
         public string Descricao { get; set; }
         public int CodCliente { get; set; }
         public int CodEmp { get; set; }

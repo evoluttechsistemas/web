@@ -1816,7 +1816,9 @@
         {
             try
             {
-                QtdComercialNovos = await CardService.GetQuantidadeCardsNovosAsync(UserState.CurrentCompanyId);
+                QtdComercialNovos = await CardService.GetQuantidadeCardsNovosAsync(
+    UserState.CurrentCompanyId,
+    UserState.CurrentUser.Trim().ToUpper());
                 await InvokeAsync(StateHasChanged);
                 return;
             }
@@ -2148,6 +2150,3 @@
         await Logout();
     }
 }
-
-
-

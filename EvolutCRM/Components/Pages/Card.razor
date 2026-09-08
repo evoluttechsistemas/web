@@ -2673,7 +2673,13 @@ private bool _deveScrollarHistorico = true;
 
     private async Task SalvarHistoricoAtual()
     {
-        await CardService.SalvarAnotacoesAsync(cardModel.Codigo, cardModel.Anotacoes ?? new List<AnotacaoModel>(), UserState.CurrentUser);
+        await CardService.SalvarAnotacoesAsync(
+            cardModel.Codigo,
+            cardModel.Anotacoes ?? new List<AnotacaoModel>(),
+            UserState.CurrentUser,
+            UserState.CurrentCompanyId,        // codEmp
+            cardModel.CodInstanciaWhatsApp     // codInstancia
+        );
     }
 
     private async Task RecarregarAnotacoes()

@@ -3482,6 +3482,8 @@ ORDER BY D.DataHora ASC", conn);
             return lista;
         }
 
+
+
         private static string SoDigitos(string? s) =>
             new string((s ?? "").Where(char.IsDigit).ToArray());
 

@@ -3172,7 +3172,12 @@ else
                     <div class="ticket-composer-tools">
                         <button type="button" class="ticket-tool-btn" title="Negrito">B</button>
                         <button type="button" class="ticket-tool-btn" title="Itálico">I</button>
-                        <button type="button" class="ticket-tool-btn" title="Anexo">📎</button>
+                        <label for="inputAnexoAnotacao"
+                               class="ticket-tool-btn"
+                               title="Anexo"
+                               style="cursor:pointer;">
+                            📎
+                        </label>
                         <button type="button" class="ticket-tool-btn" title="Emoji">😊</button>
                     </div>
                 </div>
@@ -3180,8 +3185,10 @@ else
                 <div class="ticket-anexo-box">
                     <label>Anexos</label>
 
-                    <InputFile OnChange="OnArquivoAnotacaoSelecionado"
-                               accept=".pdf,.txt,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.bmp,.doc,.docx,.xls,.xlsx,.zip,.rar,.apk,.pfx" />
+                    <InputFile id="inputAnexoAnotacao"
+                               OnChange="OnArquivoAnotacaoSelecionado"
+                               accept=".pdf,.txt,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.bmp,.doc,.docx,.xls,.xlsx,.zip,.rar,.apk,.pfx"
+                               style="display:none;" />
 
                     @if (ArquivoAnotacao != null)
                     {
@@ -3588,8 +3595,10 @@ else
 
                             @if (!string.IsNullOrEmpty(h.CaminhoImagem))
                             {
-                                var nomeArquivo = !string.IsNullOrWhiteSpace(h.NomeImagem) ? h.NomeImagem : h.CaminhoImagem;
-                                var ext = Path.GetExtension(nomeArquivo ?? "").ToLowerInvariant();
+                                var nomeParaExt = !string.IsNullOrWhiteSpace(h.NomeImagem)
+                      ? h.NomeImagem
+                      : h.CaminhoImagem?.Split('?')[0] ?? "";
+                                var ext = Path.GetExtension(nomeParaExt).ToLowerInvariant();
                                 var ehImagem = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp";
                                 var ehPdf = ext == ".pdf";
 
@@ -3740,28 +3749,6 @@ else
                                         }
                                     }
                                 </div>
-                            }
-
-                            @if (!string.IsNullOrEmpty(h.CaminhoImagem))
-                            {
-                                @* bloco de imagem/PDF/documento — SEM o áudio aqui dentro *@
-                                var nomeArquivo = h.NomeImagem ?? "";
-                                var ext = Path.GetExtension(nomeArquivo).ToLowerInvariant();
-                                var ehPdf = ext == ".pdf";
-                                var ehImagem = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp";
-
-                                @if (ehPdf)
-                                {
-                                    @* card PDF *@
-                                }
-                                else if (ehImagem)
-                                {
-                                    @* imagem *@
-                                }
-                                else if (!string.IsNullOrWhiteSpace(nomeArquivo))
-                                {
-                                    @* outro documento *@
-                                }
                             }
 
 
