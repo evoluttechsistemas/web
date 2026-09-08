@@ -3,6 +3,7 @@
 @inject MonitorBackupService MonitorBackupService
 @inject IJSRuntime JS
 @implements IDisposable
+@inject UserState UserState
 
 <style>
     .mb-wrap {
@@ -1358,8 +1359,8 @@
 
         try
         {
-            _todos = await MonitorBackupService.ObterStatusBackupsAsync();
-            _semBackup = await MonitorBackupService.ObterClientesSemBackupAsync();
+            _todos = await MonitorBackupService.ObterStatusBackupsAsync(UserState.CurrentCompanyId);
+            _semBackup = await MonitorBackupService.ObterClientesSemBackupAsync(UserState.CurrentCompanyId);
             _paginaSemBackup = 1;
             _paginaSemBackupItens = _semBackup.Skip(0).Take(_porPaginaSemBackup).ToList();
             _ultimaAtualizacao = DateTime.Now;

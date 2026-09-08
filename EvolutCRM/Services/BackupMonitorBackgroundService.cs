@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Data.SqlClient;
 
 namespace EvolutCRM.Services
 {
@@ -39,42 +40,54 @@ namespace EvolutCRM.Services
             {
                 await using var scope = _services.CreateAsyncScope();
                 var backupSvc = scope.ServiceProvider.GetRequiredService<MonitorBackupService>();
+                var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
 
-                var criticos = await backupSvc.ObterClientesParaAlertaAsync();
+                var codEmps = new List<int>();
+                await using var con = new SqlConnection(config.GetConnectionString("Connection"));
+                await using var cmd = new SqlCommand("SELECT Codigo FROM Empresa WHERE ISNULL(Inativo, 'N') <> 'S'", con);
+                await con.OpenAsync();
+                await using var rd = await cmd.ExecuteReaderAsync();
+                while (await rd.ReadAsync())
+                    codEmps.Add(rd.GetInt32(0));
 
-                var semBackup = await backupSvc.ObterClientesSemBackupAsync();
-                criticos.AddRange(semBackup.Select(x => new MonitorBackupModel
+                foreach (var codEmp in codEmps)
                 {
-                    CodCliente = x.CodCliente,
-                    NomeCliente = x.NomeCliente,
-                    Cnpj = x.Cnpj,
-                    Status = StatusBackup.SemBackup,
-                    DataHoraUltimaSincronizacao = null
-                }));
+                    var criticos = await backupSvc.ObterClientesParaAlertaAsync(codEmp);
 
-                foreach (var cliente in criticos)
-                {
-                    var chave = $"{cliente.CodCliente}_{cliente.Cnpj}";
-                    var agora = DateTime.Now;
+                    var semBackup = await backupSvc.ObterClientesSemBackupAsync(codEmp);
+                    criticos.AddRange(semBackup.Select(x => new MonitorBackupModel
+                    {
+                        CodCliente = x.CodCliente,
+                        NomeCliente = x.NomeCliente,
+                        Cnpj = x.Cnpj,
+                        Status = StatusBackup.SemBackup,
+                        DataHoraUltimaSincronizacao = null
+                    }));
 
-                    if (_ultimaNotificacao.TryGetValue(chave, out var ultima)
-                        && (agora - ultima).TotalHours < 24)
-                        continue;
+                    foreach (var cliente in criticos)
+                    {
+                        var chave = $"{cliente.CodCliente}_{cliente.Cnpj}";
+                        var agora = DateTime.Now;
 
-                    var dias = cliente.DataHoraUltimaSincronizacao.HasValue
-                        ? (int)(agora - cliente.DataHoraUltimaSincronizacao.Value).TotalDays
-                        : -1;
+                        if (_ultimaNotificacao.TryGetValue(chave, out var ultima)
+                            && (agora - ultima).TotalHours < 24)
+                            continue;
 
-                    var mensagem = dias >= 0
-                        ? $"{dias} dia(s) sem backup. Último: {cliente.DataHoraUltimaSincronizacao:dd/MM/yyyy HH:mm} ({cliente.Computador})"
-                        : "Nenhum backup registrado para este cliente.";
+                        var dias = cliente.DataHoraUltimaSincronizacao.HasValue
+                            ? (int)(agora - cliente.DataHoraUltimaSincronizacao.Value).TotalDays
+                            : -1;
 
-                    _ultimaNotificacao[chave] = agora;
+                        var mensagem = dias >= 0
+                            ? $"{dias} dia(s) sem backup. Último: {cliente.DataHoraUltimaSincronizacao:dd/MM/yyyy HH:mm} ({cliente.Computador})"
+                            : "Nenhum backup registrado para este cliente.";
 
-                    _logger.LogWarning(
-                        "Alerta backup: {Cliente} — {Mensagem}",
-                        cliente.NomeCliente,
-                        mensagem);
+                        _ultimaNotificacao[chave] = agora;
+
+                        _logger.LogWarning(
+                            "Alerta backup: {Cliente} — {Mensagem}",
+                            cliente.NomeCliente,
+                            mensagem);
+                    }
                 }
             }
             catch (Exception ex)

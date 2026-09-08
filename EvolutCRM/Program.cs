@@ -81,6 +81,8 @@ builder.Services.AddScoped<ClienteCadastroService>();
 builder.Services.AddScoped<ParametroDinamicoService>();
 builder.Services.AddScoped<TicketClassificacaoService>();
 builder.Services.AddScoped<ClienteWhatsAppFotoService>();
+builder.Services.AddSingleton<DeployNotificacaoState>();
+builder.Services.AddHostedService<DeployNotificacaoService>();
 
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AcessoRemoto), "Acesso Remoto", "fas fa-desktop", "admin/acesso-remoto");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AdminLogs), "Admin Logs", "fas fa-file-shield", "admin/logs");

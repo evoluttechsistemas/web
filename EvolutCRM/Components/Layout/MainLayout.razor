@@ -15,6 +15,87 @@
 @using EvolutCRM.Models
 @using Microsoft.JSInterop
 @inject EvolutCRM.Services.MonitorBackupService MonitorBackupService
+@inject EvolutCRM.Services.DeployNotificacaoState DeployState
+
+
+@* ── CSS ─────────────────────────────────────────────────────────────────── *@
+<style>
+    .deploy-overlay {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        z-index: 99999;
+        animation: deploySlideIn 0.4s ease;
+    }
+
+    @@keyframes deploySlideIn {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .deploy-modal {
+        background: #1e293b;
+        color: #f1f5f9;
+        border-left: 4px solid #3b82f6;
+        border-radius: 12px;
+        padding: 18px 22px;
+        min-width: 320px;
+        max-width: 400px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .deploy-modal--urgente {
+        border-left-color: #ef4444;
+        background: #1e1010;
+    }
+
+    .deploy-modal__icone {
+        font-size: 22px;
+    }
+
+    .deploy-modal__titulo {
+        font-size: 15px;
+        font-weight: 700;
+        color: #f8fafc;
+    }
+
+    .deploy-modal__mensagem {
+        font-size: 13px;
+        color: #94a3b8;
+        line-height: 1.5;
+    }
+
+    .deploy-modal__countdown {
+        font-size: 13px;
+        color: #fca5a5;
+        margin-top: 4px;
+    }
+
+    .deploy-modal__barra {
+        height: 4px;
+        background: #374151;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 4px;
+    }
+
+    .deploy-modal__barra-progresso {
+        height: 100%;
+        background: #ef4444;
+        border-radius: 4px;
+        transition: width 1s linear;
+    }
+</style>
 
 <MainMenu Notificacoes="_notificacoesPainel"
           OnAbrirNotificacao="AbrirNotificacaoPainel"
@@ -66,6 +147,48 @@
     <a class="dismiss">🗙</a>
 </div>
 
+@* ── MODAL DE DEPLOY ─────────────────────────────────────────────────────── *@
+@if (DeployState.Ativo)
+{
+    <div class="deploy-overlay">
+        <div class="deploy-modal @(DeployState.Tipo == "aviso30seg" ? "deploy-modal--urgente" : "")">
+            <div class="deploy-modal__icone">
+                @if (DeployState.Tipo == "aviso30seg")
+                {
+                    <span>⚠️</span>
+                }
+                else
+                {
+                    <span>🔄</span>
+                }
+            </div>
+            <div class="deploy-modal__titulo">
+                @if (DeployState.Tipo == "aviso30seg")
+                {
+                    <span>Atenção!</span>
+                }
+                else
+                {
+                    <span>Atualização disponível</span>
+                }
+            </div>
+            <div class="deploy-modal__mensagem">
+                @DeployState.Mensagem
+            </div>
+            @if (DeployState.Tipo == "aviso30seg")
+            {
+                <div class="deploy-modal__countdown">
+                    O sistema fechará em <strong>@_segundosRestantes</strong> segundo(s)
+                </div>
+                <div class="deploy-modal__barra">
+                    <div class="deploy-modal__barra-progresso"
+                         style="width: @(_percentualBarra)%"></div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
 <script>
     window.crmLog = window.crmLog || function(msg) {
         console.log(msg);
@@ -112,6 +235,7 @@
 
 </script>
 
+
 @code {
     private Dictionary<int, (DateTime UltimaNotificacao, int Contagem)> _mensagensFailedNotificadas = new();
     private int _ultimaQtdNovosTickets = -1;
@@ -134,6 +258,10 @@
     private bool _atualizandoOutros;
     private PeriodicTimer? _timerCards;
     private bool _atualizandoCards;
+    // Deploy countdown
+    private int _segundosRestantes = 30;
+    private double _percentualBarra = 100;
+    private CancellationTokenSource? _deployCountdownCts;
 
     private List<NotificacaoPainelModel> _notificacoesPainel = new();
 
@@ -968,7 +1096,7 @@
 
         try
         {
-            var criticos = await MonitorBackupService.ObterClientesParaAlertaAsync();
+            var criticos = await MonitorBackupService.ObterClientesParaAlertaAsync(UserState.CurrentCompanyId);
             var hoje = DateTime.Today.ToString("yyyyMMdd");
 
             foreach (var cliente in criticos)
@@ -1186,6 +1314,8 @@
         Nav.LocationChanged += AoNavegar;
         Abas.OnMudanca += AoMudar;
         RegistrarRotaAtual(Nav.Uri);
+        DeployState.OnChange += OnDeployStateChanged;
+        DeployState.Limpar();
     }
 
     private void AoNavegar(object? sender, LocationChangedEventArgs e)
@@ -1283,6 +1413,8 @@
         Nav.LocationChanged -= AoNavegar;
         Nav.LocationChanged -= OnLocationChanged;
         Abas.OnMudanca -= AoMudar;
+        DeployState.OnChange -= OnDeployStateChanged;
+        _deployCountdownCts?.Cancel();
     }
 
 
@@ -1549,5 +1681,42 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
 
     return aba.Parametros;
 }
+
+    private void OnDeployStateChanged()
+    {
+        InvokeAsync(async () =>
+        {
+            StateHasChanged();
+
+            if (DeployState.Ativo && DeployState.Tipo == "aviso30seg")
+            {
+                await IniciarCountdownAsync();
+            }
+        });
+    }
+
+    private async Task IniciarCountdownAsync()
+    {
+        _deployCountdownCts?.Cancel();
+        _deployCountdownCts = new CancellationTokenSource();
+        var token = _deployCountdownCts.Token;
+
+        _segundosRestantes = 30;
+        _percentualBarra = 100;
+
+        while (_segundosRestantes > 0 && !token.IsCancellationRequested)
+        {
+            await Task.Delay(1000, token).ContinueWith(_ => { });
+            if (token.IsCancellationRequested) break;
+            _segundosRestantes--;
+            _percentualBarra = (_segundosRestantes / 30.0) * 100;
+            await InvokeAsync(StateHasChanged);
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            await JS.InvokeVoidAsync("location.reload");
+        }
+    }
 
 }

@@ -39,26 +39,12 @@ namespace EvolutCRM.Services
     public class MonitorBackupService
     {
         private readonly string _conn;
-        private readonly UserState _state;
-
-        public MonitorBackupService(IConfiguration config, UserState state)
+        public MonitorBackupService(IConfiguration config)
         {
             _conn = config.GetConnectionString("Connection")!;
-            _state = state;
         }
 
-        private int CodEmpAtual
-        {
-            get
-            {
-                if (_state.CurrentCompanyId <= 0)
-                    throw new InvalidOperationException("Empresa do usuário não carregada no UserState.");
-
-                return _state.CurrentCompanyId;
-            }
-        }
-
-        public async Task<List<MonitorBackupModel>> ObterStatusBackupsAsync()
+        public async Task<List<MonitorBackupModel>> ObterStatusBackupsAsync(int codEmp)
         {
             var lista = new List<MonitorBackupModel>();
             var agora = DateTime.Now;
@@ -92,7 +78,7 @@ namespace EvolutCRM.Services
 
             await using var con = new SqlConnection(_conn);
             await using var cmd = new SqlCommand(sql, con);
-            cmd.Parameters.AddWithValue("@CodEmp", CodEmpAtual);
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
 
             await con.OpenAsync();
             await using var rd = await cmd.ExecuteReaderAsync();
@@ -135,15 +121,15 @@ namespace EvolutCRM.Services
             return StatusBackup.SemBackup;
         }
 
-        public async Task<List<MonitorBackupModel>> ObterClientesParaAlertaAsync()
+        public async Task<List<MonitorBackupModel>> ObterClientesParaAlertaAsync(int codEmp)
         {
-            var todos = await ObterStatusBackupsAsync();
+            var todos = await ObterStatusBackupsAsync(codEmp);
             return todos
                 .Where(x => x.Status == StatusBackup.Critico || x.Status == StatusBackup.SemBackup)
                 .ToList();
         }
 
-        public async Task<List<ClienteSemBackupModel>> ObterClientesSemBackupAsync()
+        public async Task<List<ClienteSemBackupModel>> ObterClientesSemBackupAsync(int codEmp)
         {
             var lista = new List<ClienteSemBackupModel>();
 
@@ -166,7 +152,7 @@ ORDER BY c.Nome ASC";
 
             await using var con = new SqlConnection(_conn);
             await using var cmd = new SqlCommand(sql, con);
-            cmd.Parameters.AddWithValue("@CodEmp", CodEmpAtual);
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
 
             await con.OpenAsync();
             await using var rd = await cmd.ExecuteReaderAsync();
