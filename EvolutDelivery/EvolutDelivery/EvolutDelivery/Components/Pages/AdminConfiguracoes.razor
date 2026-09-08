@@ -1,0 +1,247 @@
+@page "/admin-configuracoes"
+@rendermode InteractiveServer
+@layout AdminLayout
+@inject IJSRuntime JS
+
+<PageTitle>Configurações - Admin</PageTitle>
+
+<style>
+    .config-section {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        margin-bottom: 24px;
+    }
+
+        .config-section h3 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #0f172a;
+        }
+
+    .config-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+        .config-item:last-child {
+            border-bottom: none;
+        }
+
+    .config-label {
+        flex: 1;
+    }
+
+        .config-label strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .config-label p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+
+    .config-input input,
+    .config-input select {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        min-width: 200px;
+    }
+
+    .toggle-switch {
+        position: relative;
+        width: 50px;
+        height: 26px;
+    }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #cbd5e1;
+        transition: .4s;
+        border-radius: 26px;
+    }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+    input:checked + .slider {
+        background-color: #16a34a;
+    }
+
+    input:checked + .slider:before {
+        transform: translateX(24px);
+    }
+</style>
+
+<h2>⚙️ Configurações do Sistema</h2>
+
+<div class="config-section">
+    <h3>🏪 Informações da Loja</h3>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Nome da Loja</strong>
+            <p>Nome exibido no site e nos pedidos</p>
+        </div>
+        <div class="config-input">
+            <input type="text" value="EvolutDelivery" />
+        </div>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Telefone de Contato</strong>
+            <p>WhatsApp para contato com clientes</p>
+        </div>
+        <div class="config-input">
+            <input type="text" value="(17) 99124-2825" />
+        </div>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Endereço</strong>
+            <p>Endereço da loja para retirada</p>
+        </div>
+        <div class="config-input">
+            <input type="text" value="Rua Exemplo, 123 - Centro" style="width:400px;" />
+        </div>
+    </div>
+</div>
+
+<div class="config-section">
+    <h3>🚚 Configurações de Entrega</h3>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Taxa de Entrega</strong>
+            <p>Valor padrão cobrado por entrega</p>
+        </div>
+        <div class="config-input">
+            <input type="number" value="5.00" step="0.50" />
+        </div>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Tempo Estimado de Entrega</strong>
+            <p>Tempo médio de entrega em minutos</p>
+        </div>
+        <div class="config-input">
+            <input type="number" value="45" />
+        </div>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Pedido Mínimo</strong>
+            <p>Valor mínimo para realizar pedido</p>
+        </div>
+        <div class="config-input">
+            <input type="number" value="20.00" step="1.00" />
+        </div>
+    </div>
+</div>
+
+<div class="config-section">
+    <h3>⏰ Horário de Funcionamento</h3>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Segunda a Sexta</strong>
+        </div>
+        <div class="config-input" style="display:flex; gap:8px; align-items:center;">
+            <input type="time" value="11:00" />
+            <span>até</span>
+            <input type="time" value="23:00" />
+        </div>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Sábado e Domingo</strong>
+        </div>
+        <div class="config-input" style="display:flex; gap:8px; align-items:center;">
+            <input type="time" value="12:00" />
+            <span>até</span>
+            <input type="time" value="00:00" />
+        </div>
+    </div>
+</div>
+
+<div class="config-section">
+    <h3>🔔 Notificações</h3>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Notificar Novos Pedidos</strong>
+            <p>Enviar notificação quando chegar novo pedido</p>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="slider"></span>
+        </label>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Notificar Clientes por Email</strong>
+            <p>Enviar email para cliente sobre status do pedido</p>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="slider"></span>
+        </label>
+    </div>
+    <div class="config-item">
+        <div class="config-label">
+            <strong>Notificar Clientes por WhatsApp</strong>
+            <p>Enviar mensagem WhatsApp sobre status do pedido</p>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" checked />
+            <span class="slider"></span>
+        </label>
+    </div>
+</div>
+
+<div style="display:flex; justify-content:flex-end; gap:12px;">
+    <button style="background:#f1f5f9; color:#475569; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer;"
+            @onclick="Cancelar">
+        Cancelar
+    </button>
+    <button style="background:#2563eb; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer;"
+            @onclick="Salvar">
+        💾 Salvar Configurações
+    </button>
+</div>
+
+@code {
+    private async Task Salvar()
+    {
+        await JS.InvokeVoidAsync("alert", "Configurações salvas com sucesso!");
+    }
+
+    private void Cancelar()
+    {
+        // Recarregar página ou resetar valores
+    }
+}
+

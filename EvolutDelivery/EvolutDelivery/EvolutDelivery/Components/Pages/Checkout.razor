@@ -1,0 +1,1375 @@
+@page "/delivery/{slug}/checkout"
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject StorageService Storage
+@inject CheckoutService CheckoutService
+@inject ClienteService ClienteService
+@inject PedidoService PedidoService
+@inject EmpresaService EmpresaService
+@inject FormaPagamentoService FormaPagamentoService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Finalizar Pedido</PageTitle>
+
+<style>
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    :root {
+        --green: #16a34a;
+        --green-light: #dcfce7;
+        --green-dark: #15803d;
+        --blue: #2563eb;
+        --blue-light: #eff6ff;
+        --red: #dc2626;
+        --red-light: #fef2f2;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --bg: #f8fafc;
+        --white: #ffffff;
+        --radius-sm: 8px;
+        --radius: 14px;
+        --radius-lg: 20px;
+        --shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+        --shadow-md: 0 4px 12px rgba(0,0,0,.10);
+    }
+
+    body {
+        background: var(--bg);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: var(--text);
+    }
+
+    /* ── LAYOUT ── */
+    .co-wrap {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 0 0 120px;
+    }
+
+    /* ── HEADER ── */
+    .co-header {
+        background: var(--white);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+
+    .co-header-back {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: var(--white);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1.1rem;
+        color: var(--muted);
+        flex-shrink: 0;
+        transition: background .15s;
+    }
+
+        .co-header-back:hover {
+            background: var(--bg);
+        }
+
+    .co-header-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .co-header-sub {
+        font-size: 0.78rem;
+        color: var(--muted);
+        margin-top: 1px;
+    }
+
+    /* ── STEPS BAR ── */
+    .co-steps {
+        display: flex;
+        align-items: center;
+        padding: 18px 20px 0;
+        gap: 0;
+    }
+
+    .co-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+        position: relative;
+    }
+
+        .co-step:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: var(--border);
+            z-index: 0;
+        }
+
+        .co-step.done:not(:last-child)::after,
+        .co-step.active:not(:last-child)::after {
+            background: var(--green);
+        }
+
+    .co-step-dot {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        background: var(--white);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: var(--muted);
+        z-index: 1;
+        transition: all .2s;
+    }
+
+    .co-step.done .co-step-dot {
+        background: var(--green);
+        border-color: var(--green);
+        color: #fff;
+    }
+
+    .co-step.active .co-step-dot {
+        background: var(--blue);
+        border-color: var(--blue);
+        color: #fff;
+    }
+
+    .co-step-label {
+        font-size: 0.68rem;
+        color: var(--muted);
+        margin-top: 5px;
+        font-weight: 600;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .co-step.active .co-step-label {
+        color: var(--blue);
+    }
+
+    .co-step.done .co-step-label {
+        color: var(--green);
+    }
+
+    /* ── CARD ── */
+    .co-card {
+        background: var(--white);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        margin: 16px 16px 0;
+        overflow: hidden;
+    }
+
+    .co-card-header {
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .co-card-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .icon-blue {
+        background: var(--blue-light);
+    }
+
+    .icon-green {
+        background: var(--green-light);
+    }
+
+    .co-card-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .co-card-body {
+        padding: 18px 20px;
+    }
+
+    /* ── FORM ── */
+    .f-row {
+        margin-bottom: 14px;
+    }
+
+        .f-row:last-child {
+            margin-bottom: 0;
+        }
+
+    .f-label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+    }
+
+    .f-input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 0.95rem;
+        color: var(--text);
+        background: var(--white);
+        transition: border-color .15s, box-shadow .15s;
+        outline: none;
+        -webkit-appearance: none;
+    }
+
+        .f-input:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.10);
+        }
+
+        .f-input.success {
+            border-color: var(--green);
+        }
+
+        .f-input.loading {
+            background: var(--bg);
+        }
+
+    .f-grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .f-grid3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+    }
+
+    /* ── CLIENTE ENCONTRADO ── */
+    .client-found {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--green-light);
+        border: 1px solid #bbf7d0;
+        border-radius: var(--radius-sm);
+        padding: 10px 14px;
+        margin-top: 14px;
+        font-size: 0.88rem;
+        color: var(--green-dark);
+        font-weight: 600;
+    }
+
+    .client-found-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--green);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    /* ── TIPO ENTREGA ── */
+    .delivery-options {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+    }
+
+    .delivery-opt {
+        border: 2px solid var(--border);
+        border-radius: var(--radius);
+        padding: 16px;
+        cursor: pointer;
+        transition: all .15s;
+        text-align: center;
+        background: var(--white);
+    }
+
+        .delivery-opt:hover {
+            border-color: #94a3b8;
+        }
+
+        .delivery-opt.selected {
+            border-color: var(--blue);
+            background: var(--blue-light);
+        }
+
+    .delivery-opt-icon {
+        font-size: 1.8rem;
+        margin-bottom: 6px;
+    }
+
+    .delivery-opt-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--text);
+    }
+
+    .delivery-opt-sub {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 2px;
+    }
+
+    .delivery-opt.selected .delivery-opt-title {
+        color: var(--blue);
+    }
+
+    /* ── ENDEREÇOS SALVOS ── */
+    .addr-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+
+    .addr-item {
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        cursor: pointer;
+        transition: all .15s;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+        .addr-item:hover {
+            border-color: #94a3b8;
+        }
+
+        .addr-item.selected {
+            border-color: var(--blue);
+            background: var(--blue-light);
+        }
+
+    .addr-item-radio {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid var(--border);
+        flex-shrink: 0;
+        margin-top: 2px;
+        transition: all .15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .addr-item.selected .addr-item-radio {
+        border-color: var(--blue);
+        background: var(--blue);
+    }
+
+        .addr-item.selected .addr-item-radio::after {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #fff;
+        }
+
+    .addr-item-label {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: var(--muted);
+        margin-bottom: 2px;
+    }
+
+    .addr-item-text {
+        font-size: 0.88rem;
+        color: var(--text);
+        line-height: 1.4;
+    }
+
+    .btn-new-addr {
+        width: 100%;
+        padding: 11px;
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-sm);
+        background: none;
+        color: var(--blue);
+        font-size: 0.88rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+        .btn-new-addr:hover {
+            border-color: var(--blue);
+            background: var(--blue-light);
+        }
+
+    /* ── PAGAMENTO ── */
+    .pay-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .pay-opt {
+        border: 2px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px 16px;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--muted);
+        transition: all .15s;
+        background: var(--white);
+        white-space: nowrap;
+    }
+
+        .pay-opt:hover {
+            border-color: #94a3b8;
+            color: var(--text);
+        }
+
+        .pay-opt.selected {
+            border-color: var(--blue);
+            background: var(--blue-light);
+            color: var(--blue);
+        }
+
+    /* ── RESUMO ── */
+    .resumo-itens {
+        margin-bottom: 16px;
+    }
+
+    .resumo-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+    }
+
+        .resumo-item:last-child {
+            border-bottom: none;
+        }
+
+    .resumo-item-qty {
+        background: var(--bg);
+        border-radius: var(--radius-sm);
+        padding: 4px 8px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--muted);
+        flex-shrink: 0;
+        min-width: 30px;
+        text-align: center;
+    }
+
+    .resumo-item-nome {
+        font-size: 0.88rem;
+        flex: 1;
+        color: var(--text);
+    }
+
+    .resumo-item-preco {
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+    }
+
+    .resumo-totais {
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+    }
+
+    .resumo-linha {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.88rem;
+        color: var(--muted);
+        margin-bottom: 8px;
+    }
+
+        .resumo-linha.total {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--text);
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 2px solid var(--border);
+            margin-bottom: 0;
+        }
+
+    /* ── ALERTS ── */
+    .alert {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 0.88rem;
+        font-weight: 500;
+        margin: 16px 16px 0;
+    }
+
+    .alert-error {
+        background: var(--red-light);
+        color: var(--red);
+        border: 1px solid #fecaca;
+    }
+
+    .alert-success {
+        background: var(--green-light);
+        color: var(--green-dark);
+        border: 1px solid #bbf7d0;
+    }
+
+    /* ── CHECKBOX ── */
+    .f-check {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.88rem;
+        color: var(--text);
+        cursor: pointer;
+        margin-top: 12px;
+    }
+
+        .f-check input[type=checkbox] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--blue);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+    /* ── FOOTER FIXO ── */
+    .co-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--white);
+        border-top: 1px solid var(--border);
+        padding: 14px 20px env(safe-area-inset-bottom);
+        z-index: 100;
+        max-width: 780px;
+        margin: 0 auto;
+    }
+    /* Para centralizar o footer no desktop */
+    @@media (min-width: 780px) {
+        .co-footer {
+            left: 50%;
+            transform: translateX(-50%);
+            width: 780px;
+        }
+    }
+
+    .co-footer-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 0.82rem;
+        color: var(--muted);
+    }
+
+    .co-footer-total {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: var(--text);
+    }
+
+    .btn-confirmar {
+        width: 100%;
+        padding: 15px;
+        background: var(--green);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius);
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background .15s, transform .1s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+        .btn-confirmar:hover:not(:disabled) {
+            background: var(--green-dark);
+        }
+
+        .btn-confirmar:active:not(:disabled) {
+            transform: scale(.98);
+        }
+
+        .btn-confirmar:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+    /* ── LOADING SPINNER ── */
+    .spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid rgba(255,255,255,.4);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin .7s linear infinite;
+        flex-shrink: 0;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    /* ── DIVIDER ── */
+    .co-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 14px 0;
+    }
+
+    /* ── TEXTAREA ── */
+    .f-textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 0.92rem;
+        font-family: inherit;
+        color: var(--text);
+        resize: none;
+        outline: none;
+        transition: border-color .15s;
+    }
+
+        .f-textarea:focus {
+            border-color: var(--blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.10);
+        }
+
+    /* ── SUCESSO ── */
+    .success-screen {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 30px;
+        text-align: center;
+        min-height: 60vh;
+    }
+
+    .success-icon {
+        width: 80px;
+        height: 80px;
+        background: var(--green-light);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        margin-bottom: 20px;
+        animation: pop .4s cubic-bezier(.34,1.56,.64,1);
+    }
+
+    @@keyframes pop {
+        from {
+            transform: scale(0);
+            opacity: 0;
+        }
+
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    .success-title {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .success-sub {
+        font-size: 0.92rem;
+        color: var(--muted);
+        max-width: 280px;
+        line-height: 1.6;
+    }
+
+    @@media (max-width: 480px) {
+        .f-grid2 {
+            grid-template-columns: 1fr;
+        }
+
+        .f-grid3 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .delivery-options {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+</style>
+
+@if (sucesso)
+{
+    <div class="success-screen">
+        <div class="success-icon">✓</div>
+        <div class="success-title">Pedido confirmado!</div>
+        <div class="success-sub">Seu pedido foi recebido e já está sendo preparado. Redirecionando...</div>
+    </div>
+}
+else
+{
+    <!-- HEADER -->
+    <div class="co-header">
+        <button class="co-header-back" @onclick='() => Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}")'>←</button>
+        <div>
+            <div class="co-header-title">Finalizar pedido</div>
+            <div class="co-header-sub">@(empresaAtual?.Fantasia ?? "")</div>
+        </div>
+    </div>
+
+    <!-- STEPS -->
+    <div class="co-steps">
+        <div class="co-step @(StepClass(1))">
+            <div class="co-step-dot">@(stepAtual > 1 ? "✓" : "1")</div>
+            <div class="co-step-label">Seus dados</div>
+        </div>
+        <div class="co-step @(StepClass(2))">
+            <div class="co-step-dot">@(stepAtual > 2 ? "✓" : "2")</div>
+            <div class="co-step-label">Entrega</div>
+        </div>
+        <div class="co-step @(StepClass(3))">
+            <div class="co-step-dot">@(stepAtual > 3 ? "✓" : "3")</div>
+            <div class="co-step-label">Pagamento</div>
+        </div>
+        <div class="co-step @(StepClass(4))">
+            <div class="co-step-dot">4</div>
+            <div class="co-step-label">Confirmar</div>
+        </div>
+    </div>
+
+    <!-- ALERTA DE ERRO -->
+    @if (!string.IsNullOrEmpty(mensagemErro))
+    {
+        <div class="alert alert-error">
+            <span>⚠</span>
+            <span>@mensagemErro</span>
+        </div>
+    }
+
+    <!-- ═══ STEP 1 — DADOS DO CLIENTE ═══ -->
+    @if (stepAtual == 1)
+    {
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-blue">👤</div>
+                <div class="co-card-title">Seus dados</div>
+            </div>
+            <div class="co-card-body">
+                <div class="f-row">
+                    <label class="f-label">Telefone / WhatsApp *</label>
+                    <input class="f-input @(clienteEncontrado ? "success" : "")"
+                           type="tel"
+                           @bind="telefoneCliente"
+                           @bind:after="AoAlterarTelefone"
+                           placeholder="(00) 00000-0000"
+                           maxlength="15" />
+                </div>
+
+                @if (clienteEncontrado && clienteAtual != null)
+                {
+                    <div class="client-found">
+                        <div class="client-found-avatar">@(clienteAtual.Nome.Substring(0, 1).ToUpper())</div>
+                        <div>
+                            <div>Olá, @clienteAtual.Nome.Split(' ')[0]!</div>
+                            <div style="font-weight:400;font-size:.8rem;margin-top:1px;color:var(--green-dark)">Seus dados foram preenchidos automaticamente</div>
+                        </div>
+                    </div>
+                }
+
+                <div class="co-divider"></div>
+
+                <div class="f-row">
+                    <label class="f-label">Nome completo *</label>
+                    <input class="f-input" type="text" @bind="nomeCliente" placeholder="Como prefere ser chamado?" />
+                </div>
+
+                <div class="f-row">
+                    <label class="f-label">E-mail</label>
+                    <input class="f-input" type="email" @bind="emailCliente" placeholder="para@receber.confirmacao" />
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ═══ STEP 2 — ENTREGA ═══ -->
+    @if (stepAtual == 2)
+    {
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-blue">🚚</div>
+                <div class="co-card-title">Como quer receber?</div>
+            </div>
+            <div class="co-card-body">
+                <div class="delivery-options">
+                    <div class="delivery-opt @(tipoEntrega == "ENTREGA" ? "selected" : "")"
+                         @onclick='() => tipoEntrega = "ENTREGA"'>
+                        <div class="delivery-opt-icon">🏠</div>
+                        <div class="delivery-opt-title">Entregar</div>
+                        <div class="delivery-opt-sub">No meu endereço</div>
+                    </div>
+                    <div class="delivery-opt @(tipoEntrega == "RETIRADA" ? "selected" : "")"
+                         @onclick='() => tipoEntrega = "RETIRADA"'>
+                        <div class="delivery-opt-icon">🏪</div>
+                        <div class="delivery-opt-title">Retirar</div>
+                        <div class="delivery-opt-sub">No estabelecimento</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (tipoEntrega == "ENTREGA")
+        {
+            <div class="co-card">
+                <div class="co-card-header">
+                    <div class="co-card-icon icon-blue">📍</div>
+                    <div class="co-card-title">Endereço de entrega</div>
+                </div>
+                <div class="co-card-body">
+
+                    @if (enderecosCliente.Any() && !usarNovoEndereco)
+                    {
+                        <div class="addr-list">
+                            @foreach (var item in enderecosCliente)
+                            {
+                                <div class="addr-item @(codigoEnderecoSelecionado == item.Codigo ? "selected" : "")"
+                                     @onclick="() => SelecionarEndereco(item)">
+                                    <div class="addr-item-radio"></div>
+                                    <div>
+                                        <div class="addr-item-label">@item.Descricao</div>
+                                        <div class="addr-item-text">@item.EnderecoCompleto</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <button class="btn-new-addr" @onclick='() => usarNovoEndereco = true'>
+                            + Usar outro endereço
+                        </button>
+                    }
+                    else
+                    {
+                        @if (enderecosCliente.Any())
+                        {
+                            <button class="btn-new-addr" style="margin-bottom:14px;"
+                                    @onclick='() => usarNovoEndereco = false'>
+                                ← Voltar para endereços salvos
+                            </button>
+                        }
+
+                        <div class="f-row">
+                            <label class="f-label">CEP</label>
+                            <input class="f-input" type="text" @bind="novoEndereco.CEP" placeholder="00000-000" maxlength="9" />
+                        </div>
+
+                        <div class="f-row">
+                            <label class="f-label">Rua / Avenida *</label>
+                            <input class="f-input" type="text" @bind="novoEndereco.Rua" placeholder="Nome da rua" />
+                        </div>
+
+                        <div class="f-grid2 f-row">
+                            <div>
+                                <label class="f-label">Número *</label>
+                                <input class="f-input" type="text" @bind="novoEndereco.Numero" placeholder="123" />
+                            </div>
+                            <div>
+                                <label class="f-label">Complemento</label>
+                                <input class="f-input" type="text" @bind="novoEndereco.Complemento" placeholder="Apto, bloco..." />
+                            </div>
+                        </div>
+
+                        <div class="f-grid2 f-row">
+                            <div>
+                                <label class="f-label">Bairro *</label>
+                                <input class="f-input" type="text" @bind="novoEndereco.Bairro" placeholder="Bairro" />
+                            </div>
+                            <div>
+                                <label class="f-label">Cidade *</label>
+                                <input class="f-input" type="text" @bind="novoEndereco.Cidade" placeholder="Cidade" />
+                            </div>
+                        </div>
+
+                        <div class="f-row">
+                            <label class="f-label">Ponto de referência</label>
+                            <input class="f-input" type="text" @bind="novoEndereco.PontoReferencia" placeholder="Próximo a..." />
+                        </div>
+
+                        @if (clienteEncontrado)
+                        {
+                            <label class="f-check">
+                                <input type="checkbox" @bind="salvarNovoEndereco" />
+                                Salvar para próximas compras
+                            </label>
+                        }
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    <!-- ═══ STEP 3 — PAGAMENTO ═══ -->
+    @if (stepAtual == 3)
+    {
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-blue">💳</div>
+                <div class="co-card-title">Forma de pagamento</div>
+            </div>
+            <div class="co-card-body">
+                <div class="pay-grid">
+                    @foreach (var fp in formasPagamento)
+                    {
+                        <div class="pay-opt @(formaPagamento == fp ? "selected" : "")"
+                             @onclick="() => formaPagamento = fp">
+                            @fp
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-blue">📝</div>
+                <div class="co-card-title">Alguma observação?</div>
+            </div>
+            <div class="co-card-body">
+                <textarea class="f-textarea" rows="3"
+                          @bind="observacao"
+                          placeholder="Ex: sem cebola, troco para R$ 50..."></textarea>
+            </div>
+        </div>
+    }
+
+    <!-- ═══ STEP 4 — CONFIRMAR ═══ -->
+    @if (stepAtual == 4)
+    {
+        <!-- Itens do pedido -->
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-blue">🛍</div>
+                <div class="co-card-title">Seus itens</div>
+            </div>
+            <div class="co-card-body">
+                <div class="resumo-itens">
+                    @foreach (var item in carrinho)
+                    {
+                        <div class="resumo-item">
+                            <div class="resumo-item-qty">@item.Quantidade×</div>
+                            <div class="resumo-item-nome">@item.Nome</div>
+                            <div class="resumo-item-preco">R$ @((item.Preco * item.Quantidade).ToString("F2"))</div>
+                        </div>
+                    }
+                </div>
+                <div class="resumo-totais">
+                    <div class="resumo-linha">
+                        <span>Subtotal</span>
+                        <span>R$ @subtotal.ToString("F2")</span>
+                    </div>
+                    <div class="resumo-linha">
+                        <span>Entrega</span>
+                        <span>@(tipoEntrega == "ENTREGA" ? $"R$ {taxaEntrega:F2}" : "Grátis")</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(observacao))
+                    {
+                        <div class="resumo-linha" style="margin-top:10px;font-style:italic;">
+                            <span>Obs:</span>
+                            <span style="text-align:right;max-width:55%">@observacao</span>
+                        </div>
+                    }
+                    <div class="resumo-linha total">
+                        <span>Total</span>
+                        <span>R$ @total.ToString("F2")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo dados -->
+        <div class="co-card">
+            <div class="co-card-header">
+                <div class="co-card-icon icon-green">✓</div>
+                <div class="co-card-title">Resumo do pedido</div>
+            </div>
+            <div class="co-card-body">
+                <div class="resumo-linha" style="margin-bottom:8px;">
+                    <span style="color:var(--muted);font-size:.82rem;">Cliente</span>
+                    <span style="font-weight:600;font-size:.9rem;">@nomeCliente</span>
+                </div>
+                <div class="resumo-linha" style="margin-bottom:8px;">
+                    <span style="color:var(--muted);font-size:.82rem;">Telefone</span>
+                    <span style="font-weight:600;font-size:.9rem;">@telefoneCliente</span>
+                </div>
+                <div class="resumo-linha" style="margin-bottom:8px;">
+                    <span style="color:var(--muted);font-size:.82rem;">Entrega</span>
+                    <span style="font-weight:600;font-size:.9rem;">@(tipoEntrega == "ENTREGA" ? "Entrega" : "Retirada")</span>
+                </div>
+                @if (tipoEntrega == "ENTREGA")
+                {
+                    <div class="resumo-linha" style="margin-bottom:8px;">
+                        <span style="color:var(--muted);font-size:.82rem;">Endereço</span>
+                        <span style="font-weight:600;font-size:.9rem;text-align:right;max-width:60%;">@EnderecoFinalTexto</span>
+                    </div>
+                }
+                <div class="resumo-linha" style="margin-bottom:0;">
+                    <span style="color:var(--muted);font-size:.82rem;">Pagamento</span>
+                    <span style="font-weight:600;font-size:.9rem;">@formaPagamento</span>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- ── FOOTER FIXO ── -->
+    <div class="co-footer">
+        <div class="co-footer-info">
+            <span>@LabelStep</span>
+            <span class="co-footer-total">R$ @total.ToString("F2")</span>
+        </div>
+
+        @if (stepAtual < 4)
+        {
+            <button class="btn-confirmar" @onclick="AvancarStep" disabled="@(!PodeAvancar)">
+                @LabelBotaoAvancar <span>→</span>
+            </button>
+        }
+        else
+        {
+            <button class="btn-confirmar" @onclick="FinalizarPedido" disabled="@processando">
+                @if (processando)
+                {
+                    <div class="spinner"></div>
+                    <span>Enviando pedido...</span>
+                }
+                else
+                {
+                    <span>✓ Confirmar pedido</span>
+                }
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string slug { get; set; } = string.Empty;
+
+    private EmpresaModel? empresaAtual;
+    private int CodEmp => empresaAtual?.Codigo ?? 0;
+
+    // Dados cliente
+    private string nomeCliente = "";
+    private string telefoneCliente = "";
+    private string emailCliente = "";
+    private Cliente? clienteAtual;
+    private bool clienteEncontrado = false;
+
+    // Entrega
+    private string tipoEntrega = "ENTREGA";
+    private List<Endereco> enderecosCliente = new();
+    private int codigoEnderecoSelecionado = 0;
+    private Endereco enderecoSelecionado = new();
+    private Endereco novoEndereco = new() { Descricao = "Casa" };
+    private bool usarNovoEndereco = false;
+    private bool salvarNovoEndereco = false;
+
+    // Pagamento
+    private string formaPagamento = "";
+    private string observacao = "";
+    private List<string> formasPagamento = new();
+
+    // Valores
+    private decimal subtotal = 0;
+    private decimal taxaEntrega = 5.00m;
+    private decimal total => subtotal + (tipoEntrega == "ENTREGA" ? taxaEntrega : 0);
+
+    // Carrinho
+    private List<ItemCarrinho> carrinho = new();
+
+    // Estado
+    private int stepAtual = 1;
+    private string mensagemErro = "";
+    private bool processando = false;
+    private bool sucesso = false;
+
+    // ── helpers ──
+    private string StepClass(int n) =>
+        stepAtual > n ? "done" : stepAtual == n ? "active" : "";
+
+    private string LabelStep => stepAtual switch
+    {
+        1 => $"{carrinho.Count} iten(s) no pedido",
+        2 => tipoEntrega == "ENTREGA" ? "Entrega" : "Retirada no local",
+        3 => string.IsNullOrEmpty(formaPagamento) ? "Escolha o pagamento" : formaPagamento,
+        4 => "Revise e confirme",
+        _ => ""
+    };
+
+    private string LabelBotaoAvancar => stepAtual switch
+    {
+        1 => "Escolher entrega",
+        2 => "Escolher pagamento",
+        3 => "Revisar pedido",
+        _ => "Continuar"
+    };
+
+    private bool PodeAvancar => stepAtual switch
+    {
+        1 => !string.IsNullOrWhiteSpace(nomeCliente) && !string.IsNullOrWhiteSpace(telefoneCliente),
+        2 => tipoEntrega == "RETIRADA" || EnderecoValido,
+        3 => !string.IsNullOrWhiteSpace(formaPagamento),
+        _ => true
+    };
+
+    private bool EnderecoValido
+    {
+        get
+        {
+            if (!DeveUsarNovoEndereco && enderecosCliente.Any())
+                return codigoEnderecoSelecionado > 0 || enderecoSelecionado.Codigo == 0;
+
+            return !string.IsNullOrWhiteSpace(novoEndereco.Rua)
+                && !string.IsNullOrWhiteSpace(novoEndereco.Numero)
+                && !string.IsNullOrWhiteSpace(novoEndereco.Bairro)
+                && !string.IsNullOrWhiteSpace(novoEndereco.Cidade);
+        }
+    }
+
+    private bool DeveUsarNovoEndereco =>
+        tipoEntrega == "ENTREGA" &&
+        (usarNovoEndereco || !enderecosCliente.Any() || codigoEnderecoSelecionado <= 0);
+
+    private bool DeveSalvarNovoEndereco =>
+        salvarNovoEndereco || !enderecosCliente.Any();
+
+    private string EnderecoFinalTexto
+    {
+        get
+        {
+            var end = DeveUsarNovoEndereco ? novoEndereco : enderecoSelecionado;
+            return end.EnderecoCompleto;
+        }
+    }
+
+    // ── lifecycle ──
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(slug)) return;
+
+        empresaAtual = await EmpresaService.BuscarPorSlugAsync(slug);
+
+        if (empresaAtual == null || empresaAtual.Codigo <= 0)
+        {
+            mensagemErro = "Empresa não encontrada.";
+            return;
+        }
+
+        formasPagamento = await FormaPagamentoService.ListarDescricoesAtivasAsync(empresaAtual.Codigo);
+        if (formasPagamento.Any())
+            formaPagamento = formasPagamento.First();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        carrinho = await Storage.ObterCarrinhoAsync() ?? new();
+
+        if (!carrinho.Any())
+        {
+            Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}");
+            return;
+        }
+
+        subtotal = carrinho.Sum(x => x.Preco * x.Quantidade);
+        StateHasChanged();
+    }
+
+    // ── navegação steps ──
+    private void AvancarStep()
+    {
+        mensagemErro = "";
+        if (stepAtual < 4)
+            stepAtual++;
+    }
+
+    // ── buscar cliente por telefone ──
+    private async Task AoAlterarTelefone()
+    {
+        mensagemErro = "";
+        clienteEncontrado = false;
+        enderecosCliente.Clear();
+        codigoEnderecoSelecionado = 0;
+        enderecoSelecionado = new Endereco();
+        usarNovoEndereco = false;
+        salvarNovoEndereco = false;
+
+        if (string.IsNullOrWhiteSpace(telefoneCliente) || telefoneCliente.Replace(" ", "").Replace("-", "").Replace("(", "").Replace(")", "").Length < 8)
+            return;
+
+        try
+        {
+            clienteAtual = await ClienteService.BuscarPorTelefoneAsync(telefoneCliente, CodEmp, empresaAtual!.CNPJ);
+            if (clienteAtual == null) return;
+
+            clienteEncontrado = true;
+            nomeCliente = clienteAtual.Nome;
+            emailCliente = clienteAtual.Email;
+
+            enderecosCliente = await ClienteService.BuscarEnderecosAsync(clienteAtual.Codigo, CodEmp);
+
+            if (enderecosCliente.Any())
+            {
+                var principal = enderecosCliente.FirstOrDefault(x => x.EnderecoPrincipal) ?? enderecosCliente.First();
+                SelecionarEndereco(principal);
+                usarNovoEndereco = false;
+            }
+            else
+            {
+                usarNovoEndereco = true;
+                salvarNovoEndereco = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao buscar cliente: {ex.Message}";
+        }
+    }
+
+    private void SelecionarEndereco(Endereco item)
+    {
+        codigoEnderecoSelecionado = item.Codigo;
+        enderecoSelecionado = item;
+    }
+
+    // ── finalizar ──
+    private async Task FinalizarPedido()
+    {
+        mensagemErro = "";
+        processando = true;
+
+        try
+        {
+            // Garante cliente
+            if (clienteAtual == null)
+                clienteAtual = await ClienteService.BuscarPorTelefoneAsync(telefoneCliente, CodEmp, empresaAtual!.CNPJ);
+
+            if (clienteAtual == null)
+            {
+                var endCadastro = tipoEntrega == "ENTREGA" ? (DeveUsarNovoEndereco ? novoEndereco : enderecoSelecionado) : new Endereco();
+                var novoId = await CheckoutService.CriarClienteDeliveryAsync(nomeCliente, telefoneCliente, emailCliente, empresaAtual!.CNPJ, endCadastro);
+                clienteAtual = await ClienteService.BuscarPorCodigoAsync(novoId, CodEmp, empresaAtual!.CNPJ);
+                if (clienteAtual == null) throw new Exception("Não foi possível localizar o cliente criado.");
+            }
+
+            // Salvar endereço novo se solicitado
+            if (tipoEntrega == "ENTREGA" && DeveUsarNovoEndereco && DeveSalvarNovoEndereco)
+                await ClienteService.SalvarEnderecoAsync(clienteAtual.Codigo, CodEmp, novoEndereco);
+
+            // Monta endereço final
+            Endereco endFinal = tipoEntrega == "ENTREGA"
+                ? (DeveUsarNovoEndereco ? novoEndereco : enderecoSelecionado)
+                : new Endereco();
+
+            var pedido = new Pedido
+            {
+                CodCliente = clienteAtual.Codigo,
+                NomeCliente = nomeCliente,
+                TelefoneCliente = telefoneCliente,
+                EmailCliente = emailCliente,
+                EnderecoCompleto = tipoEntrega == "ENTREGA" ? endFinal.EnderecoCompleto : "RETIRADA NO LOCAL",
+                Bairro = endFinal.Bairro ?? "",
+                Cidade = endFinal.Cidade ?? "",
+                CEP = endFinal.CEP ?? "",
+                Complemento = endFinal.Complemento ?? "",
+                Numero = endFinal.Numero ?? "",
+                Referencia = endFinal.PontoReferencia ?? "",
+                ValorSubtotal = subtotal,
+                ValorEntrega = tipoEntrega == "ENTREGA" ? taxaEntrega : 0,
+                ValorDesconto = 0,
+                ValorTotal = total,
+                FormaPagamento = formaPagamento,
+                TipoEntrega = tipoEntrega,
+                Observacao = observacao + "Pagamento: " + formaPagamento + " Tipo: " + tipoEntrega,
+                Usuario = "SITE",
+                CodEmp = CodEmp,
+                Status = "PENDENTE",
+                CNPJ = empresaAtual!.CNPJ
+            };
+
+            var codPedido = await PedidoService.CriarPedidoAsync(pedido, carrinho);
+
+            await Storage.LimparCarrinhoAsync();
+
+            sucesso = true;
+            StateHasChanged();
+
+            await Task.Delay(1800);
+            Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}/pedido-confirmado/{codPedido}");
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao finalizar pedido: {ex.Message}";
+            stepAtual = 4;
+        }
+        finally
+        {
+            processando = false;
+        }
+    }
+}
