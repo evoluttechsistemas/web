@@ -1,0 +1,636 @@
+﻿@page "/delivery/{slug}/carrinho"
+@using System.Globalization
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject EmpresaService empresaService
+@inject StorageService storage
+@inject NavigationManager NavManager
+
+<PageTitle>Meu Carrinho</PageTitle>
+
+<style>
+    *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+
+    :root {
+        --primary: #2563eb;
+        --primary-dark: #1e40af;
+        --primary-light: #eff6ff;
+        --green: #16a34a;
+        --green-light: #dcfce7;
+        --red: #dc2626;
+        --red-light: #fef2f2;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --bg: #f8fafc;
+        --white: #ffffff;
+        --radius-sm: 8px;
+        --radius: 14px;
+        --shadow: 0 1px 4px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+    }
+
+    body {
+        background: var(--bg);
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        color: var(--text);
+    }
+
+    /* ── HEADER ── */
+    .ca-header {
+        background: var(--white);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+
+    .ca-back {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid var(--border);
+        background: var(--white);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 1.1rem;
+        color: var(--muted);
+        flex-shrink: 0;
+        transition: background .15s;
+    }
+
+        .ca-back:hover {
+            background: var(--bg);
+        }
+
+    .ca-header-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .ca-header-count {
+        margin-left: auto;
+        background: var(--primary-light);
+        color: var(--primary);
+        font-size: 0.78rem;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 20px;
+    }
+
+    /* ── WRAP ── */
+    .ca-wrap {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 0 0 160px;
+    }
+
+    /* ── VAZIO ── */
+    .ca-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 30px;
+        text-align: center;
+        color: var(--muted);
+    }
+
+    .ca-empty-icon {
+        font-size: 3.5rem;
+        margin-bottom: 16px;
+    }
+
+    .ca-empty-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 8px;
+    }
+
+    .ca-empty-sub {
+        font-size: 0.88rem;
+        line-height: 1.6;
+        margin-bottom: 24px;
+    }
+
+    .btn-voltar-loja {
+        padding: 13px 28px;
+        background: var(--primary);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius);
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background .15s;
+    }
+
+        .btn-voltar-loja:hover {
+            background: var(--primary-dark);
+        }
+
+    /* ── LISTA ── */
+    .ca-list {
+        padding: 16px 16px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* ── ITEM CARD ── */
+    .ca-item {
+        background: var(--white);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px;
+        transition: box-shadow .15s;
+        position: relative;
+    }
+
+    .ca-item-img {
+        width: 58px;
+        height: 58px;
+        border-radius: var(--radius-sm);
+        object-fit: cover;
+        flex-shrink: 0;
+        background: var(--bg);
+    }
+
+    .ca-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .ca-item-nome {
+        font-size: 0.93rem;
+        font-weight: 700;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 4px;
+    }
+
+    .ca-item-unit {
+        font-size: 0.78rem;
+        color: var(--muted);
+    }
+
+    .ca-item-total {
+        font-size: 0.95rem;
+        font-weight: 800;
+        color: var(--primary-dark);
+        margin-top: 2px;
+    }
+
+    /* ── CONTROLES DE QUANTIDADE ── */
+    .ca-qty {
+        display: flex;
+        align-items: center;
+        gap: 0;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .ca-qty-btn {
+        width: 34px;
+        height: 34px;
+        border: none;
+        background: var(--white);
+        color: var(--primary);
+        font-size: 1.1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .12s;
+        flex-shrink: 0;
+    }
+
+        .ca-qty-btn:hover {
+            background: var(--primary-light);
+        }
+
+        .ca-qty-btn.remove {
+            color: var(--red);
+        }
+
+            .ca-qty-btn.remove:hover {
+                background: var(--red-light);
+            }
+
+    .ca-qty-num {
+        min-width: 58px;
+        text-align: center;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--text);
+        border-left: 1.5px solid var(--border);
+        border-right: 1.5px solid var(--border);
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* ── SEÇÃO TOTAIS ── */
+    .ca-totals {
+        background: var(--white);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        margin: 12px 16px 0;
+        padding: 16px 18px;
+    }
+
+    .ca-totals-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        margin-bottom: 12px;
+    }
+
+    .ca-total-linha {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.88rem;
+        color: var(--muted);
+        margin-bottom: 8px;
+    }
+
+        .ca-total-linha.grand {
+            font-size: 1.05rem;
+            font-weight: 800;
+            color: var(--text);
+            border-top: 1.5px solid var(--border);
+            padding-top: 12px;
+            margin-top: 4px;
+            margin-bottom: 0;
+        }
+
+        .ca-total-linha .val {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+    /* ── LIMPAR CARRINHO ── */
+    .btn-limpar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: none;
+        border: none;
+        color: var(--red);
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 10px 16px;
+        margin-left: auto;
+        opacity: .8;
+        transition: opacity .15s;
+    }
+
+        .btn-limpar:hover {
+            opacity: 1;
+        }
+
+    /* ── FOOTER FIXO ── */
+    .ca-footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: var(--white);
+        border-top: 1px solid var(--border);
+        padding: 14px 20px env(safe-area-inset-bottom);
+        z-index: 100;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    @@media (min-width: 600px) {
+        .ca-footer {
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+        }
+    }
+
+    .ca-footer-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 12px;
+    }
+
+    .ca-footer-label {
+        font-size: 0.82rem;
+        color: var(--muted);
+        font-weight: 500;
+    }
+
+    .ca-footer-total {
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: var(--text);
+    }
+
+    .ca-footer-itens {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-top: 1px;
+    }
+
+    .btn-checkout {
+        width: 100%;
+        padding: 15px;
+        background: var(--green);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius);
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: background .15s, transform .1s;
+    }
+
+        .btn-checkout:hover {
+            background: #15803d;
+        }
+
+        .btn-checkout:active {
+            transform: scale(.98);
+        }
+
+    /* ── TOAST ── */
+    .ca-toast {
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e293b;
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 30px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        z-index: 200;
+        animation: fadeInOut 2s ease forwards;
+        white-space: nowrap;
+    }
+
+    @@keyframes fadeInOut {
+        0% {
+            opacity: 0;
+            transform: translateX(-50%) translateY(10px);
+        }
+
+        15% {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        75% {
+            opacity: 1;
+        }
+
+        100% {
+            opacity: 0;
+        }
+    }
+</style>
+
+<!-- HEADER -->
+<div class="ca-header">
+    <button class="ca-back" @onclick="Voltar">←</button>
+    <div class="ca-header-title">Meu carrinho</div>
+    @if (itens.Any())
+    {
+        <div class="ca-header-count">@itens.Count iten(s)</div>
+    }
+</div>
+
+<div class="ca-wrap">
+    @if (!itens.Any())
+    {
+        <!-- VAZIO -->
+        <div class="ca-empty">
+            <div class="ca-empty-icon">🛒</div>
+            <div class="ca-empty-title">Carrinho vazio</div>
+            <div class="ca-empty-sub">Adicione produtos ao carrinho<br>para continuar com seu pedido.</div>
+            <button class="btn-voltar-loja" @onclick="Voltar">Ver produtos</button>
+        </div>
+    }
+    else
+    {
+        <!-- BOTÃO LIMPAR -->
+        <div style="display:flex;">
+            <button class="btn-limpar" @onclick="LimparCarrinho">🗑 Limpar carrinho</button>
+        </div>
+
+        <!-- LISTA DE ITENS -->
+        <div class="ca-list">
+            @foreach (var item in itens)
+            {
+                <div class="ca-item">
+                    <img class="ca-item-img"
+                         src="@(string.IsNullOrEmpty(item.ImagemBase64) ? "/EvolutDelivery/imagens/sem-imagem.png" : item.ImagemBase64)"
+                         alt="@item.Nome" />
+
+                    <div class="ca-item-info">
+                        <div class="ca-item-nome">@item.Nome</div>
+                        <div class="ca-item-unit">@item.Preco.ToString("C", new CultureInfo("pt-BR")) cada</div>
+                        <div class="ca-item-total">@((item.Preco * item.Quantidade).ToString("C", new CultureInfo("pt-BR")))</div>
+                    </div>
+
+                    <div class="ca-qty">
+                        <button class="ca-qty-btn @(item.Quantidade <= QuantidadeMinima(item) ? "remove" : "")"
+                                @onclick="() => Diminuir(item)">
+                            @(item.Quantidade <= QuantidadeMinima(item) ? "🗑" : "−")
+                        </button>
+                        <div class="ca-qty-num">@FormatarQuantidade(item)</div>
+                        <button class="ca-qty-btn" @onclick="() => Aumentar(item)">+</button>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- TOTAIS -->
+        <div class="ca-totals">
+            <div class="ca-totals-title">Resumo</div>
+            <div class="ca-total-linha">
+                <span>Subtotal (@FormatarQuantidadeTotal(TotalItens) iten(s))</span>
+                <span class="val">@Subtotal.ToString("C", new CultureInfo("pt-BR"))</span>
+            </div>
+            <div class="ca-total-linha">
+                <span>Taxa de entrega</span>
+                <span class="val" style="color:var(--muted);font-size:.82rem;">calculada no checkout</span>
+            </div>
+            <div class="ca-total-linha grand">
+                <span>Total estimado</span>
+                <span>@Subtotal.ToString("C", new CultureInfo("pt-BR"))</span>
+            </div>
+        </div>
+
+        <!-- FOOTER FIXO -->
+        <div class="ca-footer">
+            <div class="ca-footer-row">
+                <div>
+                    <div class="ca-footer-label">Total estimado</div>
+                    <div class="ca-footer-itens">taxa calculada no próximo passo</div>
+                </div>
+                <div class="ca-footer-total">@Subtotal.ToString("C", new CultureInfo("pt-BR"))</div>
+            </div>
+            <button class="btn-checkout" @onclick="IrParaCheckout">
+                Finalizar pedido →
+            </button>
+        </div>
+    }
+</div>
+
+@if (mostrarToast)
+{
+    <div class="ca-toast">@mensagemToast</div>
+}
+
+@code {
+    [Parameter] public string slug { get; set; } = string.Empty;
+
+    private List<ItemCarrinho> itens = new();
+    private bool mostrarToast = false;
+    private string mensagemToast = "";
+
+    private decimal TotalItens => itens.Sum(i => i.Quantidade);
+    private decimal Subtotal => itens.Sum(i => i.Preco * i.Quantidade);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            var salvo = await storage.GetAsync<List<ItemCarrinho>>("carrinho");
+            if (salvo != null)
+            {
+                itens = salvo;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("ERRO CARRINHO: " + ex.ToString());
+        }
+    }
+
+    private async Task Aumentar(ItemCarrinho item)
+    {
+        item.Quantidade += PassoQuantidade(item);
+        NormalizarQuantidade(item);
+        await SalvarCarrinho();
+    }
+
+    private async Task Diminuir(ItemCarrinho item)
+    {
+        if (item.Quantidade > QuantidadeMinima(item))
+        {
+            item.Quantidade -= PassoQuantidade(item);
+            NormalizarQuantidade(item);
+        }
+        else
+        {
+            itens.Remove(item);
+            await ExibirToast($"\"{item.Nome}\" removido");
+        }
+        await SalvarCarrinho();
+    }
+
+    private bool PermiteDecimal(ItemCarrinho item)
+    {
+        return string.Equals(item.PermiteDecimal ?? "N", "S", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private decimal QuantidadeMinima(ItemCarrinho item)
+    {
+        return PermiteDecimal(item) ? 0.001m : 1m;
+    }
+
+    private decimal PassoQuantidade(ItemCarrinho item)
+    {
+        return PermiteDecimal(item) ? 0.100m : 1m;
+    }
+
+    private void NormalizarQuantidade(ItemCarrinho item)
+    {
+        decimal minimo = QuantidadeMinima(item);
+
+        if (item.Quantidade < minimo)
+            item.Quantidade = minimo;
+
+        item.Quantidade = PermiteDecimal(item)
+            ? Math.Round(item.Quantidade, 3, MidpointRounding.AwayFromZero)
+            : Math.Max(1, Math.Truncate(item.Quantidade));
+    }
+
+    private string FormatarQuantidade(ItemCarrinho item)
+    {
+        return PermiteDecimal(item)
+            ? item.Quantidade.ToString("0.###", new CultureInfo("pt-BR"))
+            : item.Quantidade.ToString("0", new CultureInfo("pt-BR"));
+    }
+
+    private string FormatarQuantidadeTotal(decimal quantidade)
+    {
+        return quantidade == Math.Truncate(quantidade)
+            ? quantidade.ToString("0", new CultureInfo("pt-BR"))
+            : quantidade.ToString("0.###", new CultureInfo("pt-BR"));
+    }
+
+    private async Task LimparCarrinho()
+    {
+        itens.Clear();
+        await storage.RemoveAsync("carrinho");
+        await ExibirToast("Carrinho limpo");
+    }
+
+    private async Task SalvarCarrinho()
+    {
+        await storage.SaveAsync("carrinho", itens);
+    }
+
+    private void Voltar()
+        => NavManager.NavigateTo($"/EvolutDelivery/delivery/{slug}");
+
+    private void IrParaCheckout()
+        => NavManager.NavigateTo($"/EvolutDelivery/delivery/{slug}/checkout");
+
+    private async Task ExibirToast(string msg)
+    {
+        mensagemToast = msg;
+        mostrarToast = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        mostrarToast = false;
+        StateHasChanged();
+    }
+}

@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutCRM", "EvolutCRM\Evol
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelpDesktop", "HelpDesktop\HelpDesktop.csproj", "{DF45F7A7-B308-49C7-AF80-FD75938C28D3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutDelivery", "EvolutDelivery\EvolutDelivery\EvolutDelivery\EvolutDelivery.csproj", "{689109E7-0154-53FD-4757-77770B687C9B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{DF45F7A7-B308-49C7-AF80-FD75938C28D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DF45F7A7-B308-49C7-AF80-FD75938C28D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DF45F7A7-B308-49C7-AF80-FD75938C28D3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{689109E7-0154-53FD-4757-77770B687C9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{689109E7-0154-53FD-4757-77770B687C9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{689109E7-0154-53FD-4757-77770B687C9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{689109E7-0154-53FD-4757-77770B687C9B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
