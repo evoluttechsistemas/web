@@ -1334,7 +1334,7 @@
     private void IniciarTimer()
     {
         _cts = new CancellationTokenSource();
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
         _ = Task.Run(async () =>
         {
             try
@@ -1352,15 +1352,25 @@
 
     private string _erroDebug = "";
 
+    // ✅ SUBSTITUIR o método AtualizarAsync inteiro por este:
     private async Task AtualizarAsync()
     {
-        _carregando = true;
-        await InvokeAsync(StateHasChanged);
+        // Spinner só aparece na primeira carga, quando ainda não há dados
+        if (!_todos.Any())
+        {
+            _carregando = true;
+            await InvokeAsync(StateHasChanged);
+        }
 
         try
         {
-            _todos = await MonitorBackupService.ObterStatusBackupsAsync(UserState.CurrentCompanyId);
-            _semBackup = await MonitorBackupService.ObterClientesSemBackupAsync(UserState.CurrentCompanyId);
+            // ✅ As duas queries rodam em paralelo em vez de sequencial
+            var t1 = MonitorBackupService.ObterStatusBackupsAsync(UserState.CurrentCompanyId);
+            var t2 = MonitorBackupService.ObterClientesSemBackupAsync(UserState.CurrentCompanyId);
+            await Task.WhenAll(t1, t2);
+
+            _todos = t1.Result;
+            _semBackup = t2.Result;
             _paginaSemBackup = 1;
             _paginaSemBackupItens = _semBackup.Skip(0).Take(_porPaginaSemBackup).ToList();
             _ultimaAtualizacao = DateTime.Now;

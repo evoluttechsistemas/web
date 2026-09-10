@@ -353,6 +353,9 @@
                         <input id="usuario"
                                autocomplete="username"
                                @bind="usuario"
+                               @bind:event="oninput"
+                               @onkeydown="OnKeyDownUsuario"
+                               @ref="_inputUsuario"
                                disabled="@Entrando" />
                     </div>
 
@@ -362,6 +365,9 @@
                                type="password"
                                autocomplete="current-password"
                                @bind="senha"
+                               @bind:event="oninput"
+                               @onkeydown="OnKeyDownSenha"
+                               @ref="_inputSenha"
                                disabled="@Entrando" />
                     </div>
 
@@ -373,6 +379,11 @@
                     </button>
                 </div>
             }
+
+            <label class="lembrar-box">
+                <input type="checkbox" @bind="lembrarUsuario" disabled="@Entrando" />
+                Lembrar usuário
+            </label>
 
             @if (Etapa2FA)
             {
@@ -386,6 +397,7 @@
                                placeholder="000000"
                                value="@codigo2FA"
                                @oninput="e => codigo2FA = e.Value?.ToString() ?? string.Empty"
+                               @onkeydown="OnKeyDown"
                                disabled="@Entrando" />
                         <span style="font-size:.76rem;color:#64748b;font-weight:650;">
                             Enviamos um código de 6 dígitos para o seu e-mail.
@@ -420,7 +432,14 @@
     </section>
 </div>
 
+<script>
+    window.focusElement = (el) => {
+        if (el) el.focus();
+    };
+</script>
+
 @code {
+    private bool lembrarUsuario = false;
     private bool lembrarDispositivo = false;
     private bool Etapa2FA = false;
     private string codigo2FA = "";
@@ -606,6 +625,11 @@
         await JS.InvokeVoidAsync("localStorage.setItem", "crm_company", empresaCodigo.ToString());
         await JS.InvokeVoidAsync("localStorage.setItem", "crm_company_name", empresaNome);
 
+        if (lembrarUsuario)
+            await JS.InvokeVoidAsync("localStorage.setItem", "crm_remember_user", usuarioLogado);
+        else
+            await JS.InvokeVoidAsync("localStorage.removeItem", "crm_remember_user");
+
         await RedirecionarPorPermissaoAsync();
     }
 
@@ -689,5 +713,48 @@
         }
 
         ErrorMessage = "Seu usuário não possui permissão para acessar nenhuma tela do sistema.";
+    }
+
+    private ElementReference _inputUsuario;
+    private ElementReference _inputSenha;
+
+    // REMOVA o OnInitializedAsync inteiro
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Carrega usuário lembrado
+        var usuarioSalvo = await JS.InvokeAsync<string?>("localStorage.getItem", "crm_remember_user");
+        if (!string.IsNullOrWhiteSpace(usuarioSalvo))
+        {
+            usuario = usuarioSalvo;
+            lembrarUsuario = true;
+            StateHasChanged(); // força re-render com o usuário preenchido
+        }
+
+        // Foca no campo correto
+        if (!string.IsNullOrWhiteSpace(usuario))
+            await JS.InvokeVoidAsync("focusElement", _inputSenha);
+        else
+            await JS.InvokeVoidAsync("focusElement", _inputUsuario);
+    }
+
+    private async Task OnKeyDownUsuario(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        await JS.InvokeVoidAsync("focusElement", _inputSenha);
+    }
+
+    private async Task OnKeyDownSenha(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        await HandleLogin();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+        await HandleVerificar2FA();
     }
 }

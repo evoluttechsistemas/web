@@ -132,6 +132,19 @@ public class AbaService
         }
         return (Humanizar(tipo.Name), "fas fa-window-maximize");
     }
+    public void Reordenar(string rotaOrigem, string rotaDestino)
+    {
+        var origem = _abas.FindIndex(a => a.Rota == rotaOrigem);
+        var destino = _abas.FindIndex(a => a.Rota == rotaDestino);
+
+        if (origem < 0 || destino < 0 || origem == destino) return;
+
+        var item = _abas[origem];
+        _abas.RemoveAt(origem);
+        _abas.Insert(destino, item);
+
+        OnMudanca?.Invoke();
+    }
 
     private static string Normalizar(string rota)
         => (rota ?? "").Trim().TrimStart('/').ToLowerInvariant();

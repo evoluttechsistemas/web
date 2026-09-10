@@ -4131,6 +4131,7 @@ else
                 </html>
             `);
     };
+
 </script>
 
 @if (MostrarModalGerarInsight)
@@ -4476,6 +4477,8 @@ else
 </script>
 
 @code {
+    private DotNetObjectReference<Ticket>? _visibilityRef;
+    private bool _paginaVisivel = true;
     private bool MensagemInterna = false;
     private string BuscaDoc = "";
     private bool BuscandoDocs = false;
@@ -5316,7 +5319,8 @@ else
             }
         }
 
-        await TicketService.MarcarComoAbertoAsync(id);
+        if (_paginaVisivel)
+            await TicketService.MarcarComoAbertoAsync(id);
 
         if (TicketAtual != null)
         {
@@ -5375,7 +5379,7 @@ else
                 var temResponsavel = !string.IsNullOrWhiteSpace(TicketAtual.Usuario)
                     && !usuariosAutomaticos.Contains(TicketAtual.Usuario.Trim());
 
-                if (temResponsavel)
+                if (temResponsavel && _paginaVisivel)
                 {
                     await TicketService.MarcarComoLidoSuporteAsync(
                         TicketAtual.Codigo,
@@ -5761,6 +5765,7 @@ else
         _debounceTimer?.Dispose();
         _rascunhoTimer?.Dispose();
         _pasteRef?.Dispose();   // ← era _dotnetRef, que era a mesma ref mas sem garantia
+        _visibilityRef?.Dispose();
         _dotnetRef = null;
         _pasteRef = null;
 
@@ -6572,6 +6577,11 @@ CodTipo == 5 ? NomeWhatsApp : null
                 ChaveVelocidadeAudio
             );
 
+            // Visibility: usa ref tipada e armazenada
+            _visibilityRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("registerVisibilityChange", _visibilityRef);
+            _paginaVisivel = await JS.InvokeAsync<bool>("isPageVisible");
+
             StateHasChanged();
         }
 
@@ -7236,6 +7246,12 @@ CodTipo == 5 ? NomeWhatsApp : null
         {
             criandoCard = false;
         }
+    }
+
+    [JSInvokable]
+    public void OnVisibilityChanged(bool isVisible)
+    {
+        _paginaVisivel = isVisible;
     }
 
 }

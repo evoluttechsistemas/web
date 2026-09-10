@@ -95,6 +95,47 @@
         border-radius: 4px;
         transition: width 1s linear;
     }
+
+
+    .aba-strip {
+        position: relative;
+    }
+
+    .aba-ghost {
+        position: fixed;
+        pointer-events: none;
+        z-index: 99999;
+        background: #2d3748;
+        border: 1px solid #4a90d9;
+        border-radius: 6px;
+        padding: 0 12px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        opacity: 0.85;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+        white-space: nowrap;
+        font-size: 13px;
+        color: #f1f5f9;
+    }
+
+    .aba-item.aba-drag-sobre {
+        border-left: 2px solid #3b82f6;
+        background: rgba(59,130,246,0.10);
+    }
+
+    .aba-item.aba-arrastando {
+        opacity: 0.35;
+    }
+
+    .aba-item {
+        cursor: grab;
+    }
+
+        .aba-item:active {
+            cursor: grabbing;
+        }
 </style>
 
 <MainMenu Notificacoes="_notificacoesPainel"
@@ -104,13 +145,15 @@
     <BodyContent>
         <div class="aba-wrapper">
 
-            <div class="aba-strip">
+            <div class="aba-strip" @ref="_abaStrip">
                 @foreach (var aba in Abas.Abas)
                 {
                     var ativa = aba.Rota == Abas.RotaAtiva;
-                    <div class="aba-item @(ativa ? "ativa" : "")"
+                    <div class="aba-item @(ativa ? "ativa" : "") @(_abaDragSobre == aba.Rota && _abaDragging != aba.Rota ? "aba-drag-sobre" : "") @(_abaDragging == aba.Rota && _dragging ? "aba-arrastando" : "")"
                          @key="aba.Rota"
-                         @onclick="() => AtivarAba(aba)">
+                         data-rota="@aba.Rota"
+                         @onclick="() => AtivarAba(aba)"
+                         @onmousedown="(e) => OnAbaMouseDown(e, aba.Rota)">
                         <i class="@aba.Icone"></i>
                         <span class="aba-titulo">@aba.Titulo</span>
                         @if (!aba.Fixa)
@@ -122,6 +165,15 @@
                                 &times;
                             </button>
                         }
+                    </div>
+                }
+
+                @* Ghost que segue o mouse restrito ao eixo X *@
+                @if (_dragging)
+                {
+                    <div class="aba-ghost" style="left:@(_ghostX)px; top:@(_ghostY)px; width:@(_ghostW)px;">
+                        <i class="@(Abas.Abas.FirstOrDefault(a => a.Rota == _abaDragging)?.Icone)"></i>
+                        <span class="aba-titulo">@(Abas.Abas.FirstOrDefault(a => a.Rota == _abaDragging)?.Titulo)</span>
                     </div>
                 }
             </div>
@@ -232,6 +284,52 @@
         window.addEventListener('beforeunload', window._offlineHandler);
         window.addEventListener('visibilitychange', window._visibilityHandler);
     };
+
+    // ── Drag de abas restrito ao eixo X ─────────────────────────────────────
+    let _dragDotNet = null;
+
+    window.abaStripDragStart = (rota, clientX, clientY) => {
+        const el = document.querySelector(`.aba-item[data-rota="${rota}"]`);
+        if (!el) return { x: clientX, y: clientY, w: 120 };
+        const r = el.getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width };
+    };
+
+    window.abaStripDragAttach = (dotnet) => {
+        _dragDotNet = dotnet;
+        document.addEventListener('mousemove', _onDragMove);
+        document.addEventListener('mouseup', _onDragUp);
+    };
+
+    window.abaStripDragDetach = () => {
+        document.removeEventListener('mousemove', _onDragMove);
+        document.removeEventListener('mouseup', _onDragUp);
+        _dragDotNet = null;
+    };
+
+    let _dragLastRota = null;
+
+    const _onDragMove = (e) => {
+        if (!_dragDotNet) return;
+
+        const abas = document.querySelectorAll('.aba-item[data-rota]');
+        let rotaAtual = '';
+        for (const el of abas) {
+            const r = el.getBoundingClientRect();
+            if (e.clientX >= r.left && e.clientX <= r.right) {
+                rotaAtual = el.dataset.rota;
+                break;
+            }
+        }
+
+        // Só invoca o Blazor quando a rota sob o cursor muda
+        if (rotaAtual !== _dragLastRota) {
+            _dragLastRota = rotaAtual;
+            _dragDotNet.invokeMethodAsync('OnMouseMove', e.clientX, e.clientY, rotaAtual);
+        }
+    };
+
+    const _onDragUp = () => _dragDotNet?.invokeMethodAsync('OnMouseUp');
 
 </script>
 
@@ -538,6 +636,7 @@
                     int.TryParse(partes[1], out idTicketAberto);
             }
 
+            
             var novosParaNotificar = tickets
                 .Where(t =>
                 {
@@ -559,9 +658,9 @@
                         && (ehMeuTicket || ehTicketSemResponsavel)
                         && (!estaDentroDoTicketAtivo || t.Codigo != idTicketAberto)
                         && (
-                            !_ticketsNotificadosLayout.ContainsKey(t.Codigo) ||
-                            _ticketsNotificadosLayout[t.Codigo] < t.DataHoraUltimaGravacao
-                        );
+    !_ticketsNotificadosLayout.ContainsKey(t.Codigo) ||
+    DateTime.Now - _ticketsNotificadosLayout[t.Codigo] >= TimeSpan.FromSeconds(15)
+);
                 })
                 .ToList();
 
@@ -578,13 +677,28 @@
             if (!novosParaNotificar.Any())
                 return;
 
+            var qtdAtual = tickets.Count(t =>
+t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+!string.IsNullOrWhiteSpace(t.Usuario) &&
+(t.Usuario.Trim().ToUpperInvariant() == usuario ||
+ new[] { "", "NOVO", "WHATSAPP", "CLIENTE" }
+     .Contains(t.Usuario.Trim().ToUpperInvariant())));
+
+            if (qtdAtual != _ultimaQtdNovosTickets)
+            {
+                _ultimaQtdNovosTickets = qtdAtual;
+                TicketNotify.SetNovos(qtdAtual);
+                await SafeJs("crmSetBadge", qtdAtual);
+            }
+
+
             var ultimasAnotacoes = new Dictionary<int, string>();
             foreach (var cod in novosParaNotificar.Select(t => t.Codigo))
                 ultimasAnotacoes[cod] = await TicketService.BuscarUltimaAnotacaoClienteAsync(cod);
 
             foreach (var t in novosParaNotificar)
             {
-                _ticketsNotificadosLayout[t.Codigo] = t.DataHoraUltimaGravacao;
+                _ticketsNotificadosLayout[t.Codigo] = DateTime.Now;
 
                 var nomeCliente = !string.IsNullOrWhiteSpace(t.ApelidoCliente)
                     ? t.ApelidoCliente
@@ -603,18 +717,18 @@
                     ultimaAnotacao = ultimaAnotacao.Substring(0, 80) + "...";
 
                 await AdicionarItemAoGrupo(
-    chaveGrupo: "GRUPO_TICKET",
-    tipoOrigem: "TICKET",
-    tituloGrupo: "💬 Tickets com nova mensagem",
-    tipo: "danger",
-    urlGrupo: "/tickets",
-    item: new NotificacaoItemModel
-    {
-        Codigo = t.Codigo,
-        Descricao = $"{nomeCliente}: {ultimaAnotacao}",
-        Url = $"/ticket/{t.Codigo}",
-        DataHora = DateTime.Now
-    });
+                    chaveGrupo: "GRUPO_TICKET",
+                    tipoOrigem: "TICKET",
+                    tituloGrupo: "💬 Tickets com nova mensagem",
+                    tipo: "danger",
+                    urlGrupo: "/tickets",
+                    item: new NotificacaoItemModel
+                    {
+                        Codigo = t.Codigo,
+                        Descricao = $"{nomeCliente}: {ultimaAnotacao}",
+                        Url = $"/ticket/{t.Codigo}",
+                        DataHora = DateTime.Now
+                    });
             }
 
             var primeiroTicket = novosParaNotificar.First();
@@ -1414,6 +1528,7 @@
         Nav.LocationChanged -= OnLocationChanged;
         Abas.OnMudanca -= AoMudar;
         DeployState.OnChange -= OnDeployStateChanged;
+        _dragRef?.Dispose();
         _deployCountdownCts?.Cancel();
     }
 
@@ -1718,5 +1833,75 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
             await JS.InvokeVoidAsync("location.reload");
         }
     }
+
+    // ── Drag por mouse (eixo X fixo) ────────────────────────────────────────
+    private ElementReference _abaStrip;
+    private bool _dragging;
+    private string? _abaDragging;
+    private string? _abaDragSobre;
+    private double _ghostX;
+    private double _ghostY;
+    private double _ghostW;
+    private double _offsetX;
+    private DotNetObjectReference<MainLayout>? _dragRef;
+
+    private async Task OnAbaMouseDown(MouseEventArgs e, string rota)
+    {
+        if (e.Button != 0) return;
+
+        _dragRef?.Dispose(); // ← descarta anterior
+        _dragRef = DotNetObjectReference.Create(this); // ← reutiliza
+
+        _abaDragging = rota;
+        _abaDragSobre = null;
+        _dragging = false;
+
+        var info = await JS.InvokeAsync<AbaRect>(
+            "abaStripDragStart", rota, e.ClientX, e.ClientY);
+
+        _ghostX = info.X;
+        _ghostY = info.Y;
+        _ghostW = info.W;
+        _offsetX = e.ClientX - info.X;
+
+        await JS.InvokeVoidAsync("abaStripDragAttach", _dragRef); // ← usa _dragRef
+    }
+
+    [JSInvokable]
+    public async Task OnMouseMove(double clientX, double clientY, string rotaSobre)
+    {
+        if (_abaDragging == null) return;
+
+        _dragging = true;
+        _ghostX = clientX - _offsetX;
+
+        var nova = string.IsNullOrEmpty(rotaSobre) ? null : rotaSobre;
+
+        // Reordena em tempo real ao passar por cima de outra aba
+        if (nova != null && nova != _abaDragging && nova != _abaDragSobre)
+        {
+            _abaDragSobre = nova;
+            Abas.Reordenar(_abaDragging, nova);
+            // Atualiza a posição do ghost para seguir a aba que se moveu
+            var info = await JS.InvokeAsync<AbaRect>("abaStripDragStart", _abaDragging, clientX, clientY);
+            _ghostX = clientX - _offsetX;
+            _ghostY = info.Y;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnMouseUp()
+    {
+        _dragging = false;
+        _abaDragging = null;
+        _abaDragSobre = null;
+
+        await JS.InvokeVoidAsync("abaStripDragDetach");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private record AbaRect(double X, double Y, double W);
 
 }

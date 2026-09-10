@@ -1406,7 +1406,27 @@
                 <span class="tk-search-ico">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
                 </span>
-                <input placeholder="Buscar ticket, cliente, assunto..." @bind="_searchTerm" />
+                <input placeholder="Buscar ticket, cliente, assunto..."
+                       value="@_searchTerm"
+                       @oninput="e => _searchTerm = e.Value?.ToString()" />
+            </div>
+
+            <div class="tk-search" style="max-width:160px;">
+                <span class="tk-search-ico">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                </span>
+                <input placeholder="Cód. Ticket C" type="number"
+                       value="@_buscaCodC"
+                       @oninput="OnBuscaCodCChanged" />
+            </div>
+
+            <div class="tk-search" style="max-width:160px;">
+                <span class="tk-search-ico">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
+                </span>
+                <input placeholder="Cód. Mensagem D" type="number"
+                       value="@_buscaCodD"
+                       @oninput="OnBuscaCodDChanged" />
             </div>
 
             <button class="tk-btn tk-btn-ghost" @onclick="AbrirFiltro" type="button">
@@ -1509,7 +1529,8 @@
         </nav>
 
         <!-- CONTEÃƒÅ¡DO -->
-        @if (!string.IsNullOrWhiteSpace(_searchTerm) || TemFiltroAvancado() || FiltroAplicado)
+        @if (!string.IsNullOrWhiteSpace(_searchTerm) || TemFiltroAvancado() || FiltroAplicado
+     || _codCEncontrado.HasValue || _codCDaMensagemD.HasValue)
         {
             @RenderListaBusca("Resultados")
         }
@@ -1546,12 +1567,31 @@
 </div>
 
 <script>
-    window.crmNotify=async function(title,body){
-        if(!("Notification"in window))return;
-        if(Notification.permission==="granted"){new Notification(title,{body,icon:"/images/logo-evoluttech.png"});}
-        else if(Notification.permission!=="denied"){
-            const p=await Notification.requestPermission();
-            if(p==="granted")new Notification(title,{body,icon:"/images/logo-evoluttech.png"});
+    window.crmNotify = async function(title, body) {
+        if(!("Notification" in window)) return;
+        if(Notification.permission === "granted") {
+            new Notification(title, {body, icon:"/images/logo-evoluttech.png"});
+        } else if(Notification.permission !== "denied") {
+            const p = await Notification.requestPermission();
+            if(p === "granted") new Notification(title, {body, icon:"/images/logo-evoluttech.png"});
+        }
+    };
+
+    window.isPageVisible = () => document.visibilityState === 'visible';
+
+    window.registerVisibilityChange = (dotNetRef) => {
+        window._visibilityDotNetRef = dotNetRef;
+
+        if (!window._visibilityListenerRegistered) {
+            window._visibilityListenerRegistered = true;
+            document.addEventListener('visibilitychange', () => {
+                if (window._visibilityDotNetRef) {
+                    window._visibilityDotNetRef.invokeMethodAsync(
+                        'OnVisibilityChanged',
+                        document.visibilityState === 'visible'
+                    );
+                }
+            });
         }
     };
 </script>
@@ -1685,6 +1725,29 @@
         await JS.InvokeVoidAsync("localStorage.setItem", StorageVisualizacaoTickets, VisaoCards ? "cards" : "abas");
         StateHasChanged();
     }
+
+    private bool _paginaVisivel = true;
+    private DotNetObjectReference<Tickets>? _visibilityRef;
+
+    [JSInvokable]
+public async void OnVisibilityChanged(bool isVisible)
+{
+    _paginaVisivel = isVisible;
+
+    if (isVisible)
+    {
+        await InvokeAsync(async () =>
+        {
+            try
+            {
+                await CarregarTickets();
+                await CarregarNotificacoes();
+                StateHasChanged();
+            }
+            catch { }
+        });
+    }
+}
 
     private async Task CarregarPreferenciaVisualizacaoAsync()
     {
@@ -2096,7 +2159,12 @@
                             await CarregarTickets();
 
                         await CarregarNotificacoes();
-                        await CarregarVisualizadoresAsync();
+
+                        // Só carrega visualizadores se a página estiver visível
+                        // (evita queries desnecessárias quando está em background)
+                        if (_paginaVisivel)
+                            await CarregarVisualizadoresAsync();
+
                         await InvokeAsync(StateHasChanged);
                     }
                     catch (Exception ex) { await JS.InvokeVoidAsync("console.error", $"Erro: {ex.Message}"); }
@@ -2176,32 +2244,53 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender) await CarregarPreferenciaVisualizacaoAsync();
+        if (firstRender)
+        {
+            await CarregarPreferenciaVisualizacaoAsync();
+
+            // ADICIONAR:
+            _visibilityRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("registerVisibilityChange", _visibilityRef);
+            _paginaVisivel = await JS.InvokeAsync<bool>("isPageVisible");
+        }
     }
     public void Dispose()
     {
         UserState.OnChange -= OnUserStateChanged;
         _refreshTimer?.Dispose();
+        _visibilityRef?.Dispose();
     }
 
     async Task CarregarTickets()
-    {
-        var novos = await TicketService.ListarChamadosAsync();
-        var usuarioLogado = UserState.CurrentUser?.Trim();
-        var agora = DateTime.Now;
+{
+    var novos = await TicketService.ListarChamadosAsync();
+    var usuarioLogado = UserState.CurrentUser?.Trim();
+    var agora = DateTime.Now;
 
-        var ticketsNovos = novos.Where(t =>
-            t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
-            !_ticketsNotificados.Contains(t.Codigo) &&
-            !string.IsNullOrWhiteSpace(t.Usuario) &&
-            (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
-             t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase))).ToList();
+    var ticketsNovos = novos.Where(t =>
+    t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+    !_ticketsNotificados.Contains(t.Codigo) &&
+    !string.IsNullOrWhiteSpace(t.Usuario) &&
+    (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
+     t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase))).ToList();
 
-        if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds(3))
-        {
-            _ultimaNotificacaoNovo = agora;
-            foreach (var t in ticketsNovos) _ticketsNotificados.Add(t.Codigo);
-        }
+if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds(3))
+{
+    _ultimaNotificacaoNovo = agora;
+
+    // Sempre adiciona ao notificados, independente de visibilidade
+    // O vermelho na listagem é controlado pelo banco (Novo = 'S'), não aqui
+    foreach (var t in ticketsNovos)
+        _ticketsNotificados.Add(t.Codigo);
+
+    var qtdNovos = novos.Count(t =>
+        t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+        !string.IsNullOrWhiteSpace(t.Usuario) &&
+        (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
+         t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
+
+    TicketNotify.SetNovos(qtdNovos);
+}
 
         _tickets = novos;
 
@@ -2261,10 +2350,13 @@
 
         if (Filtros.CodSituacao.HasValue)
             q = q.Where(t => t.CodSituacao == Filtros.CodSituacao.Value);
-        else if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm))
+        else if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm)
+                 && !_codCEncontrado.HasValue && !_codCDaMensagemD.HasValue)
             q = q.Where(t => t.CodSituacao == situacao);
 
-        if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm) && AbaSetorSelecionada.HasValue)
+        if (!FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm)
+            && AbaSetorSelecionada.HasValue
+            && !_codCEncontrado.HasValue && !_codCDaMensagemD.HasValue)
             q = q.Where(t => t.CodSetor == AbaSetorSelecionada.Value);
 
         if (Filtros.CodTipo.HasValue) q = q.Where(t => t.CodTipo == Filtros.CodTipo.Value);
@@ -2284,8 +2376,15 @@
                 (t.ApelidoCliente?.Contains(busca, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
+        if (_codCEncontrado.HasValue)
+            q = q.Where(t => t.Codigo == _codCEncontrado.Value);
+
+        if (_codCDaMensagemD.HasValue)
+            q = q.Where(t => t.Codigo == _codCDaMensagemD.Value);
+
         string? usuarioFiltro = null;
-        bool modoPadrao = !FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm);
+        bool modoPadrao = !FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm)
+                          && !_codCEncontrado.HasValue && !_codCDaMensagemD.HasValue;
         if (!string.IsNullOrWhiteSpace(Filtros.UsuarioResponsavel))
             usuarioFiltro = Filtros.UsuarioResponsavel.Trim().ToUpper();
         else if (modoPadrao && !string.IsNullOrWhiteSpace(_usuarioSelecionado))
@@ -2592,6 +2691,38 @@
         await CarregarTickets(); await CarregarNotificacoes(); StateHasChanged();
     }
 
+    private string? _buscaCodC;
+    private string? _buscaCodD;
+    private int? _codCEncontrado;
+    private int? _codCDaMensagemD;
+
+    private async Task OnBuscaCodCChanged(ChangeEventArgs e)
+    {
+        _buscaCodC = e.Value?.ToString();
+        _codCEncontrado = null;
+
+        if (int.TryParse(_buscaCodC, out var cod) && cod > 0)
+        {
+            var ticket = await TicketService.BuscarTicketPorCodigoCAsync(cod, UserState.CurrentCompanyId);
+            _codCEncontrado = ticket?.Codigo;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnBuscaCodDChanged(ChangeEventArgs e)
+    {
+        _buscaCodD = e.Value?.ToString();
+        _codCDaMensagemD = null;
+
+        if (int.TryParse(_buscaCodD, out var cod) && cod > 0)
+        {
+            _codCDaMensagemD = await TicketService.BuscarTicketPorCodigoDAsync(cod, UserState.CurrentCompanyId);
+        }
+
+        StateHasChanged();
+    }
+
     /* Ã¢â€â‚¬Ã¢â€â‚¬ STATE Ã¢â€â‚¬Ã¢â€â‚¬ */
     private int StatusSelecionado = 1;
     private int? AbaSetorSelecionada = 1;
@@ -2700,6 +2831,10 @@
         SugestoesFiltroCliente.Clear();
         UsuariosClienteFiltro.Clear();
         FiltroAplicado = false;
+        _buscaCodC = null;
+        _buscaCodD = null;
+        _codCEncontrado = null;
+        _codCDaMensagemD = null;
     }
     async Task AplicarFiltros()
     {
@@ -2714,4 +2849,6 @@
         !string.IsNullOrWhiteSpace(Filtros.UsuarioResponsavel) || !string.IsNullOrWhiteSpace(Filtros.DescricaoTitulo) ||
         Filtros.CodSituacao.HasValue || Filtros.CodTipo.HasValue || Filtros.Prioridade.HasValue ||
         Filtros.DataInicial.HasValue || Filtros.DataFinal.HasValue || Filtros.SomenteNovos;
+
+
 }

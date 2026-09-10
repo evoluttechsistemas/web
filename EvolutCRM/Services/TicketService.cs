@@ -243,6 +243,38 @@ ORDER BY
             return lista;
         }
 
+        public async Task<TicketChamadoCModel?> BuscarTicketPorCodigoCAsync(int codigo, int codEmp)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            var sql = "SELECT TOP 1 Codigo FROM TicketChamadoC WHERE Codigo = @Codigo AND CodEmp = @CodEmp";
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@Codigo", codigo);
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+
+            var result = await cmd.ExecuteScalarAsync();
+            return result == null || result == DBNull.Value ? null : new TicketChamadoCModel { Codigo = Convert.ToInt32(result) };
+        }
+
+        public async Task<int?> BuscarTicketPorCodigoDAsync(int codigoD, int codEmp)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            var sql = @"
+        SELECT TOP 1 CodTicketChamadoC
+        FROM TicketChamadoD
+        WHERE Codigo = @Codigo AND CodEmp = @CodEmp";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@Codigo", codigoD);
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+
+            var result = await cmd.ExecuteScalarAsync();
+            return result == null || result == DBNull.Value ? null : Convert.ToInt32(result);
+        }
+
         public Task<(bool Sucesso, string Mensagem)> AcessarRemotoClienteAsync(string codigoAcesso)
         {
             if (string.IsNullOrWhiteSpace(codigoAcesso))

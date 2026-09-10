@@ -39,6 +39,8 @@ namespace EvolutCRM.Services
     public class MonitorBackupService
     {
         private readonly string _conn;
+        private static readonly Dictionary<int, (List<MonitorBackupModel> dados, DateTime expira)> _cacheBackups = new();
+        private static readonly SemaphoreSlim _lockBackups = new(1, 1);
         public MonitorBackupService(IConfiguration config)
         {
             _conn = config.GetConnectionString("Connection")!;
@@ -46,35 +48,55 @@ namespace EvolutCRM.Services
 
         public async Task<List<MonitorBackupModel>> ObterStatusBackupsAsync(int codEmp)
         {
+            var ttl = TimeSpan.FromSeconds(25);
+
+            if (_cacheBackups.TryGetValue(codEmp, out var cached) && DateTime.Now < cached.expira)
+                return cached.dados;
+
+            await _lockBackups.WaitAsync();
+            try
+            {
+                if (_cacheBackups.TryGetValue(codEmp, out cached) && DateTime.Now < cached.expira)
+                    return cached.dados;
+
+                var lista = await ConsultarBackupsNoBancoAsync(codEmp);
+                _cacheBackups[codEmp] = (lista, DateTime.Now.Add(ttl));
+                return lista;
+            }
+            finally { _lockBackups.Release(); }
+        }
+
+        private async Task<List<MonitorBackupModel>> ConsultarBackupsNoBancoAsync(int codEmp)
+        {
             var lista = new List<MonitorBackupModel>();
             var agora = DateTime.Now;
 
             const string sql = @"
-    SELECT
-        b.CodCliente,
-        b.Cnpj,
-        b.NomeCliente,
-        ISNULL(c.Apelido, '')               AS Apelido,
-        MAX(b.DataHoraUltimaSincronizacao) AS DataHoraUltimaSincronizacao,
-        MAX(b.Arquivo)                     AS Arquivo,
-        MAX(b.TamanhoBytes)                AS TamanhoBytes,
-        MAX(b.Computador)                  AS Computador,
-        MAX(b.VersaoSistema)               AS VersaoSistema,
-        SUM(b.QuantidadeSincronizacoes)    AS QuantidadeSincronizacoes
-    FROM ControleBackupCliente b
-    INNER JOIN Cliente c
-            ON c.CodEmp = b.CodEmp
-           AND (
-                REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cnpj)), '.', ''), '/', ''), '-', '')
-                    = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
-                OR REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cpf)), '.', ''), '/', ''), '-', '')
-                    = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
-           )
-    WHERE b.CodEmp = @CodEmp
-      AND c.CodEmp = @CodEmp
-      AND c.ClienteMensalista = 'S'
-    GROUP BY b.CodCliente, b.Cnpj, b.NomeCliente, c.Apelido
-    ORDER BY MAX(b.DataHoraUltimaSincronizacao) ASC";
+SELECT
+    b.CodCliente,
+    b.Cnpj,
+    b.NomeCliente,
+    ISNULL(c.Apelido, '')               AS Apelido,
+    MAX(b.DataHoraUltimaSincronizacao) AS DataHoraUltimaSincronizacao,
+    MAX(b.Arquivo)                     AS Arquivo,
+    MAX(b.TamanhoBytes)                AS TamanhoBytes,
+    MAX(b.Computador)                  AS Computador,
+    MAX(b.VersaoSistema)               AS VersaoSistema,
+    SUM(b.QuantidadeSincronizacoes)    AS QuantidadeSincronizacoes
+FROM ControleBackupCliente b
+INNER JOIN Cliente c
+        ON c.CodEmp = b.CodEmp
+       AND (
+            REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cnpj)), '.', ''), '/', ''), '-', '')
+                = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
+            OR REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cpf)), '.', ''), '/', ''), '-', '')
+                = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
+       )
+WHERE b.CodEmp = @CodEmp
+  AND c.CodEmp = @CodEmp
+  AND c.ClienteMensalista = 'S'
+GROUP BY b.CodCliente, b.Cnpj, b.NomeCliente, c.Apelido
+ORDER BY MAX(b.DataHoraUltimaSincronizacao) ASC";
 
             await using var con = new SqlConnection(_conn);
             await using var cmd = new SqlCommand(sql, con);
@@ -91,9 +113,7 @@ namespace EvolutCRM.Services
 
                 lista.Add(new MonitorBackupModel
                 {
-                    CodCliente = rd.IsDBNull("CodCliente")
-                        ? 0
-                        : int.TryParse(rd["CodCliente"]?.ToString(), out var cod) ? cod : 0,
+                    CodCliente = rd.IsDBNull("CodCliente") ? 0 : int.TryParse(rd["CodCliente"]?.ToString(), out var cod) ? cod : 0,
                     Cnpj = rd.IsDBNull("Cnpj") ? "" : rd.GetString("Cnpj"),
                     NomeCliente = rd.IsDBNull("NomeCliente") ? "" : rd.GetString("NomeCliente"),
                     Apelido = rd.IsDBNull("Apelido") ? "" : rd.GetString("Apelido"),
