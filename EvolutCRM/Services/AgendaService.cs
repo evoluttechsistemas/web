@@ -309,10 +309,19 @@ namespace EvolutCRM.Services
                 a.DataAgendamento.Date == agenda.DataAgendamento.Date);
         }
 
+        // DEPOIS
         public async Task FinalizarAgendaAsync(AgendaModel agenda, List<AgendaModel> agendas)
         {
+            // Agenda originada de ticket: apenas marca a agenda-detalhe como resolvida,
+            // sem tocar no status do ticket pai.
             if (agenda.Origem == "TICKET")
+            {
+                if (agenda.Codigo > 0)
+                    await _ticketService.FinalizarAgendaTicketAsync(agenda.Codigo);
                 return;
+            }
+
+            // ... restante do código existente permanece igual
 
             if (agenda.EhOcorrenciaGerada && agenda.AgendaPaiCodigo.HasValue)
             {

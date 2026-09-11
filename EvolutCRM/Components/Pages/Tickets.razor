@@ -1415,19 +1415,19 @@
                 <span class="tk-search-ico">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
                 </span>
-                <input placeholder="Cód. Ticket C" type="number"
+                <input placeholder="Código Ticket" type="number"
                        value="@_buscaCodC"
                        @oninput="OnBuscaCodCChanged" />
             </div>
 
-            <div class="tk-search" style="max-width:160px;">
+           @*  <div class="tk-search" style="max-width:160px;">
                 <span class="tk-search-ico">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
                 </span>
                 <input placeholder="Cód. Mensagem D" type="number"
                        value="@_buscaCodD"
                        @oninput="OnBuscaCodDChanged" />
-            </div>
+            </div> *@
 
             <button class="tk-btn tk-btn-ghost" @onclick="AbrirFiltro" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
@@ -1580,19 +1580,31 @@
     window.isPageVisible = () => document.visibilityState === 'visible';
 
     window.registerVisibilityChange = (dotNetRef) => {
-        window._visibilityDotNetRef = dotNetRef;
+        // Guarda em array — múltiplos componentes podem registrar
+        if (!window._visibilityRefs) window._visibilityRefs = [];
+
+        // Remove entradas inválidas acumuladas
+        window._visibilityRefs = window._visibilityRefs.filter(r => r != null);
+
+        // Evita duplicata da mesma ref
+        if (!window._visibilityRefs.includes(dotNetRef))
+            window._visibilityRefs.push(dotNetRef);
 
         if (!window._visibilityListenerRegistered) {
             window._visibilityListenerRegistered = true;
             document.addEventListener('visibilitychange', () => {
-                if (window._visibilityDotNetRef) {
-                    window._visibilityDotNetRef.invokeMethodAsync(
-                        'OnVisibilityChanged',
-                        document.visibilityState === 'visible'
-                    );
-                }
+                const visible = document.visibilityState === 'visible';
+                (window._visibilityRefs || []).forEach(ref => {
+                    try { ref.invokeMethodAsync('OnVisibilityChanged', visible); }
+                    catch (e) { /* componente já descartado */ }
+                });
             });
         }
+    };
+
+    window.unregisterVisibilityChange = (dotNetRef) => {
+        if (!window._visibilityRefs) return;
+        window._visibilityRefs = window._visibilityRefs.filter(r => r !== dotNetRef);
     };
 </script>
 
@@ -2138,12 +2150,18 @@ public async void OnVisibilityChanged(bool isVisible)
     {
         LerStatusDaUrl();
         UserState.OnChange += OnUserStateChanged;
+        TicketNotify.OnChange += OnTicketNotifyChanged; // ← ADICIONAR
         if (UserState.IsReady && !string.IsNullOrWhiteSpace(UserState.CurrentUser))
             _ = InitializeFromUserState();
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         _ = AutoRefreshLoop();
         CarregarNotificacoes();
     }
+
+    private void OnTicketNotifyChanged()
+{
+    _ = InvokeAsync(StateHasChanged);
+}
 
     private async Task AutoRefreshLoop()
     {
@@ -2257,42 +2275,52 @@ public async void OnVisibilityChanged(bool isVisible)
     public void Dispose()
     {
         UserState.OnChange -= OnUserStateChanged;
-        _refreshTimer?.Dispose();
+        TicketNotify.OnChange -= OnTicketNotifyChanged; // ← ADICIONAR
+        try { _ = JS.InvokeVoidAsync("unregisterVisibilityChange", _visibilityRef); }
+        catch { }
         _visibilityRef?.Dispose();
+        _refreshTimer?.Dispose();
     }
 
     async Task CarregarTickets()
-{
-    var novos = await TicketService.ListarChamadosAsync();
-    var usuarioLogado = UserState.CurrentUser?.Trim();
-    var agora = DateTime.Now;
+    {
+        var novos = await TicketService.ListarChamadosAsync();
+        var usuarioLogado = UserState.CurrentUser?.Trim();
+        var agora = DateTime.Now;
 
-    var ticketsNovos = novos.Where(t =>
-    t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
-    !_ticketsNotificados.Contains(t.Codigo) &&
-    !string.IsNullOrWhiteSpace(t.Usuario) &&
-    (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
-     t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase))).ToList();
+        // Atualiza badge SEMPRE — independente de já ter notificado
+        var qtdNovos = novos.Count(t =>
+            t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+            !string.IsNullOrWhiteSpace(t.Usuario) &&
+            (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
+             t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
 
-if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds(3))
-{
-    _ultimaNotificacaoNovo = agora;
+        
+        TicketNotify.SetNovos(qtdNovos);
 
-    // Sempre adiciona ao notificados, independente de visibilidade
-    // O vermelho na listagem é controlado pelo banco (Novo = 'S'), não aqui
-    foreach (var t in ticketsNovos)
-        _ticketsNotificados.Add(t.Codigo);
+        // Controle de notificação (beep/toast) — só dispara uma vez por ticket
+        var ticketsNovos = novos.Where(t =>
+            t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
+            !_ticketsNotificados.Contains(t.Codigo) &&
+            !string.IsNullOrWhiteSpace(t.Usuario) &&
+            (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
+             t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase))).ToList();
 
-    var qtdNovos = novos.Count(t =>
-        t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
-        !string.IsNullOrWhiteSpace(t.Usuario) &&
-        (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
-         t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
-
-    TicketNotify.SetNovos(qtdNovos);
-}
+        if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds(3))
+        {
+            _ultimaNotificacaoNovo = agora;
+            foreach (var t in ticketsNovos)
+                _ticketsNotificados.Add(t.Codigo);
+        }
 
         _tickets = novos;
+
+        if (_codCEncontrado.HasValue && !_tickets.Any(t => t.Codigo == _codCEncontrado.Value))
+        {
+            var ticket = await TicketService.BuscarChamadoAsync(_codCEncontrado.Value);
+            if (ticket != null)
+                _tickets.Add(ticket);
+        }
 
         if (VisaoCards && SituacoesTicket.Any(s => s.Codigo == 3))
         {
@@ -2301,13 +2329,13 @@ if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds
             _tickets.AddRange(finalizados);
         }
 
-        // Carrega usuários só uma vez (não muda a cada refresh de 5s)
         if (UsuariosDisponiveis.Count == 0)
         {
             UsuariosDisponiveis = (await TicketService.ListarUsuariosAsync())
                 .Where(u => !string.IsNullOrWhiteSpace(u))
                 .Select(u => u.Trim().ToUpper()).Distinct().OrderBy(u => u).ToList();
         }
+
         _ticketsNotificados.RemoveWhere(id => !_tickets.Any(t => t.Codigo == id && t.Novo == "S"));
         await InvokeAsync(StateHasChanged);
     }
@@ -2704,7 +2732,17 @@ if (ticketsNovos.Any() && agora - _ultimaNotificacaoNovo >= TimeSpan.FromSeconds
         if (int.TryParse(_buscaCodC, out var cod) && cod > 0)
         {
             var ticket = await TicketService.BuscarTicketPorCodigoCAsync(cod, UserState.CurrentCompanyId);
-            _codCEncontrado = ticket?.Codigo;
+            if (ticket != null)
+            {
+                _codCEncontrado = ticket.Codigo;
+
+                if (!_tickets.Any(t => t.Codigo == ticket.Codigo))
+                {
+                    var completo = await TicketService.BuscarChamadoAsync(ticket.Codigo);
+                    if (completo != null)
+                        _tickets.Add(completo);
+                }
+            }
         }
 
         StateHasChanged();

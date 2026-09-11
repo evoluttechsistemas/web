@@ -5252,19 +5252,19 @@ else
         if (TicketAtual == null || EhNovo)
             return;
 
-        // Batedor: 1 query leve (COUNT + MAX). Roda a cada 3s sem pesar.
+        // Em Blazor SPA, document.visibilityState é sempre 'visible' na mesma aba.
+        // A verificação correta é checar se a rota ativa é a deste ticket.
+        var rotaAtual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].ToLowerInvariant();
+        var rotaEsteTicket = $"ticket/{id}";
+        bool visivelAgora = rotaAtual == rotaEsteTicket;
+
         var resumo = await TicketService.ResumoHistoricoAsync(id);
 
-        // Detecção pelo MAX(Codigo): sempre cresce com mensagem nova,
-        // imune a divergências de contagem por filtros.
-        // O Count cobre edições de mensagem (que não criam linha nova).
         bool historicoMudou = resumo.UltimoCodigo != _ultimoCodigoHistorico
                            || resumo.Total != Historico.Count;
 
-        // Nada novo → sai imediatamente. Nenhuma query pesada, nenhum render.
         if (!historicoMudou)
         {
-            // Só atualiza os tiquinhos de entrega (enviado/entregue/lido) — query leve
             var statusMap = await TicketService.BuscarStatusWhatsAppAsync(id);
             bool mudouStatus = false;
             foreach (var msg in Historico)
@@ -5281,14 +5281,12 @@ else
             return;
         }
 
-        // Chegou algo novo → busca SÓ as mensagens novas (não a conversa inteira)
         var novas = await TicketService.BuscarHistoricoNovasAsync(id, _ultimoCodigoHistorico);
 
         var codigosExistentes = Historico.Select(h => h.Codigo).ToHashSet();
         foreach (var nova in novas.Where(h => !codigosExistentes.Contains(h.Codigo)))
             Historico.Insert(0, nova);
 
-        // Atualiza status das já existentes na mesma passada
         var mapaStatus = await TicketService.BuscarStatusWhatsAppAsync(id);
         foreach (var msg in Historico)
         {
@@ -5298,12 +5296,8 @@ else
 
         _ultimoCodigoHistorico = Historico.Count > 0 ? Historico.Max(h => h.Codigo) : 0;
 
-        // ✅ RENDER IMEDIATO: a mensagem aparece agora, sem esperar a query de IA
         await InvokeAsync(StateHasChanged);
 
-        // A partir daqui nada segura a exibição da mensagem — só atualizações secundárias.
-
-        // Busca dados de IA só agora (quando algo mudou), não a cada ciclo
         var ticketAtualizado = await TicketService.BuscarChamadoAsync(id);
         if (ticketAtualizado != null && TicketAtual != null)
         {
@@ -5319,16 +5313,16 @@ else
             }
         }
 
-        if (_paginaVisivel)
+        if (visivelAgora)
             await TicketService.MarcarComoAbertoAsync(id);
 
         if (TicketAtual != null)
         {
             var usuariosAutomaticos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA" };
+            { "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA" };
             var temResponsavel = !string.IsNullOrWhiteSpace(TicketAtual.Usuario)
                 && !usuariosAutomaticos.Contains(TicketAtual.Usuario.Trim());
-            if (temResponsavel)
+            if (temResponsavel && visivelAgora)
                 TicketAtual.Novo = "N";
         }
 
@@ -5379,15 +5373,21 @@ else
                 var temResponsavel = !string.IsNullOrWhiteSpace(TicketAtual.Usuario)
                     && !usuariosAutomaticos.Contains(TicketAtual.Usuario.Trim());
 
-                if (temResponsavel && _paginaVisivel)
+                // Lê visibilidade real do JS no momento do carregamento,
+                // pois _paginaVisivel ainda pode estar como true (valor inicial)
+                // antes do OnAfterRenderAsync atualizar via JS
+                bool visivelAgora = false;
+                try { visivelAgora = await JS.InvokeAsync<bool>("isPageVisible"); }
+                catch { visivelAgora = false; }
+
+                if (temResponsavel && visivelAgora)
                 {
+                    await TicketService.MarcarComoLidoSuporteAsync(TicketAtual.Codigo, UserState.CurrentUser ?? "");
                     await TicketService.MarcarComoLidoSuporteAsync(
                         TicketAtual.Codigo,
                         UserState.CurrentUser ?? ""
                     );
-
                     TicketAtual.Novo = "N";
-
                     var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser);
                     TicketNotify.SetNovos(qtd);
                 }
@@ -5761,17 +5761,19 @@ else
 
     public void Dispose()
     {
+        try { _ = JS.InvokeVoidAsync("unregisterVisibilityChange", _visibilityRef); }
+        catch { }
+        _visibilityRef?.Dispose();
+
         _timer?.Dispose();
         _debounceTimer?.Dispose();
         _rascunhoTimer?.Dispose();
-        _pasteRef?.Dispose();   // ← era _dotnetRef, que era a mesma ref mas sem garantia
-        _visibilityRef?.Dispose();
+        _pasteRef?.Dispose();
         _dotnetRef = null;
         _pasteRef = null;
 
         _ctsAgenda?.Cancel();
         _ctsAgenda?.Dispose();
-
         _timerAgenda?.Dispose();
 
         _ctsVisualizacao?.Cancel();

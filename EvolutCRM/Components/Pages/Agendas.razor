@@ -1414,7 +1414,7 @@
                                                     {
                                                         <button class="ag-mini-btn" title="Editar" @onclick="() => AbrirModalEditarAgenda(ag)">✏️</button>
                                                     }
-                                                    @if (PodeFinalizarAgendas && ag.Origem != "TICKET")
+                                                    @if (PodeFinalizarAgendas)
                                                     {
                                                         <button class="ag-mini-btn" title="Finalizar" @onclick="() => ResolverAgenda(ag)">✅</button>
                                                     }
@@ -1478,7 +1478,7 @@
                                                     {
                                                         <button class="ag-mini-btn" @onclick="() => AbrirModalEditarAgenda(ag)">✏️</button>
                                                     }
-                                                    @if (PodeFinalizarAgendas && ag.Origem != "TICKET")
+                                                    @if (PodeFinalizarAgendas)
                                                     {
                                                         <button class="ag-mini-btn" @onclick="() => ResolverAgenda(ag)">✅</button>
                                                     }
@@ -1736,7 +1736,7 @@
                             <div class="ag-group-item-client">
                                 @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
                             </div>
-                            @if (ag.Status != "RESOLVIDO" && ag.Origem != "TICKET")
+                            @if (ag.Status != "RESOLVIDO")
                             {
                                 <div class="ag-group-item-actions" @onclick:stopPropagation="true">
                                     @if (PodeCriarAgendas)
@@ -1845,7 +1845,6 @@
     {
         try
         {
-            if (agenda.Origem == "TICKET") return;
             await AgendaService.FinalizarAgendaAsync(agenda, agendas);
             agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
             agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);

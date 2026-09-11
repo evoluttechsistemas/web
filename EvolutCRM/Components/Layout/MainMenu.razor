@@ -1211,6 +1211,18 @@
         padding: 2px 5px;
         font-style: italic;
     }
+
+    .notif-card.success {
+        background: linear-gradient(135deg, #16a34a, #14532d);
+        border-color: #14532d;
+        box-shadow: 0 0 12px rgba(22,163,74,.4);
+    }
+
+        .notif-card.success .nc-title,
+        .notif-card.success .nc-text,
+        .notif-card.success .nc-time {
+            color: #fff;
+        }
 </style>
 
 <!-- hamburger -->
@@ -1731,6 +1743,9 @@
 </div>
 
 @code {
+
+    private PeriodicTimer? _timerBadgeComercial;
+    private CancellationTokenSource? _timerBadgeComercialCts;
     [Parameter] public EventCallback<NotificacaoItemModel> OnRemoverItem { get; set; }
     private bool _permissoesCarregadas = false;
     private bool mostrarLogs = false;
@@ -1858,6 +1873,7 @@
         Nav.LocationChanged += OnLocationChanged;
         TicketNotify.OnChange += AtualizarMenu;
         ChatNotify.OnChange += AtualizarMenu;
+        UserState.OnChange += OnUserStateChangedMenu;
 
         await CarregarPermissoesMenuAsync();
 
@@ -1935,6 +1951,28 @@
             }
             catch (OperationCanceledException) { }
         });
+
+        _timerBadgeComercialCts = new CancellationTokenSource();
+        _timerBadgeComercial = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerBadgeComercial.WaitForNextTickAsync(_timerBadgeComercialCts.Token))
+                {
+                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                        continue;
+                    await InvokeAsync(CarregarBadgeComercialAsync);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private async void OnUserStateChangedMenu()
+    {
+        await Task.Delay(300);
+        await InvokeAsync(CarregarBadgeComercialAsync);
     }
 
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -2047,6 +2085,10 @@
         _timerAtividadeCts?.Cancel(); _timerAtividade?.Dispose(); _timerAtividadeCts?.Dispose();
         _timerBadgeChatCts?.Cancel(); _timerBadgeChat?.Dispose(); _timerBadgeChatCts?.Dispose();
         _timerBadgeTicketCts?.Cancel(); _timerBadgeTicket?.Dispose(); _timerBadgeTicketCts?.Dispose();
+        _timerBadgeComercialCts?.Cancel();
+        _timerBadgeComercial?.Dispose();
+        _timerBadgeComercialCts?.Dispose();
+        UserState.OnChange -= OnUserStateChangedMenu;
     }
 
     private async Task CarregarPermissoesMenuAsync()

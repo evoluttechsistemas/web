@@ -1253,16 +1253,6 @@ WHERE ISNULL(d.MensagemExcluida,'N') = 'N'
             return resultado;
         }
 
-
-        // ─────────────────────────────────────────────────────────────────────────────
-        // Adicionar dentro da classe CardService (CardService.cs)
-        // ─────────────────────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Cria um ticket de suporte a partir de um card do CRM.
-        /// Copia cabeçalho + resumo do histórico como primeira anotação.
-        /// Não cria nenhum vínculo: os dois registros vivem de forma independente.
-        /// </summary>
         public async Task<int> CriarTicketAPartirDoCardAsync(
     int codCard,
     string usuarioResponsavel,

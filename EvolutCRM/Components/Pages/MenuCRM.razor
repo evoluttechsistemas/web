@@ -1449,6 +1449,7 @@
 
     private async void OnUserStateChanged()
     {
+        await Task.Delay(300); // aguarda UserState estabilizar
         if (!UserState.IsReady) return;
         await InitializeFromUserState();
     }
@@ -1458,6 +1459,7 @@
         currentUser = UserState.CurrentUser ?? "";
         currentCompany = UserState.CurrentCompany ?? "";
         _usuarioSelecionado = currentUser.Trim().ToUpper();
+        await RefreshAll(); // ← recarrega os cards do novo usuário
         await InvokeAsync(StateHasChanged);
     }
 

@@ -1617,7 +1617,7 @@
                     <div class="cresc-meta">
                         <div class="cresc-meta-item">
                             <span class="cml">Crescimento (mês)</span>
-                            <span class="cmv">@CrescimentoMesAtual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                            <span class="cmv">@CrescimentoMesAtual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Meta mensal</span>
@@ -1626,12 +1626,12 @@
                         <div class="cresc-meta-item">
                             <span class="cml">Resultado mensal</span>
                             <span class="cmv" style="color:@(ResultadoMensal < 0 ? "var(--c-red)" : "var(--c-green)");">
-                                @ResultadoMensal.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%
+                                @ResultadoMensal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%
                             </span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Crescimento anual</span>
-                            <span class="cmv">@CrescimentoAnual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                            <span class="cmv">@CrescimentoAnual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Meta anual</span>
@@ -1640,7 +1640,7 @@
                         <div class="cresc-meta-item">
                             <span class="cml">Resultado anual</span>
                             <span class="cmv" style="color:@(ResultadoAnual < 0 ? "var(--c-red)" : "var(--c-green)");">
-                                @ResultadoAnual.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%
+                                @ResultadoAnual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%
                             </span>
                         </div>
                     </div>
@@ -2846,14 +2846,14 @@
 
             sb.Append(LT + "rect class='cresc-bar' x='" + F(bx) + "' y='" + F(yTop) + "' width='" + F(bw)
                 + "' height='" + F(barH) + "' rx='7' fill='" + fill + "'>");
-            sb.Append(LT + "title>" + CrescimentoMesesLabel[i] + ": " + CrescimentoMoM[i].ToString("0", Inv) + "% no mês"
-                + " (acum. " + top.ToString("0", Inv) + "%)" + LT + "/title>");
+            sb.Append(LT + "title>" + CrescimentoMesesLabel[i] + ": " + CrescimentoMoM[i].ToString("0.0", Inv) + "% no mês"
+                + " (acum. " + top.ToString("0.0", Inv) + "%)" + LT + "/title>");
             sb.Append(LT + "/rect>");
 
             // rótulo = MoM real do mês (igual ao WPF)
             double yLbl = yTop - 10;
             sb.Append(LT + "text class='vlabel' x='" + F(cx) + "' y='" + F(yLbl)
-                + "' text-anchor='middle'>" + CrescimentoMoM[i].ToString("0", Inv) + "%" + LT + "/text>");
+                + "' text-anchor='middle'>" + CrescimentoMoM[i].ToString("0.0", Inv) + "%" + LT + "/text>");
 
             // mês no eixo X
             sb.Append(LT + "text class='mlabel' x='" + F(cx) + "' y='" + F(h - 16)

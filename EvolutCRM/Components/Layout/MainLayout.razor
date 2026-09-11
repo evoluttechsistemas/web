@@ -473,7 +473,6 @@
             await AtualizarNotificacoesAgendasTicket();
             await AtualizarNotificacoesCards();
             await AtualizarNotificacoesTicketsSemResponsavel();
-            await AtualizarNotificacoesBackupAsync();
 
             await JS.InvokeVoidAsync("registrarOfflineAoFechar",
                 UserState.CurrentUser?.Trim() ?? "");
@@ -586,7 +585,6 @@
 
                             await AtualizarNotificacoesAgendas();
                             await AtualizarNotificacoesAgendasTicket();
-                            await AtualizarNotificacoesBackupAsync();
                         });
                     }
                     finally
@@ -675,7 +673,9 @@
                 .ForEach(id => _ticketsNotificadosLayout.Remove(id));
 
             if (!novosParaNotificar.Any())
+            {
                 return;
+            }
 
             var qtdAtual = tickets.Count(t =>
 t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
@@ -720,7 +720,7 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
                     chaveGrupo: "GRUPO_TICKET",
                     tipoOrigem: "TICKET",
                     tituloGrupo: "💬 Tickets com nova mensagem",
-                    tipo: "danger",
+                    tipo: "success",
                     urlGrupo: "/tickets",
                     item: new NotificacaoItemModel
                     {
@@ -839,7 +839,7 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
     chaveGrupo: "GRUPO_TICKET_SEM_RESP",
     tipoOrigem: "TICKET_SEM_RESPONSAVEL",
     tituloGrupo: "🆘 Tickets sem atendimento",
-    tipo: "danger",
+    tipo: "success",
     urlGrupo: "/tickets",
     item: new NotificacaoItemModel { Codigo = t.Codigo, Descricao = mensagem, Url = $"/ticket/{t.Codigo}", DataHora = DateTime.Now });
 
@@ -1202,55 +1202,55 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         );
     }
 
-    private HashSet<string> _backupsNotificadosHoje = new();
+    // private HashSet<string> _backupsNotificadosHoje = new();
 
-    private async Task AtualizarNotificacoesBackupAsync()
-    {
-        if (!UserState.IsReady) return;
+    // private async Task AtualizarNotificacoesBackupAsync()
+    // {
+    //     if (!UserState.IsReady) return;
 
-        try
-        {
-            var criticos = await MonitorBackupService.ObterClientesParaAlertaAsync(UserState.CurrentCompanyId);
-            var hoje = DateTime.Today.ToString("yyyyMMdd");
+    //     try
+    //     {
+    //         var criticos = await MonitorBackupService.ObterClientesParaAlertaAsync(UserState.CurrentCompanyId);
+    //         var hoje = DateTime.Today.ToString("yyyyMMdd");
 
-            foreach (var cliente in criticos)
-            {
-                var chave = $"BACKUP_{cliente.CodCliente}_{cliente.Cnpj}_{hoje}";
+    //         foreach (var cliente in criticos)
+    //         {
+    //             var chave = $"BACKUP_{cliente.CodCliente}_{cliente.Cnpj}_{hoje}";
 
-                // Notifica no máximo 1x por dia por cliente por sessão
-                if (_backupsNotificadosHoje.Contains(chave))
-                    continue;
+    //             // Notifica no máximo 1x por dia por cliente por sessão
+    //             if (_backupsNotificadosHoje.Contains(chave))
+    //                 continue;
 
-                _backupsNotificadosHoje.Add(chave);
+    //             _backupsNotificadosHoje.Add(chave);
 
-                var dias = cliente.DataHoraUltimaSincronizacao.HasValue
-                    ? (int)(DateTime.Now - cliente.DataHoraUltimaSincronizacao.Value).TotalDays
-                    : -1;
+    //             var dias = cliente.DataHoraUltimaSincronizacao.HasValue
+    //                 ? (int)(DateTime.Now - cliente.DataHoraUltimaSincronizacao.Value).TotalDays
+    //                 : -1;
 
-                var mensagem = dias >= 0
-                    ? $"{dias} dia(s) sem backup. Último: {cliente.DataHoraUltimaSincronizacao:dd/MM/yyyy HH:mm} ({cliente.Computador})"
-                    : "Nenhum backup registrado para este cliente.";
+    //             var mensagem = dias >= 0
+    //                 ? $"{dias} dia(s) sem backup. Último: {cliente.DataHoraUltimaSincronizacao:dd/MM/yyyy HH:mm} ({cliente.Computador})"
+    //                 : "Nenhum backup registrado para este cliente.";
 
-                await AdicionarItemAoGrupo(
-    chaveGrupo: "GRUPO_BACKUP",
-    tipoOrigem: "BACKUP",
-    tituloGrupo: "💾 Backups críticos",
-    tipo: "warning",
-    urlGrupo: "/admin/monitor-backups",
-    item: new NotificacaoItemModel
-    {
-        Codigo = cliente.CodCliente,
-        Descricao = $"{cliente.NomeCliente}: {mensagem}",
-        Url = "/admin/monitor-backups",
-        DataHora = DateTime.Now
-    });
-            }
-        }
-        catch (Exception ex)
-        {
-            await SafeJs("crmLog", $"[BackupNotify] Erro: {ex.Message}");
-        }
-    }
+    //             await AdicionarItemAoGrupo(
+    // chaveGrupo: "GRUPO_BACKUP",
+    // tipoOrigem: "BACKUP",
+    // tituloGrupo: "💾 Backups críticos",
+    // tipo: "warning",
+    // urlGrupo: "/admin/monitor-backups",
+    // item: new NotificacaoItemModel
+    // {
+    //     Codigo = cliente.CodCliente,
+    //     Descricao = $"{cliente.NomeCliente}: {mensagem}",
+    //     Url = "/admin/monitor-backups",
+    //     DataHora = DateTime.Now
+    // });
+    //         }
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         await SafeJs("crmLog", $"[BackupNotify] Erro: {ex.Message}");
+    //     }
+    // }
 
     private List<AgendaModel> ExpandirAgendasRepetitivasLayout(List<AgendaModel> agendasOriginais)
     {
