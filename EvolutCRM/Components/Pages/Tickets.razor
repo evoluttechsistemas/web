@@ -1395,6 +1395,30 @@
         border: 1px solid white;
         box-shadow: 0 1px 3px rgba(0,0,0,.2);
     }
+
+    .btn-novo-rapido {
+        height: 28px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1.5px solid var(--b300);
+        background: #fff;
+        color: var(--b700);
+        font-family: 'IBM Plex Sans', sans-serif;
+        font-size: 10.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: var(--tr);
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        .btn-novo-rapido:hover {
+            background: var(--b50);
+            border-color: var(--b500);
+            transform: translateY(-1px);
+        }
 </style>
 
 <div class="tk">
@@ -1434,15 +1458,24 @@
                 Filtrar
             </button>
 
-            <button class="tk-btn tk-btn-ghost" @onclick="Recarregar" type="button">
+            @* <button class="tk-btn tk-btn-ghost" @onclick="Recarregar" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
                 Atualizar
-            </button>
+            </button> *@
 
             <button class="tk-btn tk-btn-solid" @onclick="NovoTicket" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Novo Ticket
             </button>
+
+            <button class="btn-novo-rapido" @onclick="() => _modalRapido = true">
+                <i class="fa-brands fa-whatsapp" style="font-size:14px; color:#25d366;"></i>
+                WhatsApp
+            </button>
+
+            <ModalCriacaoRapidaTicket Visivel="@_modalRapido"
+                                      AoFechar="@(() => _modalRapido = false)"
+                                      AoCriar="@OnTicketCriado" />
         </header>
 
         <!-- TABS -->
@@ -1742,24 +1775,24 @@
     private DotNetObjectReference<Tickets>? _visibilityRef;
 
     [JSInvokable]
-public async void OnVisibilityChanged(bool isVisible)
-{
-    _paginaVisivel = isVisible;
-
-    if (isVisible)
+    public async Task OnVisibilityChanged(bool isVisible)
     {
-        await InvokeAsync(async () =>
+        _paginaVisivel = isVisible;
+
+        if (isVisible)
         {
-            try
+            await InvokeAsync(async () =>
             {
-                await CarregarTickets();
-                await CarregarNotificacoes();
-                StateHasChanged();
-            }
-            catch { }
-        });
+                try
+                {
+                    await CarregarTickets();
+                    await CarregarNotificacoes();
+                    StateHasChanged();
+                }
+                catch { }
+            });
+        }
     }
-}
 
     private async Task CarregarPreferenciaVisualizacaoAsync()
     {
@@ -1841,14 +1874,20 @@ public async void OnVisibilityChanged(bool isVisible)
     {
         try
         {
+            // Só carrega visualizadores dos tickets atualmente visíveis na tela
+            var ticketsVisiveis = VisaoCards
+                ? _tickets
+                : FiltrarPorStatus(StatusSelecionado).Take(50).ToList();
+
             var novosMapas = new Dictionary<int, List<string>>();
-            // Limita aos tickets atualmente carregados para não sobrecarregar
-            foreach (var t in _tickets)
+
+            foreach (var t in ticketsVisiveis)
             {
                 var viewers = await TicketService.ObterVisualizadoresTicketAsync(t.Codigo);
                 if (viewers.Any())
                     novosMapas[t.Codigo] = viewers.Select(v => v.Usuario).ToList();
             }
+
             _visualizadoresPorTicket = novosMapas;
         }
         catch (Exception ex)
@@ -2150,18 +2189,20 @@ public async void OnVisibilityChanged(bool isVisible)
     {
         LerStatusDaUrl();
         UserState.OnChange += OnUserStateChanged;
-        TicketNotify.OnChange += OnTicketNotifyChanged; // ← ADICIONAR
+        TicketNotify.OnChange += OnTicketNotifyChanged;
         if (UserState.IsReady && !string.IsNullOrWhiteSpace(UserState.CurrentUser))
             _ = InitializeFromUserState();
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         _ = AutoRefreshLoop();
-        CarregarNotificacoes();
+        _ = CarregarNotificacoes();  // ← era sem _ = e sem await
     }
 
     private void OnTicketNotifyChanged()
 {
     _ = InvokeAsync(StateHasChanged);
 }
+
+    private int _ciclosRefresh = 0;
 
     private async Task AutoRefreshLoop()
     {
@@ -2178,14 +2219,17 @@ public async void OnVisibilityChanged(bool isVisible)
 
                         await CarregarNotificacoes();
 
-                        // Só carrega visualizadores se a página estiver visível
-                        // (evita queries desnecessárias quando está em background)
-                        if (_paginaVisivel)
+                        // Visualizadores a cada 3 ciclos (≈15s) e só quando visível
+                        _ciclosRefresh++;
+                        if (_paginaVisivel && _ciclosRefresh % 3 == 0)
                             await CarregarVisualizadoresAsync();
 
                         await InvokeAsync(StateHasChanged);
                     }
-                    catch (Exception ex) { await JS.InvokeVoidAsync("console.error", $"Erro: {ex.Message}"); }
+                    catch (Exception ex)
+                    {
+                        await JS.InvokeVoidAsync("console.error", $"Erro: {ex.Message}");
+                    }
                 });
             }
         }
@@ -2255,8 +2299,14 @@ public async void OnVisibilityChanged(bool isVisible)
     private async void OnUserStateChanged()
     {
         if (!UserState.IsReady) return;
-        await JS.InvokeVoidAsync("crmLog", $"[Tickets] UserState Ã¢â€ â€™ {UserState.CurrentUser}");
-        await InitializeFromUserState();
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await InitializeFromUserState();
+            });
+        }
+        catch { }
     }
 
 
@@ -2759,6 +2809,15 @@ public async void OnVisibilityChanged(bool isVisible)
         }
 
         StateHasChanged();
+    }
+
+    private bool _modalRapido = false;
+
+    private async Task OnTicketCriado(int ticketId)
+    {
+        _modalRapido = false;
+        await CarregarTickets();
+        AbrirTicket(ticketId);
     }
 
     /* Ã¢â€â‚¬Ã¢â€â‚¬ STATE Ã¢â€â‚¬Ã¢â€â‚¬ */

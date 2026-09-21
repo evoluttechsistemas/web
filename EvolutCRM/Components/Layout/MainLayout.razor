@@ -242,42 +242,25 @@
 }
 
 <script>
-    window.crmLog = window.crmLog || function(msg) {
-        console.log(msg);
-    };
+    window.crmLog = window.crmLog || function(msg) { console.log(msg); };
 
-    // ← ADICIONAR:
     window.registrarOfflineAoFechar = (usuario) => {
         if (!usuario) return;
 
-        // Remove listener anterior se houver (evita duplicar em re-renders)
         if (window._offlineHandler) {
             window.removeEventListener('beforeunload', window._offlineHandler);
             window.removeEventListener('visibilitychange', window._visibilityHandler);
         }
 
         window._offlineHandler = () => {
-            // sendBeacon é o único método confiável ao fechar janela
-            // funciona mesmo em WebView/apps embarcados
-            navigator.sendBeacon(
-                '/api/usuario/marcar-offline',
-                new Blob(
-                    [JSON.stringify({ usuario: usuario })],
-                    { type: 'application/json' }
-                )
-            );
+            navigator.sendBeacon('/api/usuario/marcar-offline',
+                new Blob([JSON.stringify({ usuario })], { type: 'application/json' }));
         };
 
         window._visibilityHandler = () => {
-            // visibilitychange cobre minimizar, trocar de aba, etc.
             if (document.visibilityState === 'hidden') {
-                navigator.sendBeacon(
-                    '/api/usuario/marcar-offline',
-                    new Blob(
-                        [JSON.stringify({ usuario: usuario })],
-                        { type: 'application/json' }
-                    )
-                );
+                navigator.sendBeacon('/api/usuario/marcar-offline',
+                    new Blob([JSON.stringify({ usuario })], { type: 'application/json' }));
             }
         };
 
@@ -285,32 +268,46 @@
         window.addEventListener('visibilitychange', window._visibilityHandler);
     };
 
-    // ── Drag de abas restrito ao eixo X ─────────────────────────────────────
-    let _dragDotNet = null;
+    let _dragDotNet  = null;
+    let _dragStartX  = 0;
+    let _dragStartY  = 0;
+    let _dragStarted = false;
+    let _dragLastRota = null;
+    const DRAG_THRESHOLD = 6;
 
     window.abaStripDragStart = (rota, clientX, clientY) => {
-        const el = document.querySelector(`.aba-item[data-rota="${rota}"]`);
+        const el = document.querySelector(`.aba-item[data-rota="${CSS.escape(rota)}"]`);
         if (!el) return { x: clientX, y: clientY, w: 120 };
         const r = el.getBoundingClientRect();
         return { x: r.left, y: r.top, w: r.width };
     };
 
-    window.abaStripDragAttach = (dotnet) => {
-        _dragDotNet = dotnet;
+    window.abaStripDragAttach = (dotnet, startX, startY) => {
+        window.abaStripDragDetach();
+        _dragDotNet  = dotnet;
+        _dragStartX  = startX;
+        _dragStartY  = startY;
+        _dragStarted = false;
         document.addEventListener('mousemove', _onDragMove);
-        document.addEventListener('mouseup', _onDragUp);
+        document.addEventListener('mouseup',   _onDragUp);
     };
 
     window.abaStripDragDetach = () => {
         document.removeEventListener('mousemove', _onDragMove);
-        document.removeEventListener('mouseup', _onDragUp);
-        _dragDotNet = null;
+        document.removeEventListener('mouseup',   _onDragUp);
+        _dragDotNet   = null;
+        _dragStarted  = false;
+        _dragLastRota = null;
     };
-
-    let _dragLastRota = null;
 
     const _onDragMove = (e) => {
         if (!_dragDotNet) return;
+
+        if (!_dragStarted) {
+            if (Math.abs(e.clientX - _dragStartX) < DRAG_THRESHOLD &&
+                Math.abs(e.clientY - _dragStartY) < DRAG_THRESHOLD) return;
+            _dragStarted = true;
+        }
 
         const abas = document.querySelectorAll('.aba-item[data-rota]');
         let rotaAtual = '';
@@ -322,19 +319,23 @@
             }
         }
 
-        // Só invoca o Blazor quando a rota sob o cursor muda
         if (rotaAtual !== _dragLastRota) {
             _dragLastRota = rotaAtual;
             _dragDotNet.invokeMethodAsync('OnMouseMove', e.clientX, e.clientY, rotaAtual);
         }
     };
 
-    const _onDragUp = () => _dragDotNet?.invokeMethodAsync('OnMouseUp');
-
+        const _onDragUp = () => {
+        const dotnet = _dragDotNet;
+        window.abaStripDragDetach();          // limpa JS imediatamente
+        dotnet?.invokeMethodAsync('OnMouseUp'); // avisa o Blazor para limpar o estado C#
+    };
 </script>
 
 
 @code {
+
+    private void AoMudar() => _ = InvokeAsync(StateHasChanged);
     private Dictionary<int, (DateTime UltimaNotificacao, int Contagem)> _mensagensFailedNotificadas = new();
     private int _ultimaQtdNovosTickets = -1;
     private bool _changelogVerificado = false;
@@ -442,9 +443,10 @@
         await SafeJs("crmLog",
             $"[Layout] Render | firstRender={firstRender} | IsReady={UserState.IsReady}");
 
-        if (!firstRender && _timerTickets != null)
+        // ← correto: sai se não for primeira renderização
+        if (!firstRender)
             return;
-        
+
         if (string.IsNullOrWhiteSpace(UserState.CurrentUser))
         {
             var usuario = await SafeJsReturn<string>("localStorage.getItem", "crm_user");
@@ -460,19 +462,20 @@
 
         if (UserState.IsReady)
         {
-            // Changelog dispara primeiro, sem bloquear o resto
             if (_changelogModal != null && !string.IsNullOrWhiteSpace(UserState.CurrentUser) && !_changelogVerificado)
             {
                 _changelogVerificado = true;
                 _ = _changelogModal.VerificarChangelog(UserState.CurrentUser.Trim());
             }
 
-            await AtualizarTickets();
+            // Carrega uma vez e compartilha na carga inicial também
+            var ticketsIniciais = await TicketService.ListarChamadosAsync();
+            await AtualizarTickets(ticketsIniciais);
             await AtualizarChatInterno();
             await AtualizarNotificacoesAgendas();
             await AtualizarNotificacoesAgendasTicket();
             await AtualizarNotificacoesCards();
-            await AtualizarNotificacoesTicketsSemResponsavel();
+            await AtualizarNotificacoesTicketsSemResponsavel(ticketsIniciais);
 
             await JS.InvokeVoidAsync("registrarOfflineAoFechar",
                 UserState.CurrentUser?.Trim() ?? "");
@@ -506,15 +509,17 @@
                     try
                     {
                         await InvokeAsync(async () =>
-{
-    if (!_disposed)
-    {
-        await AtualizarTickets();
-        await AtualizarChatInterno();
-        await AtualizarNotificacoesTicketsSemResponsavel();
-        await AtualizarNotificacoesMensagensPresasAsync();
-    }
-});
+                        {
+                            if (!_disposed)
+                            {
+                                // Uma única query pesada por ciclo de 5s
+                                var tickets = await TicketService.ListarChamadosAsync();
+                                await AtualizarTickets(tickets);
+                                await AtualizarChatInterno();
+                                await AtualizarNotificacoesTicketsSemResponsavel(tickets);
+                                await AtualizarNotificacoesMensagensPresasAsync();
+                            }
+                        });
                     }
                     finally
                     {
@@ -541,15 +546,12 @@
                     if (_atualizandoCards) continue;
 
                     _atualizandoCards = true;
-
                     try
                     {
                         await InvokeAsync(async () =>
                         {
                             if (!_disposed)
-                            {
                                 await AtualizarNotificacoesCards();
-                            }
                         });
                     }
                     finally
@@ -602,7 +604,8 @@
         });
     }
 
-    private async Task AtualizarTickets()
+    private async Task AtualizarTickets(
+    List<TicketChamadoCModel>? ticketsPreCarregados = null)
     {
         if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
             return;
@@ -613,7 +616,6 @@
 
             var qtdNovos = await TicketService.GetQuantidadeTicketsNovosAsync(usuario);
 
-            // Só dispara badge/JS se o número realmente mudou — evita render desnecessário a cada 5s
             if (qtdNovos != _ultimaQtdNovosTickets)
             {
                 _ultimaQtdNovosTickets = qtdNovos;
@@ -621,7 +623,12 @@
                 await SafeJs("crmSetBadge", qtdNovos);
             }
 
-            var tickets = await TicketService.ListarChamadosAsync();
+            // Se não há tickets novos, economiza a query pesada
+            if (qtdNovos == 0)
+                return;
+
+            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosAsync();
+
 
             var rotaAtiva = Abas.RotaAtiva ?? "";
             var estaDentroDoTicketAtivo = rotaAtiva.StartsWith("ticket/");
@@ -657,7 +664,7 @@
                         && (!estaDentroDoTicketAtivo || t.Codigo != idTicketAberto)
                         && (
     !_ticketsNotificadosLayout.ContainsKey(t.Codigo) ||
-    DateTime.Now - _ticketsNotificadosLayout[t.Codigo] >= TimeSpan.FromSeconds(15)
+    DateTime.Now - _ticketsNotificadosLayout[t.Codigo] >= TimeSpan.FromMinutes(3)
 );
                 })
                 .ToList();
@@ -692,9 +699,15 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
             }
 
 
-            var ultimasAnotacoes = new Dictionary<int, string>();
-            foreach (var cod in novosParaNotificar.Select(t => t.Codigo))
-                ultimasAnotacoes[cod] = await TicketService.BuscarUltimaAnotacaoClienteAsync(cod);
+            var tarefas = novosParaNotificar
+    .Select(async t => new
+    {
+        t.Codigo,
+        Anotacao = await TicketService.BuscarUltimaAnotacaoClienteAsync(t.Codigo)
+    });
+
+            var resultados = await Task.WhenAll(tarefas);
+            var ultimasAnotacoes = resultados.ToDictionary(x => x.Codigo, x => x.Anotacao);
 
             foreach (var t in novosParaNotificar)
             {
@@ -775,52 +788,57 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         }
     }
 
-    private async Task AtualizarNotificacoesTicketsSemResponsavel()
+    private async Task AtualizarNotificacoesTicketsSemResponsavel(
+    List<TicketChamadoCModel>? ticketsPreCarregados = null)
     {
         if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
             return;
 
         try
         {
-            var tickets = await TicketService.ListarChamadosAsync();
+            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosAsync();
+
             var agora = DateTime.Now;
 
             var usuariosAutomaticos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "", "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA"
-    };
+        {
+            "", "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA"
+        };
 
-            var ticketsSemResponsavel = tickets
-    .Where(t =>
-        t.CodSituacao == 1 &&
-        usuariosAutomaticos.Contains((t.Usuario ?? "").Trim()) &&
-        (agora - t.DataHoraUltimaGravacao).TotalMinutes >= 5)
-    .ToList();
+            // Tickets em aberto onde a ÚLTIMA GRAVAÇÃO foi do cliente/bot (não do atendente)
+            // e aguardam resposta há mais de 5 min — sem depender do campo Novo
+            var ticketsSemResposta = tickets
+                .Where(t =>
+                    t.CodSituacao == 1 &&
+                    (agora - t.DataHoraUltimaGravacao).TotalMinutes >= 5 &&
+                    usuariosAutomaticos.Contains((t.UsuarioUltimaGravacao ?? "").Trim()))
+                .ToList();
 
-            // Remove do controle os tickets que já têm responsável ou saíram do suporte
+            // Limpa do controle os tickets que o atendente já respondeu ou saíram do filtro
             _ultimaNotificacaoTicketSemResponsavel
-                .Where(x => !ticketsSemResponsavel.Any(t => t.Codigo == x.Key))
+                .Where(x => !ticketsSemResposta.Any(t => t.Codigo == x.Key))
                 .Select(x => x.Key)
                 .ToList()
                 .ForEach(id => _ultimaNotificacaoTicketSemResponsavel.Remove(id));
 
-            if (!ticketsSemResponsavel.Any())
+            if (!ticketsSemResposta.Any())
                 return;
 
-            foreach (var t in ticketsSemResponsavel)
+            foreach (var t in ticketsSemResposta)
             {
-                var minutosAberto = (int)(agora - t.DataHoraUltimaGravacao).TotalMinutes;
+                var minutosEsperando = (int)(agora - t.DataHoraUltimaGravacao).TotalMinutes;
 
                 var jaNotificou = _ultimaNotificacaoTicketSemResponsavel.TryGetValue(t.Codigo, out var controle);
 
-                // Reseta se a última gravação mudou (ticket reaberto ou nova mensagem)
+                // Reseta se chegou nova mensagem do cliente depois da última notificação
                 if (jaNotificou && controle.UltimaGravacao < t.DataHoraUltimaGravacao)
                 {
                     _ultimaNotificacaoTicketSemResponsavel.Remove(t.Codigo);
                     jaNotificou = false;
                 }
 
-                var deveNotificar = !jaNotificou || (agora - controle.UltimaNotificacao).TotalMinutes >= 1;
+                // Notifica na primeira vez e depois a cada 5 min (evita spam)
+                var deveNotificar = !jaNotificou || (agora - controle.UltimaNotificacao).TotalMinutes >= 5;
 
                 if (!deveNotificar)
                     continue;
@@ -833,15 +851,21 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
                         ? t.NomeCliente
                         : $"Ticket #{t.Codigo}";
 
-                var mensagem = $"{nomeCliente} aguarda atendimento há {minutosAberto} min. Assunto: {t.Assunto}";
+                var mensagem = $"{nomeCliente} aguarda atendimento há {minutosEsperando} min. Assunto: {t.Assunto}";
 
                 await AdicionarItemAoGrupo(
-    chaveGrupo: "GRUPO_TICKET_SEM_RESP",
-    tipoOrigem: "TICKET_SEM_RESPONSAVEL",
-    tituloGrupo: "🆘 Tickets sem atendimento",
-    tipo: "success",
-    urlGrupo: "/tickets",
-    item: new NotificacaoItemModel { Codigo = t.Codigo, Descricao = mensagem, Url = $"/ticket/{t.Codigo}", DataHora = DateTime.Now });
+                    chaveGrupo: "GRUPO_TICKET_SEM_RESP",
+                    tipoOrigem: "TICKET_SEM_RESPONSAVEL",
+                    tituloGrupo: "🆘 Tickets sem atendimento",
+                    tipo: "danger",
+                    urlGrupo: "/tickets",
+                    item: new NotificacaoItemModel
+                    {
+                        Codigo = t.Codigo,
+                        Descricao = mensagem,
+                        Url = $"/ticket/{t.Codigo}",
+                        DataHora = DateTime.Now
+                    });
 
                 await SafeJs("crmToast", $"🆘 {mensagem}", "danger");
                 await SafeJs("crmBlinkStart", $"🆘 TICKET SEM ATENDIMENTO!", 8);
@@ -963,20 +987,20 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
 
             if (_cardsConhecidos.Count == 0)
             {
-                _cardsConhecidos = idsAtuais;
-
-                // Primeira carga: busca TODAS as últimas mensagens numa query só
                 var todasUltimas = await CardService.GetUltimasMensagensClienteAsync(
                     cards.Select(c => c.Codigo).ToList());
-
                 foreach (var kv in todasUltimas)
                     _cardsMensagensNotificadas[kv.Key] = kv.Value.DataHora;
+
+                _cardsConhecidos = cards
+                    .Where(c => todasUltimas.ContainsKey(c.Codigo))
+                    .Select(c => c.Codigo)
+                    .ToHashSet();
 
                 await SafeJs("crmLog", $"[CardNotify] Primeira carga: {_cardsConhecidos.Count} card(s).");
                 return;
             }
 
-            // Só notifica novos cards cujo responsável é o usuário logado (ou sem responsável)
             var novosCards = cards
                 .Where(c => !_cardsConhecidos.Contains(c.Codigo)
                     && (string.IsNullOrWhiteSpace(c.Usuario)
@@ -1429,7 +1453,6 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         Abas.OnMudanca += AoMudar;
         RegistrarRotaAtual(Nav.Uri);
         DeployState.OnChange += OnDeployStateChanged;
-        DeployState.Limpar();
     }
 
     private void AoNavegar(object? sender, LocationChangedEventArgs e)
@@ -1531,7 +1554,6 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         _dragRef?.Dispose();
         _deployCountdownCts?.Cancel();
     }
-
 
     private async Task AtualizarNotificacoesAgendasTicket()
     {
@@ -1713,7 +1735,6 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         }
     }
 
-    private void AoMudar() => InvokeAsync(StateHasChanged);
 
     private void AtivarAba(AbaItem aba)
     {
@@ -1799,7 +1820,7 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
 
     private void OnDeployStateChanged()
     {
-        InvokeAsync(async () =>
+        _ = InvokeAsync(async () =>
         {
             StateHasChanged();
 
@@ -1849,8 +1870,8 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
     {
         if (e.Button != 0) return;
 
-        _dragRef?.Dispose(); // ← descarta anterior
-        _dragRef = DotNetObjectReference.Create(this); // ← reutiliza
+        _dragRef?.Dispose();
+        _dragRef = DotNetObjectReference.Create(this);
 
         _abaDragging = rota;
         _abaDragSobre = null;
@@ -1864,7 +1885,8 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
         _ghostW = info.W;
         _offsetX = e.ClientX - info.X;
 
-        await JS.InvokeVoidAsync("abaStripDragAttach", _dragRef); // ← usa _dragRef
+        // ← passa startX e startY para o JS calcular threshold
+        await JS.InvokeVoidAsync("abaStripDragAttach", _dragRef, e.ClientX, e.ClientY);
     }
 
     [JSInvokable]
@@ -1872,17 +1894,15 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
     {
         if (_abaDragging == null) return;
 
-        _dragging = true;
+        _dragging = true;   // só chega aqui após o threshold do JS
         _ghostX = clientX - _offsetX;
 
         var nova = string.IsNullOrEmpty(rotaSobre) ? null : rotaSobre;
 
-        // Reordena em tempo real ao passar por cima de outra aba
         if (nova != null && nova != _abaDragging && nova != _abaDragSobre)
         {
             _abaDragSobre = nova;
             Abas.Reordenar(_abaDragging, nova);
-            // Atualiza a posição do ghost para seguir a aba que se moveu
             var info = await JS.InvokeAsync<AbaRect>("abaStripDragStart", _abaDragging, clientX, clientY);
             _ghostX = clientX - _offsetX;
             _ghostY = info.Y;

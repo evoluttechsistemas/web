@@ -122,6 +122,11 @@ h1:focus {
     overflow: auto;
 }
 
+    /* Ticket existente ocupa exatamente a área disponível da aba */
+    .aba-painel:has(.ticket-modern-container:not(.modo-novo)) {
+        overflow: hidden !important;
+    }
+
     .aba-painel.oculta {
         visibility: hidden !important;
         pointer-events: none !important;

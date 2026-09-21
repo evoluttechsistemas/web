@@ -255,7 +255,10 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
 
                 await AtualizarStatusBancoAsync(dto.Codigo, "aguardando_qr", null, null, inst.CodEmp);
 
-                _monitor.LogBaileysStatus($"Instância #{dto.Codigo} ({inst.Nome}) aguardando QR", connected: false);  // ← ADD
+                _monitor.LogBaileysStatus(
+    instancia: $"#{dto.Codigo}",
+status: $"{inst.Nome} aguardando QR",
+connected: false);
 
                 return Ok(new { sucesso = true });
             }
@@ -292,7 +295,10 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
 
                 await AtualizarStatusBancoAsync(dto.Codigo, "desconectado", null, null, inst.CodEmp);
 
-                _monitor.LogBaileysStatus($"Instância #{dto.Codigo} desconectada manualmente", connected: false);  // ← ADD
+                _monitor.LogBaileysStatus(
+    instancia: $"#{dto.Codigo}",
+    status: $"{inst.Nome} aguardando QR",
+    connected: false);
 
                 return Ok(new { sucesso = true });
             }
@@ -351,7 +357,7 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
             {
                 if (VerificarPortaAtiva())
                 {
-                    _monitor.LogBaileysStatus("Serviço BaileysHelp já estava rodando", connected: true);  // ← ADD
+                    _monitor.LogBaileysStatus("BaileysHelp", "Serviço já estava rodando", connected: true);
                     return Ok(new { sucesso = true, mensagem = "Serviço já está rodando." });
                 }
 
@@ -362,7 +368,7 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
                     System.Threading.Thread.Sleep(1000);
                     if (VerificarPortaAtiva())
                     {
-                        _monitor.LogBaileysStatus("Serviço BaileysHelp iniciado com sucesso", connected: true);  // ← ADD
+                        _monitor.LogBaileysStatus("BaileysHelp", "Serviço iniciado com sucesso", connected: true);
                         return Ok(new { sucesso = true, mensagem = "Serviço iniciado." });
                     }
                 }
@@ -432,7 +438,7 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
                     System.Threading.Thread.Sleep(1000);
                     if (!VerificarPortaAtiva())
                     {
-                        _monitor.LogBaileysStatus("Serviço BaileysHelp parado com sucesso", connected: false);  // ← ADD
+                        _monitor.LogBaileysStatus("BaileysHelp", "Serviço parado com sucesso", connected: false);
                         return Ok(new { sucesso = true, mensagem = "Serviço parado." });
                     }
                 }
@@ -469,15 +475,19 @@ VALUES (@Nome, @PastaAuth, 'desconectado', GETDATE(), @CodEmp)", conn);
                 // Conectado ou desconectado são os eventos mais relevantes para o monitor
                 if (dto.Status == "conectado")
                     _monitor.LogBaileysStatus(
-                        $"Instância #{dto.Codigo} conectada — número: {dto.Numero ?? "?"}",
-                        connected: true);
+    instancia: dto.Numero ?? $"#{dto.Codigo}",
+    status: $"Instância #{dto.Codigo} conectada",
+    connected: true);
                 else if (dto.Status == "desconectado")
                 {
                     var msg = string.IsNullOrWhiteSpace(dto.MotivoDesconexao)
                         ? $"Instância #{dto.Codigo} desconectada"
                         : $"Instância #{dto.Codigo} desconectada — {dto.MotivoDesconexao}";
 
-                    _monitor.LogBaileysStatus(msg, connected: false);
+                    _monitor.LogBaileysStatus(
+    instancia: $"#{dto.Codigo}",
+    status: msg,
+    connected: false);
                 }
                 else if (dto.Status == "erro_repasse")
                     _monitor.Log(LogCategory.Baileys, LogSeverity.Error,
@@ -606,8 +616,9 @@ WHERE Codigo = @Codigo
                 await AtualizarStatusBancoAsync(req.Codigo, "aguardando_qr", null, null, instancia.CodEmp);
 
                 _monitor.LogBaileysStatus(
-                    $"Instância #{req.Codigo} ({instancia.Nome}) — novo QR forçado",
-                    connected: false);
+    instancia: $"#{req.Codigo}",
+    status: $"{instancia.Nome} — novo QR forçado",
+    connected: false);
 
                 return Ok(new { sucesso = true });
             }

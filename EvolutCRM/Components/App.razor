@@ -19,10 +19,74 @@
 
     <script src="/js/crm-notify.js?v=3"></script>
     <script src="/js/ticket-audio.js"></script>
+    <script src="/js/paste-image.js"></script>
     <script src="_framework/blazor.web.js"></script>
     <script src="/js/screen-recorder.js"></script>
     <script src="js/ticketAudio.js"></script>
     <script src="/js/Acesso-Remoto.js"></script>
+
+    <script>
+            window._ticketF3Ref = null;
+            window._ticketF3Handler = null;
+
+            window.registrarAtalhoF3 = (dotnetRef) => {
+                if (window._ticketF3Handler) {
+                    document.removeEventListener('keydown', window._ticketF3Handler, true);
+                    window._ticketF3Handler = null;
+                }
+
+                window._ticketF3Ref = dotnetRef;
+
+                            window._ticketF3Handler = async function (e) {
+                if (['F1', 'F2', 'F3'].includes(e.key)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+
+                if (e.key === 'F1') {
+                    if (window._ticketF3Ref)
+                        await window._ticketF3Ref.invokeMethodAsync('AtalhoAtualizarTicket');
+                }
+
+                if (e.key === 'F2') {
+                    if (window._ticketF3Ref)
+                        await window._ticketF3Ref.invokeMethodAsync('AtalhoFinalizarComVersao');
+                }
+
+                if (e.key === 'F3') {
+                    if (window._ticketF3Ref)
+                        await window._ticketF3Ref.invokeMethodAsync('AtalhoFinalizarTicket');
+                }
+
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (window._ticketF3Ref)
+                        await window._ticketF3Ref.invokeMethodAsync('AtalhoFinalizarSemInsight');
+                }
+
+                if (e.key >= '1' && e.key <= '9') {
+                    if (window._ticketF3Ref) {
+                        const tag = document.activeElement?.tagName?.toLowerCase();
+                        if (tag === 'input' || tag === 'textarea') {
+                            return;
+                        }
+                        e.preventDefault();
+                        await window._ticketF3Ref.invokeMethodAsync('AtalhoNumeroF1', parseInt(e.key));
+                    }
+                }
+            };
+
+                document.addEventListener('keydown', window._ticketF3Handler, true);
+            };
+
+            window.removerAtalhoF3 = () => {
+                if (window._ticketF3Handler) {
+                    document.removeEventListener('keydown', window._ticketF3Handler, true);
+                    window._ticketF3Handler = null;
+                }
+                window._ticketF3Ref = null;
+            };
+    </script>
 
     <script>
         window.chatInternoRef = null;

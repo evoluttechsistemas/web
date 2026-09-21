@@ -482,12 +482,25 @@
             <div class="mon-stat-lbl">Falhas de envio</div>
             <div class="mon-stat-val">@snap.SendFailures</div>
         </div>
-        <div class="mon-stat @(snap.BaileysStatus.Contains("Conectado") ? "s-ok" : "s-err")">
+        <div class="mon-stat @(snap.Instancias.Any(i => i.Status.Contains("conectado")) ? "s-ok" : "s-err")">
             <div class="mon-stat-lbl">Conexão Baileys</div>
-            <div class="mon-stat-val small">@snap.BaileysStatus</div>
-            @if (snap.BaileysUptime.TotalMinutes > 0 && snap.BaileysUptime.TotalDays < 365)
+            @if (!snap.Instancias.Any())
             {
-                <div class="mon-stat-sub">uptime @((int)snap.BaileysUptime.TotalMinutes)min</div>
+                <div class="mon-stat-val small">—</div>
+            }
+            else
+            {
+                @foreach (var inst in snap.Instancias)
+                {
+                    <div class="mon-stat-val small">@inst.Numero</div>
+                    <div class="mon-stat-sub">
+                        @inst.Status
+                        @if (inst.Uptime.TotalMinutes > 0)
+                        {
+                            <span> · uptime @((int)inst.Uptime.TotalMinutes)min</span>
+                        }
+                    </div>
+                }
             }
         </div>
         <div class="mon-stat @(snap.SlowQueries > 0 ? "s-warn" : "s-ok")">
@@ -896,7 +909,7 @@
 </div>
 
 @code {
-    private HealthSnapshot snap = new(0, 0, 0, 0, "—", TimeSpan.Zero);
+    private HealthSnapshot snap = new(0, 0, 0, 0, new List<BaileysInstanciaInfo>());
     private string ultimaAtualizacao = "";
     private System.Threading.Timer? _timer;
     private HealthLogEntry? logExpandido;
@@ -924,6 +937,7 @@
     private void SetFiltro(LogCategory cat, string valor)
     {
         filtros[cat] = valor;
+        StateHasChanged();
     }
 
     private void LimparLogs()

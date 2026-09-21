@@ -181,6 +181,7 @@ SELECT
     ISNULL(T.Novo, 'N') AS Novo,
     ISNULL(T.CodTipo, 1) AS CodTipo,
     ISNULL(T.Prioridade, 2) AS Prioridade,
+    ISNULL(T.UsuarioUltimaGravacao, '') AS UsuarioUltimaGravacao,
     AP.StatusAprovacao,
     F.FotoUrl AS FotoClienteUrl
 FROM TicketChamadoC T
@@ -230,13 +231,14 @@ ORDER BY
                     CodSituacao = rd.IsDBNull(8) ? 1 : rd.GetInt32(8),
                     DataHoraAbertura = rd.IsDBNull(9) ? DateTime.Now : rd.GetDateTime(9),
                     DataHoraUltimaGravacao = rd.IsDBNull(10)
-                        ? (rd.IsDBNull(9) ? DateTime.Now : rd.GetDateTime(9))
-                        : rd.GetDateTime(10),
+        ? (rd.IsDBNull(9) ? DateTime.Now : rd.GetDateTime(9))
+        : rd.GetDateTime(10),
                     Novo = rd.IsDBNull(11) ? "N" : rd.GetString(11),
                     CodTipo = rd.IsDBNull(12) ? 1 : rd.GetInt32(12),
                     Prioridade = rd.IsDBNull(13) ? 2 : rd.GetInt32(13),
-                    StatusAprovacao = rd.IsDBNull(14) ? null : rd.GetString(14),
-                    FotoClienteUrl = rd.IsDBNull(15) ? null : rd.GetString(15)
+                    UsuarioUltimaGravacao = rd.IsDBNull(14) ? "" : rd.GetString(14),
+                    StatusAprovacao = rd.IsDBNull(15) ? null : rd.GetString(15),
+                    FotoClienteUrl = rd.IsDBNull(16) ? null : rd.GetString(16)
                 });
             }
 
@@ -370,13 +372,10 @@ ORDER BY ISNULL(C.Apelido, C.Nome), A.NomeComputador";
 
             using var cmd = new SqlCommand(sql, con);
             AddCodEmp(cmd);
-            AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Termo", termo?.Trim() ?? "");
-            AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Busca", "%" + (termo?.Trim() ?? "") + "%");
 
             using var rd = await cmd.ExecuteReaderAsync();
-
             while (await rd.ReadAsync())
             {
                 lista.Add(new AcessoRemotoModel
@@ -1212,28 +1211,27 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
             await con.OpenAsync();
 
             var sql = @"
-    SELECT T.Codigo, T.Status, T.CodSetor, ISNULL(T.CodCategoria,0),
-           T.DataAbertura, T.DataHoraAbertura,
-           T.Usuario, T.UsuarioUltimaGravacao, T.DataHoraUltimaGravacao,
-           T.CodCliente, T.Assunto, T.CodSituacao, T.Novo,
-           ISNULL(T.Versao,''), ISNULL(T.CodTipo,1),
-           ISNULL(T.Prioridade,2), ISNULL(T.TelefoneWhatsApp,''),
-    ISNULL(T.ObservacaoCliente,'') AS ObservacaoCliente,
-    ISNULL(T.AssuntoSugerido,'') AS AssuntoSugerido,
-    ISNULL(T.SentimentoCliente,'') AS SentimentoCliente,
-    ISNULL(T.SentimentoEmoji,'') AS SentimentoEmoji,
-    ISNULL(T.AssuntoSugeridoStatus,'') AS AssuntoSugeridoStatus,
-    T.CodInstanciaWhatsApp,
-    F.FotoUrl AS FotoClienteUrl
-    FROM TicketChamadoC T
-    LEFT JOIN ClienteWhatsAppFoto F
-           ON F.CodEmp = T.CodEmp
-          AND F.Telefone = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(T.TelefoneWhatsApp, ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')
-    WHERE T.Codigo = @Id AND T.CodEmp = @CodEmp
-      AND ISNULL(T.ChatInterno, 'N') <> 'S'";
+SELECT T.Codigo, T.Status, T.CodSetor, ISNULL(T.CodCategoria,0),
+       T.DataAbertura, T.DataHoraAbertura,
+       T.Usuario, T.UsuarioUltimaGravacao, T.DataHoraUltimaGravacao,
+       T.CodCliente, T.Assunto, T.CodSituacao, T.Novo,
+       ISNULL(T.Versao,''), ISNULL(T.CodTipo,1),
+       ISNULL(T.Prioridade,2), ISNULL(T.TelefoneWhatsApp,''),
+       ISNULL(T.ObservacaoCliente,'') AS ObservacaoCliente,
+       ISNULL(T.AssuntoSugerido,'') AS AssuntoSugerido,
+       ISNULL(T.SentimentoCliente,'') AS SentimentoCliente,
+       ISNULL(T.SentimentoEmoji,'') AS SentimentoEmoji,
+       ISNULL(T.AssuntoSugeridoStatus,'') AS AssuntoSugeridoStatus,
+       T.CodInstanciaWhatsApp,
+       F.FotoUrl AS FotoClienteUrl
+FROM TicketChamadoC T
+LEFT JOIN ClienteWhatsAppFoto F
+       ON F.CodEmp = T.CodEmp
+      AND F.Telefone = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(T.TelefoneWhatsApp, ''), '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '')
+WHERE T.Codigo = @Id AND T.CodEmp = @CodEmp
+  AND ISNULL(T.ChatInterno, 'N') <> 'S'";
 
             using var cmd = new SqlCommand(sql, con);
-            AddCodEmp(cmd);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Id", id);
 
@@ -1277,8 +1275,8 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
         {
             using var con = new SqlConnection(_conn);
             await con.OpenAsync();
-            using var cmd = new SqlCommand("SELECT Apelido FROM Cliente WHERE Codigo = @Cod AND CodEmp = @CodEmp", con);
-            AddCodEmp(cmd);
+            using var cmd = new SqlCommand(
+                "SELECT Apelido FROM Cliente WHERE Codigo = @Cod AND CodEmp = @CodEmp", con);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Cod", codCliente);
             var result = await cmd.ExecuteScalarAsync();
@@ -1292,37 +1290,34 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
             using var con = new SqlConnection(_conn);
             await con.OpenAsync();
 
-            // ATENÇÃO: filtra 'ia_processing' para nunca exibir a trava no histórico.
-            // 'saudacao_auto' e 'aguarde_auto' SÃO exibidos normalmente (são mensagens reais).
             var sql = @"
-    SELECT 
-        Codigo, CodTicketChamadoC, Anotacao, DataHora, Usuario,
-        CaminhoImagem,
-        CASE WHEN Imagem IS NOT NULL AND LEN(Imagem) > 0 THEN 1 ELSE 0 END AS TemImagem,
-        NomeImagem, EnvioCliente,
-        ISNULL(NovaAgenda, 'N'), DataHoraAgenda,
-        ISNULL(AgendaResolvida, 'N'), UltimaNotificacaoAgenda,
-        ISNULL(NotificarAgenda, 'S'),
-        CASE WHEN Audio IS NOT NULL AND LEN(Audio) > 0 THEN 1 ELSE 0 END AS TemAudio,
-        AudioMimeType, AudioFileName,
-        ISNULL(StatusWhatsApp, ''),
-        ISNULL(Alterado, 'N'),
-        ISNULL(MensagemExcluida, 'N'),
-        TranscricaoAudio,
-ISNULL(AudioTranscrito, 'N') AS AudioTranscrito,
-CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
-        VideoMimeType, VideoFileName,
-        ISNULL(CodMensagemRespondida, 0) AS CodMensagemRespondida,
-        ISNULL(TextoMensagemRespondida, '') AS TextoMensagemRespondida,
-        ISNULL(UsuarioMensagemRespondida, '') AS UsuarioMensagemRespondida,
-        ISNULL(Interno, 'N') AS Interno
-    FROM TicketChamadoD
-    WHERE CodTicketChamadoC = @Id AND CodEmp = @CodEmp
-      AND ISNULL(StatusWhatsApp, '') <> 'ia_processing'
-    ORDER BY DataHora DESC";
+SELECT
+    Codigo, CodTicketChamadoC, Anotacao, DataHora, Usuario,
+    CaminhoImagem,
+    CASE WHEN Imagem IS NOT NULL THEN 1 ELSE 0 END AS TemImagem,
+    NomeImagem, EnvioCliente,
+    ISNULL(NovaAgenda, 'N'), DataHoraAgenda,
+    ISNULL(AgendaResolvida, 'N'), UltimaNotificacaoAgenda,
+    ISNULL(NotificarAgenda, 'S'),
+    CASE WHEN Audio IS NOT NULL THEN 1 ELSE 0 END AS TemAudio,
+    AudioMimeType, AudioFileName,
+    ISNULL(StatusWhatsApp, ''),
+    ISNULL(Alterado, 'N'),
+    ISNULL(MensagemExcluida, 'N'),
+    TranscricaoAudio,
+    ISNULL(AudioTranscrito, 'N') AS AudioTranscrito,
+    CASE WHEN Video IS NOT NULL THEN 1 ELSE 0 END AS TemVideo,
+    VideoMimeType, VideoFileName,
+    ISNULL(CodMensagemRespondida, 0) AS CodMensagemRespondida,
+    ISNULL(TextoMensagemRespondida, '') AS TextoMensagemRespondida,
+    ISNULL(UsuarioMensagemRespondida, '') AS UsuarioMensagemRespondida,
+    ISNULL(Interno, 'N') AS Interno
+FROM TicketChamadoD
+WHERE CodTicketChamadoC = @Id AND CodEmp = @CodEmp
+  AND ISNULL(StatusWhatsApp, '') <> 'ia_processing'
+ORDER BY DataHora DESC";
 
             using var cmd = new SqlCommand(sql, con);
-            AddCodEmp(cmd);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Id", id);
 
@@ -1347,7 +1342,6 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
                 var excluida = rd.IsDBNull(19) ? "N" : rd.GetString(19);
 
                 string? audioUrl = temAudio ? $"/api/tickets/audio/{codigo}?t={codigo}" : null;
-                // Se tem áudio, não usa caminhoImagem para não duplicar
                 string? imagemUrl = temImagem ? $"/api/tickets/anexo/{codigo}" : (temAudio ? null : caminhoImagem);
 
                 var transcricao = rd["TranscricaoAudio"] == DBNull.Value ? "" : rd["TranscricaoAudio"].ToString();
@@ -1384,7 +1378,8 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
                     VideoUrl = videoUrl,
                     VideoMimeType = videoMimeType,
                     VideoFileName = videoFileName,
-                    CodMensagemRespondida = rd["CodMensagemRespondida"] == DBNull.Value || (int)rd["CodMensagemRespondida"] == 0 ? null : (int?)rd["CodMensagemRespondida"],
+                    CodMensagemRespondida = rd["CodMensagemRespondida"] == DBNull.Value || (int)rd["CodMensagemRespondida"] == 0
+                        ? null : (int?)rd["CodMensagemRespondida"],
                     TextoMensagemRespondida = rd["TextoMensagemRespondida"]?.ToString(),
                     UsuarioMensagemRespondida = rd["UsuarioMensagemRespondida"]?.ToString(),
                     Interno = rd["Interno"]?.ToString() ?? "N",
@@ -1402,38 +1397,36 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
             await con.OpenAsync();
 
             var sql = @"
-    SELECT 
-        Codigo, CodTicketChamadoC, Anotacao, DataHora, Usuario,
-        CaminhoImagem,
-        CASE WHEN Imagem IS NOT NULL AND LEN(Imagem) > 0 THEN 1 ELSE 0 END AS TemImagem,
-        NomeImagem, EnvioCliente,
-        ISNULL(NovaAgenda, 'N'), DataHoraAgenda,
-        ISNULL(AgendaResolvida, 'N'), UltimaNotificacaoAgenda,
-        ISNULL(NotificarAgenda, 'S'),
-        CASE WHEN Audio IS NOT NULL AND LEN(Audio) > 0 THEN 1 ELSE 0 END AS TemAudio,
-        AudioMimeType, AudioFileName,
-        ISNULL(StatusWhatsApp, ''),
-        ISNULL(Alterado, 'N'),
-        ISNULL(MensagemExcluida, 'N'),
-        TranscricaoAudio,
-        ISNULL(AudioTranscrito, 'N') AS AudioTranscrito,
-        CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
-        VideoMimeType, VideoFileName,
-        ISNULL(CodMensagemRespondida, 0) AS CodMensagemRespondida,
-        ISNULL(TextoMensagemRespondida, '') AS TextoMensagemRespondida,
-        ISNULL(UsuarioMensagemRespondida, '') AS UsuarioMensagemRespondida,
-        ISNULL(Interno, 'N') AS Interno
-    FROM TicketChamadoD
-    WHERE CodTicketChamadoC = @Id AND CodEmp = @CodEmp
-      AND Codigo > @UltimoCodigo
-      AND ISNULL(StatusWhatsApp, '') <> 'ia_processing'
-    ORDER BY DataHora DESC";
+SELECT
+    Codigo, CodTicketChamadoC, Anotacao, DataHora, Usuario,
+    CaminhoImagem,
+    CASE WHEN Imagem IS NOT NULL THEN 1 ELSE 0 END AS TemImagem,
+    NomeImagem, EnvioCliente,
+    ISNULL(NovaAgenda, 'N'), DataHoraAgenda,
+    ISNULL(AgendaResolvida, 'N'), UltimaNotificacaoAgenda,
+    ISNULL(NotificarAgenda, 'S'),
+    CASE WHEN Audio IS NOT NULL THEN 1 ELSE 0 END AS TemAudio,
+    AudioMimeType, AudioFileName,
+    ISNULL(StatusWhatsApp, ''),
+    ISNULL(Alterado, 'N'),
+    ISNULL(MensagemExcluida, 'N'),
+    TranscricaoAudio,
+    ISNULL(AudioTranscrito, 'N') AS AudioTranscrito,
+    CASE WHEN Video IS NOT NULL THEN 1 ELSE 0 END AS TemVideo,
+    VideoMimeType, VideoFileName,
+    ISNULL(CodMensagemRespondida, 0) AS CodMensagemRespondida,
+    ISNULL(TextoMensagemRespondida, '') AS TextoMensagemRespondida,
+    ISNULL(UsuarioMensagemRespondida, '') AS UsuarioMensagemRespondida,
+    ISNULL(Interno, 'N') AS Interno
+FROM TicketChamadoD
+WHERE CodTicketChamadoC = @Id AND CodEmp = @CodEmp
+  AND Codigo > @UltimoCodigo
+  AND ISNULL(StatusWhatsApp, '') <> 'ia_processing'
+ORDER BY DataHora DESC";
 
             using var cmd = new SqlCommand(sql, con);
             AddCodEmp(cmd);
-            AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Id", id);
-            AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@UltimoCodigo", ultimoCodigo);
 
             using var rd = await cmd.ExecuteReaderAsync();
@@ -1493,7 +1486,8 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
                     VideoUrl = videoUrl,
                     VideoMimeType = videoMimeType,
                     VideoFileName = videoFileName,
-                    CodMensagemRespondida = rd["CodMensagemRespondida"] == DBNull.Value || (int)rd["CodMensagemRespondida"] == 0 ? null : (int?)rd["CodMensagemRespondida"],
+                    CodMensagemRespondida = rd["CodMensagemRespondida"] == DBNull.Value || (int)rd["CodMensagemRespondida"] == 0
+                        ? null : (int?)rd["CodMensagemRespondida"],
                     TextoMensagemRespondida = rd["TextoMensagemRespondida"]?.ToString(),
                     UsuarioMensagemRespondida = rd["UsuarioMensagemRespondida"]?.ToString(),
                     Interno = rd["Interno"]?.ToString() ?? "N",
@@ -1533,8 +1527,8 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
         {
             using var con = new SqlConnection(_conn);
             await con.OpenAsync();
-            using var cmd = new SqlCommand("SELECT Celular FROM Cliente WHERE Codigo = @Cod AND CodEmp = @CodEmp", con);
-            AddCodEmp(cmd);
+            using var cmd = new SqlCommand(
+                "SELECT Celular FROM Cliente WHERE Codigo = @Cod AND CodEmp = @CodEmp", con);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Cod", codCliente);
             var result = await cmd.ExecuteScalarAsync();
@@ -1549,18 +1543,16 @@ CASE WHEN Video IS NOT NULL AND LEN(Video) > 0 THEN 1 ELSE 0 END AS TemVideo,
             await conn.OpenAsync();
 
             var sql = @"
-        SELECT Codigo, CodCliente, NomeComputador, CodigoAcesso
-        FROM ClienteAcessoRemoto
-        WHERE CodCliente = @CodCliente AND CodEmp = @CodEmp
-        ORDER BY NomeComputador";
+SELECT Codigo, CodCliente, NomeComputador, CodigoAcesso
+FROM ClienteAcessoRemoto
+WHERE CodCliente = @CodCliente AND CodEmp = @CodEmp
+ORDER BY NomeComputador";
 
             using var cmd = new SqlCommand(sql, conn);
-            AddCodEmp(cmd);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@CodCliente", codCliente);
 
             using var reader = await cmd.ExecuteReaderAsync();
-
             while (await reader.ReadAsync())
             {
                 lista.Add(new AcessoRemotoModel
@@ -2110,46 +2102,86 @@ VALUES
 
                 int ticketId;
                 using (var cmd = new SqlCommand(@"
-                    INSERT INTO TicketChamadoC
-                    (CodEmp, Status,CodSetor,CodCategoria,DataAbertura,DataHoraAbertura,
-                     Usuario,CodUsuario,UsuarioUltimaGravacao,DataHoraUltimaGravacao,
-                     CodCliente,Assunto,CodSituacao,Novo,CodTipo,Prioridade,
-                     UsuarioAbertura,EnvioMassa,TelefoneWhatsApp)
-                    OUTPUT INSERTED.Codigo
-                    VALUES
-                    (@CodEmp,1,@Setor,NULL,CAST(GETDATE() AS DATE),GETDATE(),
-                     @UsuarioDestino,@CodUsuario,@UsuarioAbertura,GETDATE(),
-                     @Cliente,@Assunto,@Situacao,@Novo,@CodTipo,@Prioridade,
-                     @UsuarioAbertura,@EnvioMassa,@TelefoneWhatsApp)", conn, tx))
+    DECLARE @NovoTicket TABLE (Codigo INT);
+
+    INSERT INTO TicketChamadoC
+    (
+        CodEmp,
+        Status,
+        CodSetor,
+        CodCategoria,
+        DataAbertura,
+        DataHoraAbertura,
+        Usuario,
+        CodUsuario,
+        UsuarioUltimaGravacao,
+        DataHoraUltimaGravacao,
+        CodCliente,
+        Assunto,
+        CodSituacao,
+        Novo,
+        CodTipo,
+        Prioridade,
+        UsuarioAbertura,
+        EnvioMassa,
+        TelefoneWhatsApp
+    )
+    OUTPUT INSERTED.Codigo INTO @NovoTicket (Codigo)
+    VALUES
+    (
+        @CodEmp,
+        1,
+        @Setor,
+        NULL,
+        CAST(GETDATE() AS DATE),
+        GETDATE(),
+        @UsuarioDestino,
+        @CodUsuario,
+        @UsuarioAbertura,
+        GETDATE(),
+        @Cliente,
+        @Assunto,
+        @Situacao,
+        @Novo,
+        @CodTipo,
+        @Prioridade,
+        @UsuarioAbertura,
+        @EnvioMassa,
+        @TelefoneWhatsApp
+    );
+
+    SELECT Codigo FROM @NovoTicket;
+", conn, tx))
                 {
-                    AddCodEmp(cmd);
+                    AddCodEmp(cmd); // Somente uma vez
+
                     cmd.Parameters.AddWithValue("@Setor", codSetor);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@UsuarioDestino", usuarioDestino);
-                    AddCodEmp(cmd);
-                    cmd.Parameters.AddWithValue("@CodUsuario", (object?)codUsuarioCliente ?? DBNull.Value);
-                    AddCodEmp(cmd);
+                    cmd.Parameters.AddWithValue(
+                        "@CodUsuario",
+                        (object?)codUsuarioCliente ?? DBNull.Value);
+
                     cmd.Parameters.AddWithValue("@Cliente", codCliente);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@Assunto", assunto);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@Situacao", codSituacao);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@CodTipo", codTipo);
-                    AddCodEmp(cmd);
-                    cmd.Parameters.AddWithValue("@Prioridade", prioridade <= 0 ? 2 : prioridade);
-                    AddCodEmp(cmd);
+                    cmd.Parameters.AddWithValue(
+                        "@Prioridade",
+                        prioridade <= 0 ? 2 : prioridade);
+
                     cmd.Parameters.AddWithValue("@UsuarioAbertura", usuarioAberturaBanco);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@Novo", novoFlag);
-                    AddCodEmp(cmd);
                     cmd.Parameters.AddWithValue("@EnvioMassa", envioMassa);
-                    AddCodEmp(cmd);
-                    cmd.Parameters.AddWithValue("@TelefoneWhatsApp",
+
+                    cmd.Parameters.AddWithValue(
+                        "@TelefoneWhatsApp",
                         string.IsNullOrWhiteSpace(telefoneWhatsApp)
-                            ? DBNull.Value : NormalizarTelefone(telefoneWhatsApp));
+                            ? DBNull.Value
+                            : NormalizarTelefone(telefoneWhatsApp));
+
                     ticketId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
                 }
+
 
                 using (var cmd = new SqlCommand(@"
                     INSERT INTO TicketChamadoD
@@ -3016,6 +3048,7 @@ SET
     CodCliente = @CodCliente,
     Assunto = @Assunto,
     ObservacaoCliente = @ObservacaoCliente,
+    UsuarioAbertura = @UsuarioAbertura,
     CodSituacao = @Situacao,
     CodSetor = @CodSetor,
     CodTipo = @CodTipo,
@@ -3057,6 +3090,7 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn);
             cmdUpdate.Parameters.AddWithValue("@Versao", ticket.Versao ?? "");
             AddCodEmp(cmdUpdate);
             cmdUpdate.Parameters.AddWithValue("@UsuarioQueSalvou", usuario);
+            cmdUpdate.Parameters.AddWithValue("@UsuarioAbertura", ticket.UsuarioAbertura ?? "");
 
             await cmdUpdate.ExecuteNonQueryAsync();
 
@@ -3514,7 +3548,103 @@ ORDER BY D.DataHora ASC", conn);
             return lista;
         }
 
+        public async Task<int> CriarClienteRapidoAsync(string nome)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
 
+            using var cmd = new SqlCommand(@"
+        INSERT INTO Cliente (CodEmp, Nome, Apelido)
+        OUTPUT INSERTED.Codigo
+        VALUES (@CodEmp, @Nome, @Nome)", conn);
+
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@Nome", nome.Trim());
+
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        }
+
+        public async Task<List<ClienteModel>> BuscarClientesComTelefoneAsync(string termo)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            var termoLimpo = (termo ?? "").Trim();
+            var termoSoDigitos = new string(termoLimpo.Where(char.IsDigit).ToArray());
+
+            var cmd = new SqlCommand(@"
+SELECT TOP 15
+    C.Codigo,
+    ISNULL(NULLIF(LTRIM(RTRIM(C.Apelido)),''), ISNULL(C.Nome,'')) AS NomeExibicao
+FROM Cliente C
+WHERE C.CodEmp = @CodEmp
+  AND (
+        C.Nome LIKE @Busca
+        OR C.Apelido LIKE @Busca
+        OR CAST(C.Codigo AS VARCHAR(20)) = @Termo
+        OR REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(C.Celular,''), '-', ''), '(', ''), ')', ''), ' ', '') LIKE @BuscaDigitos
+        OR REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(C.Telefone,''), '-', ''), '(', ''), ')', ''), ' ', '') LIKE @BuscaDigitos
+        OR EXISTS (
+            SELECT 1 FROM TicketChamadoC T
+            WHERE T.CodEmp = C.CodEmp
+              AND T.CodCliente = C.Codigo
+              AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                      ISNULL(T.TelefoneWhatsApp,''),
+                  '+',''),'-',''),'(',''),')',''),' ','') LIKE @BuscaDigitos
+        )
+        OR EXISTS (
+            SELECT 1 FROM TicketChamadoC T
+            WHERE T.CodEmp = C.CodEmp
+              AND T.CodCliente = C.Codigo
+              AND ISNULL(T.UsuarioAbertura,'') LIKE @Busca
+              AND ISNULL(T.TelefoneWhatsApp,'') <> ''
+        )
+  )
+ORDER BY
+    CASE WHEN ISNULL(C.ClienteMensalista,'N') = 'S' THEN 0 ELSE 1 END,
+    ISNULL(NULLIF(LTRIM(RTRIM(C.Apelido)),''), ISNULL(C.Nome,''))", conn);
+
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@Busca", "%" + termoLimpo + "%");
+            cmd.Parameters.AddWithValue("@Termo", termoLimpo);
+            cmd.Parameters.AddWithValue("@BuscaDigitos",
+                string.IsNullOrWhiteSpace(termoSoDigitos) ? "%" + termoLimpo + "%" : "%" + termoSoDigitos + "%");
+
+            var resultado = new List<ClienteModel>();
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                resultado.Add(new ClienteModel
+                {
+                    Codigo = reader.GetInt32(0),
+                    Nome = reader.IsDBNull(1) ? "" : reader.GetString(1)
+                });
+            }
+
+            return resultado;
+        }
+
+        public async Task SalvarCelularClienteAsync(int codCliente, string celular)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+        UPDATE Cliente
+        SET Celular = @Celular,
+            DataHoraUltimaGravacao = GETDATE(),
+            UsuarioUltimaGravacao = @Usuario
+        WHERE Codigo = @CodCliente
+          AND CodEmp = @CodEmp", conn);
+
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+            cmd.Parameters.AddWithValue("@Celular", celular.Trim());
+            cmd.Parameters.AddWithValue("@Usuario", _state.CurrentUser ?? "HELP");
+
+            await cmd.ExecuteNonQueryAsync();
+        }
 
         private static string SoDigitos(string? s) =>
             new string((s ?? "").Where(char.IsDigit).ToArray());

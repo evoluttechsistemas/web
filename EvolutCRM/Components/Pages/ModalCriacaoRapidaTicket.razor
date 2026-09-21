@@ -1,0 +1,1219 @@
+﻿@inject EvolutCRM.Services.TicketService TicketSvc
+@inject NavigationManager Nav
+@inject UserState UserState
+@inject IJSRuntime JS
+@using EvolutCRM.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.Processing
+@using SixLabors.ImageSharp.Formats.Jpeg
+
+<style>
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-rapido {
+        background: var(--surface, #fff);
+        border-radius: 12px;
+        width: 560px;
+        max-width: 95vw;
+        max-height: 92vh;
+        overflow-y: auto;
+        box-shadow: 0 8px 32px rgba(0,0,0,.2);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .modal-rapido-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        background: var(--primary, #1a56db);
+        color: #fff;
+        font-weight: 600;
+        font-size: 15px;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .btn-fechar {
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 18px;
+        cursor: pointer;
+        line-height: 1;
+        opacity: .8;
+    }
+
+        .btn-fechar:hover {
+            opacity: 1;
+        }
+
+    .modal-rapido-body {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .campo-grupo {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        position: relative;
+    }
+
+        .campo-grupo label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary, #555);
+        }
+
+    .input-campo {
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 8px;
+        padding: 9px 12px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color .15s;
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--surface, #fff);
+        color: var(--text, #111);
+    }
+
+        .input-campo:focus {
+            border-color: var(--primary, #1a56db);
+        }
+
+    .input-selecionado {
+        border-color: #22c55e !important;
+        background: #f0fdf4;
+    }
+
+    .textarea-mensagem {
+        resize: vertical;
+        min-height: 100px;
+        font-family: inherit;
+    }
+
+    .dropdown-sugestoes {
+        position: absolute;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        background: var(--surface, #fff);
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.12);
+        z-index: 200;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .sugestao-item {
+        padding: 9px 14px;
+        font-size: 14px;
+        cursor: pointer;
+        color: var(--text, #111);
+        transition: background .1s;
+    }
+
+        .sugestao-item:hover {
+            background: var(--hover, #f3f4f6);
+        }
+
+    .sugestao-novo {
+        color: var(--primary, #1a56db);
+        font-style: italic;
+    }
+
+    .hint-novo {
+        font-size: 12px;
+        color: #f59e0b;
+        margin-top: 2px;
+    }
+
+    .erro-msg {
+        font-size: 13px;
+        color: #ef4444;
+        background: #fef2f2;
+        border-radius: 6px;
+        padding: 8px 12px;
+    }
+
+    .modal-rapido-footer {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        padding: 14px 20px;
+        border-top: 1px solid var(--border, #e5e7eb);
+        position: sticky;
+        bottom: 0;
+        background: #fff;
+        z-index: 2;
+    }
+
+    .btn-cancelar {
+        background: none;
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 8px;
+        padding: 8px 18px;
+        font-size: 14px;
+        cursor: pointer;
+        color: var(--text, #333);
+    }
+
+        .btn-cancelar:hover {
+            background: var(--hover, #f3f4f6);
+        }
+
+    .btn-criar {
+        background: var(--primary, #1a56db);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 22px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity .15s;
+    }
+
+        .btn-criar:hover {
+            opacity: .9;
+        }
+
+        .btn-criar:disabled, .btn-cancelar:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+        }
+
+    /* Contatos */
+    .contatos-lista {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .contato-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 12px;
+        font-size: 13px;
+        border-bottom: 1px solid var(--border, #f3f4f6);
+    }
+
+        .contato-item:last-child {
+            border-bottom: none;
+        }
+
+    .contato-nome {
+        font-weight: 600;
+        color: var(--text, #111);
+    }
+
+    .contato-fone {
+        font-size: 12px;
+        color: var(--text-secondary, #555);
+        font-family: monospace;
+    }
+
+    /* Caixa de anexos / mídia */
+    .anexo-box {
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 8px;
+        padding: 12px;
+        background: #f8fbff;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .ferramentas-midia {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .tool-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1e40af;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: .13s ease;
+    }
+
+        .tool-btn:hover {
+            background: #dbeafe;
+            transform: translateY(-1px);
+        }
+
+        .tool-btn.gravando {
+            background: #fee2e2 !important;
+            border-color: #fecaca !important;
+            color: #991b1b !important;
+            animation: pulseRecModal 1s infinite;
+        }
+
+    @@keyframes pulseRecModal {
+        0% {
+            box-shadow: 0 0 0 rgba(220,38,38,0);
+        }
+
+        50% {
+            box-shadow: 0 0 0 5px rgba(220,38,38,.20);
+        }
+
+        100% {
+            box-shadow: 0 0 0 rgba(220,38,38,0);
+        }
+    }
+
+    .label-ferramenta {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 700;
+    }
+
+    .audio-mini-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,.72);
+        border: 1px solid rgba(203,213,225,.7);
+        border-radius: 999px;
+        padding: 5px 7px;
+        width: fit-content;
+        max-width: 100%;
+    }
+
+    .audio-mini-player {
+        height: 28px;
+        width: 200px;
+        min-width: 140px;
+        max-width: 100%;
+    }
+
+    .btn-remover-midia {
+        border: none;
+        background: #fee2e2;
+        color: #991b1b;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 800;
+        padding: 4px 10px;
+        cursor: pointer;
+    }
+
+    .preview-img {
+        max-width: 100%;
+        max-height: 120px;
+        border-radius: 8px;
+        border: 1px solid #90caf9;
+        margin-top: 4px;
+    }
+
+    .info-arquivo {
+        font-size: 11px;
+        color: #0d47a1;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .contato-selecionado {
+        background: #f0fdf4 !important;
+        border-left: 3px solid #22c55e;
+    }
+
+    .contato-item:hover {
+        background: var(--hover, #f3f4f6);
+    }
+</style>
+
+@if (Visivel)
+{
+    <div class="modal-overlay">
+        <div class="modal-rapido">
+
+            <div class="modal-rapido-header">
+                <span>⚡ Novo Ticket Rápido</span>
+                <button class="btn-fechar" @onclick="Fechar">✕</button>
+            </div>
+
+            <div class="modal-rapido-body">
+
+                <!-- Campo Cliente -->
+                <div class="campo-grupo">
+                    <label>Cliente</label>
+                    <input value="@_termoCliente"
+                           @oninput="OnTermoClienteChange"
+                           placeholder="Cliente, telefone ou nome de contato..."
+                           class="input-campo @(_clienteSelecionado ? "input-selecionado" : "")"
+                           autocomplete="off" />
+
+                    @if (_sugestoes.Any())
+                    {
+                        <div class="dropdown-sugestoes">
+                            @foreach (var c in _sugestoes)
+                            {
+                                <div class="sugestao-item" @onclick="() => SelecionarCliente(c)">
+                                    @c.Nome
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(_termoCliente) && !_clienteSelecionado)
+                            {
+                                <div class="sugestao-item sugestao-novo" @onclick="UsarComoNovo">
+                                    ➕ Criar cliente "<strong>@_termoCliente</strong>"
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (_mostrarSalvarContato)
+                    {
+                        <div style="border: 1px solid #fcd34d; border-radius: 8px; background: #fffbeb; padding: 12px; margin-top: 6px; display: flex; flex-direction: column; gap: 10px;">
+                            <div style="font-size: 12px; font-weight: 700; color: #92400e;">
+                                📵 Número não encontrado — deseja salvar como novo contato?
+                            </div>
+
+                            <div class="campo-grupo" style="margin: 0;">
+                                <label>Nome do contato</label>
+                                <input @bind="_nomeNovoContato"
+                                       placeholder="Ex.: Gabriel"
+                                       class="input-campo" />
+                            </div>
+
+                            <div class="campo-grupo" style="margin: 0; position: relative;">
+                                <label>Vincular ao cliente</label>
+                                <input value="@_termoBuscaClienteContato"
+                                       @oninput="OnBuscaClienteContatoChange"
+                                       placeholder="Buscar cliente..."
+                                       class="input-campo" />
+
+                                @if (_sugestoesClienteContato.Any())
+                                {
+                                    <div class="dropdown-sugestoes">
+                                        @foreach (var c in _sugestoesClienteContato)
+                                        {
+                                            <div class="sugestao-item" @onclick="() => SelecionarClienteContato(c)">
+                                                @c.Nome
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+
+                            <button type="button"
+                                    class="btn-criar"
+                                    style="width: 100%;"
+                                    @onclick="SalvarNovoContato"
+                                    disabled="@_salvandoContato">
+                                @(_salvandoContato ? "Salvando..." : "💾 Salvar contato e continuar")
+                            </button>
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(_termoCliente) && !_sugestoes.Any() && !_clienteSelecionado)
+                    {
+                        <div class="hint-novo">
+                            Cliente não encontrado — será criado como novo ao salvar.
+                        </div>
+                    }
+                </div>
+
+                <!-- Contatos do cliente -->
+                @if (_contatosCliente.Any())
+{
+    <div class="campo-grupo">
+        <label>Contatos do cliente @(_contatoSelecionado ? "— ✅ WhatsApp selecionado" : "— clique para usar via WhatsApp")</label>
+        <div class="contatos-lista">
+            @foreach (var c in _contatosCliente.Where(c => !_contatoSelecionado || c.Telefone == _telefoneWhatsApp))
+            {
+                var selecionado = c.Telefone == _telefoneWhatsApp;
+                <div class="contato-item @(selecionado ? "contato-selecionado" : "")"
+                     style="cursor:pointer;"
+                     @onclick="() => SelecionarContato(c)">
+                    <span class="contato-nome">
+                        @if (selecionado) { <text>✅ </text> }
+                        @c.Nome
+                    </span>
+                    <span class="contato-fone">@c.Telefone</span>
+                </div>
+            }
+        </div>
+                        @if (_contatoSelecionado)
+                        {
+                            <span style="font-size:11px; color:#64748b; cursor:pointer; margin-top:2px;"
+                                  @onclick="LimparContato">
+                                ✕ Trocar contato
+                            </span>
+                        }
+    </div>
+}
+
+                <!-- Campo Mensagem -->
+                <div class="campo-grupo">
+                    <label>Primeira mensagem</label>
+                    <textarea id="modalRapidoMensagem"
+                              @bind="_mensagem"
+                              placeholder="Descreva o problema ou solicitação..."
+                              class="input-campo textarea-mensagem"
+                              rows="4" />
+                </div>
+
+                <!-- Anexos / Mídia -->
+                <div class="campo-grupo">
+                    <label>Anexos e mídia</label>
+                    <div class="anexo-box">
+
+                        <div class="ferramentas-midia">
+                            <!-- Anexo de arquivo -->
+                            <label for="inputAnexoModal" class="tool-btn" title="Anexar arquivo" style="cursor:pointer;">
+                                📎
+                            </label>
+                            <InputFile id="inputAnexoModal"
+                                       OnChange="OnArquivoSelecionado"
+                                       accept=".pdf,.txt,.csv,.xml,.json,.jpg,.jpeg,.png,.gif,.webp,.bmp,.doc,.docx,.xls,.xlsx,.zip,.rar,.apk,.pfx,.p12"
+                                       style="display:none;" />
+
+                            <!-- Gravação de áudio -->
+                            @if (!_gravandoAudio)
+                            {
+                                <button type="button" class="tool-btn" title="Gravar áudio" @onclick="AlternarGravacaoAudio">🎤</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="tool-btn gravando" title="Parar áudio" @onclick="AlternarGravacaoAudio">⏹</button>
+                            }
+
+                            <!-- Gravação de tela -->
+                            @if (!_gravandoTela)
+                            {
+                                <button type="button" class="tool-btn" title="Gravar tela" @onclick="IniciarGravacaoTela">🎥</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="tool-btn gravando" title="Parar gravação" @onclick="PararGravacaoTela">⏹</button>
+                            }
+
+                            <span class="label-ferramenta">
+                                @if (_gravandoAudio)
+                                {
+                                    <text>Gravando áudio...</text>
+                                }
+                                else if (_gravandoTela)
+                                {
+
+                                    <text>Gravando tela...</text>
+                                }
+                                else
+                                {
+
+                                    <text>Áudio / Tela / Arquivo</text>
+                                }
+                            </span>
+                        </div>
+
+                        <!-- Preview áudio -->
+                        @if (!string.IsNullOrWhiteSpace(_previewAudio))
+                        {
+                            <div class="audio-mini-container">
+                                <span>🎧</span>
+                                <audio controls class="audio-mini-player" src="@_previewAudio"></audio>
+                                <button type="button" class="btn-remover-midia" @onclick="RemoverAudio">Remover</button>
+                            </div>
+                        }
+
+                        <!-- Preview vídeo gravado -->
+                        @if (_videoGravado != null)
+                        {
+                            <div class="info-arquivo">
+                                🎥 @_videoGravadoNome
+                                <button type="button" class="btn-remover-midia" @onclick="RemoverVideo">✕</button>
+                            </div>
+                        }
+
+                        <!-- Preview arquivo anexado -->
+                        @if (_arquivo != null)
+                        {
+                            var ext = System.IO.Path.GetExtension(_arquivo.Name).ToLowerInvariant();
+                            var ehImg = ext is ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp";
+
+                            <div class="info-arquivo">
+                                📎 @_arquivo.Name
+                                <button type="button" class="btn-remover-midia" @onclick="RemoverArquivo">✕</button>
+                            </div>
+
+                            @if (ehImg && !string.IsNullOrEmpty(_previewArquivo))
+                            {
+                                <img src="@_previewArquivo" class="preview-img" />
+                            }
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_erro))
+                {
+                    <div class="erro-msg">@_erro</div>
+                }
+            </div>
+
+            <div class="modal-rapido-footer">
+                <button class="btn-cancelar" @onclick="Fechar" disabled="@_salvando">Cancelar</button>
+                <button class="btn-criar" @onclick="Criar" disabled="@_salvando">
+                    @if (_salvando)
+                    {
+                        <span>Criando...</span>
+                    }
+                    else
+                    {
+
+                        <span>⚡ Criar Ticket</span>
+                    }
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+
+    private bool _mostrarSalvarContato = false;
+    private string _nomeNovoContato = "";
+    private string _termoBuscaClienteContato = "";
+    private List<ClienteModel> _sugestoesClienteContato = new();
+    private int _codClienteContato = 0;
+    private bool _salvandoContato = false;
+    private string _telefoneWhatsApp = "";
+    private string _nomeWhatsApp = "";
+    private bool _contatoSelecionado = false;
+    [Parameter] public bool Visivel { get; set; }
+    [Parameter] public EventCallback AoFechar { get; set; }
+    [Parameter] public EventCallback<int> AoCriar { get; set; }
+
+    // ── Cliente ──────────────────────────────────────────────────────────
+    private string _termoCliente = "";
+    private bool _clienteSelecionado = false;
+    private int _codClienteSelecionado = 0;
+    private List<ClienteModel> _sugestoes = new();
+    private List<WhatsAppContatoDto> _contatosCliente = new();
+    private CancellationTokenSource? _cts;
+
+    // ── Mensagem ─────────────────────────────────────────────────────────
+    private string _mensagem = "";
+    private string _erro = "";
+    private bool _salvando = false;
+
+    // ── Arquivo / imagem ─────────────────────────────────────────────────
+    private IBrowserFile? _arquivo;
+    private string? _previewArquivo;
+
+    // ── Áudio ────────────────────────────────────────────────────────────
+    private bool _gravandoAudio = false;
+    private byte[]? _audioGravado;
+    private string _audioMimeType = "";
+    private string _audioNome = "";
+    private string _previewAudio = "";
+
+    // ── Vídeo (gravação de tela) ─────────────────────────────────────────
+    private bool _gravandoTela = false;
+    private byte[]? _videoGravado;
+    private string _videoGravadoNome = "";
+    private string _videoGravadoMime = "";
+
+    // ── Paste JS ref ─────────────────────────────────────────────────────
+    private DotNetObjectReference<ModalCriacaoRapidaTicket>? _pasteRef;
+    private bool _pasteJsInicializado = false;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Lifecycle
+    // ─────────────────────────────────────────────────────────────────────
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Visivel && !_pasteJsInicializado)
+        {
+            _pasteJsInicializado = true;
+            _pasteRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("enablePasteImage", "modalRapidoMensagem", _pasteRef);
+        }
+        else if (!Visivel && _pasteJsInicializado)
+        {
+            _pasteJsInicializado = false;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Cliente — autocomplete
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task OnTermoClienteChange(ChangeEventArgs e)
+    {
+        _termoCliente = e.Value?.ToString() ?? "";
+        _clienteSelecionado = false;
+        _codClienteSelecionado = 0;
+        _contatosCliente = new();
+        _contatoSelecionado = false;
+        _telefoneWhatsApp = "";
+        _nomeWhatsApp = "";
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        if (_termoCliente.Length < 2)
+        {
+            _sugestoes = new();
+            return;
+        }
+
+        var termoBusca = _termoCliente;
+
+        await Task.Delay(250, token).ContinueWith(async t =>
+        {
+            if (t.IsCanceled) return;
+
+            var resultado = await TicketSvc.BuscarClientesComTelefoneAsync(termoBusca);
+
+            var termoSoDigitos = new string(termoBusca.Where(char.IsDigit).ToArray());
+
+            // Enriquece o nome com o contato — tanto para busca por número quanto por nome
+            foreach (var cli in resultado)
+            {
+                var contatos = await TicketSvc.BuscarTelefonesWhatsAppClienteAsync(cli.Codigo);
+
+                WhatsAppContatoDto? contatoMatch = null;
+                int qtdMatch = 0;
+
+                if (termoSoDigitos.Length >= 8)
+                {
+                    var matches = contatos.Where(x =>
+                        x.Telefone.Contains(termoSoDigitos) || termoSoDigitos.Contains(x.Telefone)).ToList();
+                    contatoMatch = matches.FirstOrDefault();
+                    qtdMatch = matches.Count;
+                }
+                else
+                {
+                    var matches = contatos.Where(x =>
+                        x.Nome.Contains(termoBusca, StringComparison.OrdinalIgnoreCase)).ToList();
+                    contatoMatch = matches.FirstOrDefault();
+                    qtdMatch = matches.Count;
+                }
+
+                if (contatoMatch != null)
+                {
+                    if (qtdMatch > 1)
+                        cli.Nome = $"{cli.Nome} — {contatoMatch.Nome} (+{qtdMatch - 1} contato{(qtdMatch > 2 ? "s" : "")})";
+                    else
+                        cli.Nome = $"{cli.Nome} — {contatoMatch.Nome}";
+                }
+            }
+
+            await InvokeAsync(() =>
+            {
+                _sugestoes = resultado;
+
+                // Se digitou número e não encontrou nenhum cliente, oferece salvar contato
+                var digits = new string(termoBusca.Where(char.IsDigit).ToArray());
+                _mostrarSalvarContato = resultado.Count == 0 && digits.Length >= 8;
+
+                StateHasChanged();
+            });
+        });
+    }
+
+    private async Task SelecionarCliente(ClienteModel c)
+    {
+        var termoBusca = _termoCliente;
+
+        _termoCliente = c.Nome;
+        _codClienteSelecionado = c.Codigo;
+        _clienteSelecionado = true;
+        _sugestoes = new();
+        _telefoneWhatsApp = "";
+        _nomeWhatsApp = "";
+        _contatoSelecionado = false;
+
+        var todosContatos = await TicketSvc.BuscarTelefonesWhatsAppClienteAsync(c.Codigo);
+
+        var termoSoDigitos = new string(termoBusca.Where(char.IsDigit).ToArray());
+
+        if (termoSoDigitos.Length >= 8)
+        {
+            // Buscou por número — filtra por telefone
+            var matches = todosContatos.Where(x =>
+                x.Telefone.Contains(termoSoDigitos) || termoSoDigitos.Contains(x.Telefone)).ToList();
+
+            if (matches.Count == 1)
+            {
+                // Só um — seleciona direto
+                _telefoneWhatsApp = matches[0].Telefone;
+                _nomeWhatsApp = matches[0].Nome;
+                _contatoSelecionado = true;
+                _termoCliente = $"{c.Nome} — {matches[0].Nome}";
+                _contatosCliente = new();
+            }
+            else
+            {
+                _contatosCliente = matches;
+            }
+        }
+        else
+        {
+            // Buscou por nome — filtra contatos pelo nome digitado
+            var matches = todosContatos.Where(x =>
+                x.Nome.Contains(termoBusca, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            if (matches.Count == 1)
+            {
+                // Só um — seleciona direto
+                _telefoneWhatsApp = matches[0].Telefone;
+                _nomeWhatsApp = matches[0].Nome;
+                _contatoSelecionado = true;
+                _termoCliente = $"{c.Nome} — {matches[0].Nome}";
+                _contatosCliente = new();
+            }
+            else if (matches.Count > 1)
+            {
+                // Vários — mostra só os que batem
+                _contatosCliente = matches;
+            }
+            else
+            {
+                // Nenhum bate pelo nome — mostra todos
+                _contatosCliente = todosContatos;
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private void SelecionarContato(WhatsAppContatoDto contato)
+    {
+        _telefoneWhatsApp = contato.Telefone;
+        _nomeWhatsApp = contato.Nome;
+        _contatoSelecionado = true;
+        StateHasChanged();
+    }
+
+    private void UsarComoNovo()
+    {
+        _clienteSelecionado = false;
+        _codClienteSelecionado = 0;
+        _sugestoes = new();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Arquivo / imagem colada
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task OnArquivoSelecionado(InputFileChangeEventArgs e)
+    {
+        _arquivo = e.File;
+        _previewArquivo = null;
+
+        if (_arquivo == null) return;
+
+        try
+        {
+            var ext = System.IO.Path.GetExtension(_arquivo.Name).ToLowerInvariant();
+            var ehImg = _arquivo.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+            if (ehImg)
+            {
+                using var stream = _arquivo.OpenReadStream(20 * 1024 * 1024);
+                using var ms = new System.IO.MemoryStream();
+                await stream.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
+                _previewArquivo = $"data:{_arquivo.ContentType};base64,{base64}";
+            }
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao carregar arquivo: " + ex.Message;
+            _arquivo = null;
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>Chamado pelo JS quando o usuário cola uma imagem no textarea.</summary>
+    [JSInvokable]
+    public async Task OnImagemColada(string base64, string contentType)
+    {
+        try
+        {
+            var bytes = Convert.FromBase64String(base64.Split(',')[1]);
+            if (bytes.Length > 10 * 1024 * 1024)
+            {
+                _erro = "Imagem muito grande. Máximo: 10 MB.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            var stream = new System.IO.MemoryStream(bytes);
+            var redimensionado = await RedimensionarImagemAsync(stream);
+            var b64 = Convert.ToBase64String(redimensionado);
+            _previewArquivo = $"data:image/jpeg;base64,{b64}";
+
+            _arquivo = new BrowserFileFromStream(
+                new System.IO.MemoryStream(redimensionado),
+                "image/jpeg",
+                "clipboard.jpg"
+            );
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao processar imagem colada: " + ex.Message;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<byte[]> RedimensionarImagemAsync(System.IO.Stream input)
+    {
+        using var image = await Image.LoadAsync(input);
+        const int maxW = 1920, maxH = 1080;
+
+        if (image.Width > maxW || image.Height > maxH)
+            image.Mutate(x => x.Resize(new ResizeOptions { Size = new Size(maxW, maxH), Mode = ResizeMode.Max }));
+
+        using var output = new System.IO.MemoryStream();
+        await image.SaveAsJpegAsync(output, new JpegEncoder { Quality = 85 });
+        return output.ToArray();
+    }
+
+    private void RemoverArquivo()
+    {
+        _arquivo = null;
+        _previewArquivo = null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Áudio
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task AlternarGravacaoAudio()
+    {
+        if (!_gravandoAudio)
+        {
+            _gravandoAudio = true;
+            await JS.InvokeVoidAsync("ticketAudio.start");
+        }
+        else
+        {
+            _gravandoAudio = false;
+            var retorno = await JS.InvokeAsync<AudioResult>("ticketAudio.stop");
+            _audioGravado = Convert.FromBase64String(retorno.base64);
+            _audioMimeType = retorno.mimeType;
+            _audioNome = "audio_" + DateTime.Now.ToString("yyyyMMddHHmmss") + ".ogg";
+            _previewAudio = $"data:{retorno.mimeType};base64,{retorno.base64}";
+        }
+    }
+
+    private void RemoverAudio()
+    {
+        _audioGravado = null;
+        _audioMimeType = "";
+        _audioNome = "";
+        _previewAudio = "";
+        _gravandoAudio = false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Vídeo / gravação de tela
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task IniciarGravacaoTela()
+    {
+        try
+        {
+            await JS.InvokeAsync<bool>("evolutScreenRecorder.iniciar");
+            _gravandoTela = true;
+            await JS.InvokeVoidAsync("crmToast", "🎥 Gravação iniciada.", "success");
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("crmToast", "Erro ao iniciar gravação: " + ex.Message, "danger");
+        }
+    }
+
+    private async Task PararGravacaoTela()
+    {
+        try
+        {
+            var retorno = await JS.InvokeAsync<ScreenRecordResult>("evolutScreenRecorder.parar");
+            _videoGravado = Convert.FromBase64String(retorno.Base64);
+            _videoGravadoNome = retorno.FileName;
+            _videoGravadoMime = retorno.MimeType;
+            _gravandoTela = false;
+            await JS.InvokeVoidAsync("crmToast", "✅ Vídeo anexado.", "success");
+        }
+        catch (Exception ex)
+        {
+            _gravandoTela = false;
+            await JS.InvokeVoidAsync("crmToast", "Erro ao parar gravação: " + ex.Message, "danger");
+        }
+    }
+
+    private void RemoverVideo()
+    {
+        _videoGravado = null;
+        _videoGravadoNome = "";
+        _videoGravadoMime = "";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Criar ticket
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task Criar()
+    {
+        _erro = "";
+
+        if (string.IsNullOrWhiteSpace(_termoCliente))
+        {
+            _erro = "Informe o cliente.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_mensagem))
+        {
+            _erro = "Informe a primeira mensagem.";
+            return;
+        }
+
+        _salvando = true;
+
+        try
+        {
+            int codCliente = _codClienteSelecionado;
+            if (codCliente == 0)
+                codCliente = await TicketSvc.CriarClienteRapidoAsync(_termoCliente.Trim());
+
+            // 1. Cria o ticket com a mensagem e o arquivo (se houver)
+            var ticketId = await TicketSvc.CriarChamadoComAnexoAsync(
+assunto: _mensagem.Trim().Length > 80
+    ? _mensagem.Trim()[..80] + "..."
+    : _mensagem.Trim(),
+descricao: _mensagem.Trim(),
+codCliente: codCliente,
+codSetor: 1,
+codSituacao: 1,
+codTipo: _contatoSelecionado ? 5 : 1,
+prioridade: 2,
+usuarioResponsavel: UserState.CurrentUser ?? "NOVO",
+arquivo: _arquivo,
+usuarioAbertura: UserState.CurrentUser ?? "NOVO",
+telefoneWhatsApp: _contatoSelecionado ? _telefoneWhatsApp : null,
+nomeWhatsApp: _contatoSelecionado ? _nomeWhatsApp : null
+);
+
+            // 2. Se tem áudio ou vídeo, salva como mensagem adicional no ticket
+            var temMidia = (_audioGravado != null && _audioGravado.Length > 0)
+                        || (_videoGravado != null && _videoGravado.Length > 0);
+
+            if (temMidia)
+            {
+                var ticketParaMidia = await TicketSvc.BuscarChamadoAsync(ticketId);
+                if (ticketParaMidia != null)
+                {
+                    await TicketSvc.SalvarAlteracoesAsync(
+                        ticket: ticketParaMidia,
+                        anotacao: "",
+                        usuarioQueSalvou: UserState.CurrentUser ?? "NOVO",
+                        imagem: null,
+                        videoBytes: _videoGravado,
+                        videoMimeType: string.IsNullOrWhiteSpace(_videoGravadoMime) ? null : _videoGravadoMime,
+                        videoFileName: string.IsNullOrWhiteSpace(_videoGravadoNome) ? null : _videoGravadoNome,
+                        audioBytes: _audioGravado,
+                        audioMimeType: string.IsNullOrWhiteSpace(_audioMimeType) ? null : _audioMimeType,
+                        audioFileName: string.IsNullOrWhiteSpace(_audioNome) ? null : _audioNome
+                    );
+                }
+            }
+
+            await AoCriar.InvokeAsync(ticketId);
+            Limpar();
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao criar ticket: " + ex.Message;
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private void LimparContato()
+    {
+        _contatoSelecionado = false;
+        _telefoneWhatsApp = "";
+        _nomeWhatsApp = "";
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Fechar / limpar
+    // ─────────────────────────────────────────────────────────────────────
+
+    private async Task Fechar()
+    {
+        Limpar();
+        await AoFechar.InvokeAsync();
+    }
+
+    private void Limpar()
+    {
+        _termoCliente = "";
+        _mensagem = "";
+        _erro = "";
+        _clienteSelecionado = false;
+        _codClienteSelecionado = 0;
+        _sugestoes = new();
+        _contatosCliente = new();
+        _arquivo = null;
+        _previewArquivo = null;
+        _audioGravado = null;
+        _audioMimeType = "";
+        _audioNome = "";
+        _previewAudio = "";
+        _gravandoAudio = false;
+        _videoGravado = null;
+        _videoGravadoNome = "";
+        _videoGravadoMime = "";
+        _gravandoTela = false;
+        _pasteJsInicializado = false;
+        _telefoneWhatsApp = "";
+        _nomeWhatsApp = "";
+        _contatoSelecionado = false;
+        _mostrarSalvarContato = false;
+        _nomeNovoContato = "";
+        _termoBuscaClienteContato = "";
+        _sugestoesClienteContato = new();
+        _codClienteContato = 0;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // DTOs auxiliares (mesmos do Ticket.razor)
+    // ─────────────────────────────────────────────────────────────────────
+
+    private class AudioResult
+    {
+        public string base64 { get; set; } = "";
+        public string mimeType { get; set; } = "";
+    }
+
+    private class ScreenRecordResult
+    {
+        public string FileName { get; set; } = "";
+        public string MimeType { get; set; } = "";
+        public string Base64 { get; set; } = "";
+    }
+
+    private async Task OnBuscaClienteContatoChange(ChangeEventArgs e)
+    {
+        _termoBuscaClienteContato = e.Value?.ToString() ?? "";
+        _codClienteContato = 0;
+
+        if (_termoBuscaClienteContato.Length < 2)
+        {
+            _sugestoesClienteContato = new();
+            return;
+        }
+
+        _sugestoesClienteContato = await TicketSvc.BuscarClientesAsync(_termoBuscaClienteContato);
+        StateHasChanged();
+    }
+
+    private void SelecionarClienteContato(ClienteModel c)
+    {
+        _codClienteContato = c.Codigo;
+        _termoBuscaClienteContato = c.Nome;
+        _sugestoesClienteContato = new();
+        StateHasChanged();
+    }
+
+    private async Task SalvarNovoContato()
+    {
+        if (string.IsNullOrWhiteSpace(_nomeNovoContato))
+        {
+            _erro = "Informe o nome do contato.";
+            return;
+        }
+
+        if (_codClienteContato <= 0)
+        {
+            _erro = "Selecione o cliente para vincular.";
+            return;
+        }
+
+        var termoSoDigitos = new string(_termoCliente.Where(char.IsDigit).ToArray());
+        if (termoSoDigitos.Length < 8)
+        {
+            _erro = "Número inválido.";
+            return;
+        }
+
+        _salvandoContato = true;
+
+        try
+        {
+            await TicketSvc.SalvarCelularClienteAsync(_codClienteContato, termoSoDigitos);
+
+            // Seleciona o cliente automaticamente
+            var clienteSelecionado = new ClienteModel
+            {
+                Codigo = _codClienteContato,
+                Nome = _termoBuscaClienteContato
+            };
+
+            _termoCliente = $"{clienteSelecionado.Nome} — {_nomeNovoContato}";
+            _codClienteSelecionado = _codClienteContato;
+            _clienteSelecionado = true;
+            _telefoneWhatsApp = termoSoDigitos;
+            _nomeWhatsApp = _nomeNovoContato;
+            _contatoSelecionado = true;
+            _mostrarSalvarContato = false;
+            _sugestoes = new();
+            _contatosCliente = new();
+            _erro = "";
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao salvar contato: " + ex.Message;
+        }
+        finally
+        {
+            _salvandoContato = false;
+            StateHasChanged();
+        }
+    }
+}

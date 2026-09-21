@@ -41,10 +41,11 @@ namespace EvolutCRM.Services
             await conn.OpenAsync();
 
             await using var cmd = new SqlCommand(@"
-        SELECT TOP 1 Id, Tipo, Mensagem
-        FROM DeployNotificacao
-        WHERE Lido = 0
-        ORDER BY DataHora DESC", conn);
+    SELECT TOP 1 Id, Tipo, Mensagem
+    FROM DeployNotificacao
+    WHERE Lido = 0
+      AND DataHora >= DATEADD(MINUTE, -10, GETDATE())
+    ORDER BY DataHora DESC", conn);
 
             await using var rd = await cmd.ExecuteReaderAsync();
 

@@ -49,9 +49,7 @@ function Send-FtpFileWithRetry($url, $credential, $bytes, $maxTentativas = 3) {
             return $true
         } catch {
             $tentativa++
-            if ($tentativa -lt $maxTentativas) {
-                Start-Sleep -Seconds 2
-            }
+            if ($tentativa -lt $maxTentativas) { Start-Sleep -Seconds 2 }
         }
     }
     return $false
@@ -114,11 +112,7 @@ foreach ($file in $files) {
     $remoteSize = Get-FtpFileSize $ftpUrl $credential
     if ($remoteSize -ne $file.Length) {
         $arquivosAlterados += @{ File = $file; Url = $ftpUrl; Relative = $relative }
-
-        # Qualquer DLL ou PDB exige parada do servico
-        if ($relative -match '\.(dll|pdb)$') {
-            $precisaReiniciar = $true
-        }
+        if ($relative -match '\.(dll|pdb)$') { $precisaReiniciar = $true }
     }
 }
 
@@ -142,9 +136,7 @@ if (-not $precisaReiniciar) {
     Write-Host ''
     Write-Host '>>> Apenas arquivos estaticos alterados. Enviando sem parar o servico...' -ForegroundColor Cyan
 
-    $count    = 0
-    $enviados = 0
-    $falhas   = @()
+    $count = 0; $enviados = 0; $falhas = @()
 
     foreach ($item in $arquivosAlterados) {
         $count++
@@ -158,20 +150,13 @@ if (-not $precisaReiniciar) {
 
     Write-Progress -Activity 'Enviando arquivos...' -Completed
 
-    if ($falhas.Count -gt 0) {
-        Write-Host "    AVISO: $($falhas.Count) arquivo(s) nao enviado(s):" -ForegroundColor Yellow
-        $falhas | ForEach-Object { Write-Host "      - $_" -ForegroundColor Yellow }
-    }
-
-    Write-Host "    $enviados arquivo(s) enviado(s)!" -ForegroundColor Green
-
     try {
         Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('atualizacao', '$versao', 'Sistema atualizado! Recarregue a pagina para ver as novidades.')"
-        Write-Host '    Notificacao enviada!' -ForegroundColor Green
     } catch {
         Write-Host '    AVISO: Nao foi possivel enviar notificacao SQL.' -ForegroundColor Yellow
     }
 
+    Write-Host "    $enviados arquivo(s) enviado(s)!" -ForegroundColor Green
     Write-Host ''
     Write-Host '============================================' -ForegroundColor Green
     Write-Host "  Deploy $versao concluido com sucesso!" -ForegroundColor Green
@@ -180,82 +165,25 @@ if (-not $precisaReiniciar) {
 }
 
 # ============================================================
-# PASSO 4: AVISO 5 MINUTOS
+# PASSO 4: COLOCAR SITE EM MANUTENCAO IMEDIATAMENTE
 # ============================================================
 Write-Host ''
-Write-Host '>>> Notificando usuarios (aviso 5 minutos)...' -ForegroundColor Cyan
-
-try {
-    Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('aviso5min', '$versao', 'O sistema sera reiniciado em 5 minutos devido a uma atualizacao.')"
-    Write-Host '    Aviso de 5 minutos enviado!' -ForegroundColor Green
-} catch {
-    Write-Host '    AVISO: Nao foi possivel enviar aviso SQL.' -ForegroundColor Yellow
-}
-
-# ============================================================
-# PASSO 5: AGUARDAR 4:30
-# ============================================================
-Write-Host ''
-Write-Host '>>> Aguardando 4 minutos e 30 segundos...' -ForegroundColor Gray
-
-$totalSecs = 270
-for ($i = $totalSecs; $i -ge 1; $i--) {
-    $mins = [math]::Floor($i / 60)
-    $secs = $i % 60
-    Write-Progress -Activity 'Aguardando aviso final...' -Status "Faltam $mins min $secs seg" -PercentComplete (($totalSecs - $i) / $totalSecs * 100)
-    Start-Sleep -Seconds 1
-}
-Write-Progress -Activity 'Aguardando aviso final...' -Completed
-
-# ============================================================
-# PASSO 6: AVISO 30 SEGUNDOS
-# ============================================================
-Write-Host ''
-Write-Host '>>> Notificando usuarios (aviso 30 segundos)...' -ForegroundColor Cyan
-
-try {
-    Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('aviso30seg', '$versao', 'Atencao! O sistema sera fechado em 30 segundos devido a uma atualizacao.')"
-    Write-Host '    Aviso de 30 segundos enviado!' -ForegroundColor Green
-} catch {
-    Write-Host '    AVISO: Nao foi possivel enviar aviso SQL.' -ForegroundColor Yellow
-}
-
-# ============================================================
-# PASSO 7: AGUARDAR 30 SEGUNDOS
-# ============================================================
-Write-Host ''
-Write-Host '>>> Aguardando 30 segundos...' -ForegroundColor Gray
-
-for ($i = 30; $i -ge 1; $i--) {
-    Write-Progress -Activity 'Aguardando reinicio...' -Status "Faltam $i seg" -PercentComplete ((30 - $i) / 30 * 100)
-    Start-Sleep -Seconds 1
-}
-Write-Progress -Activity 'Aguardando reinicio...' -Completed
-
-# ============================================================
-# PASSO 8: COLOCAR SITE EM MANUTENCAO
-# ============================================================
-Write-Host ''
-Write-Host '>>> Colocando site em manutencao...' -ForegroundColor Cyan
+Write-Host '>>> Colocando site em manutencao agora...' -ForegroundColor Yellow
 
 $offlineContent = [System.Text.Encoding]::UTF8.GetBytes('<html><body><h2>Atualizando sistema, aguarde...</h2></body></html>')
 $offlineUrl     = $ftpHost.TrimEnd('/') + '/app_offline.htm'
 
 Send-FtpFile $offlineUrl $credential $offlineContent
 Write-Host '    app_offline.htm criado. Aguardando processo encerrar...' -ForegroundColor Gray
-
-# Aguarda o processo dotnet terminar de vez (era 2s, agora 12s)
 Start-Sleep -Seconds 12
 
 # ============================================================
-# PASSO 9: ENVIAR TODOS OS ARQUIVOS ALTERADOS
+# PASSO 5: ENVIAR TODOS OS ARQUIVOS ALTERADOS
 # ============================================================
 Write-Host ''
 Write-Host '>>> Enviando todos os arquivos alterados...' -ForegroundColor Cyan
 
-$count    = 0
-$enviados = 0
-$falhas   = @()
+$count = 0; $enviados = 0; $falhas = @()
 
 foreach ($item in $arquivosAlterados) {
     $count++
@@ -276,7 +204,7 @@ Write-Progress -Activity 'Enviando arquivos...' -Completed
 Write-Host "    $enviados/$($arquivosAlterados.Count) arquivo(s) enviado(s)." -ForegroundColor Green
 
 # ============================================================
-# PASSO 10: REATIVAR SITE
+# PASSO 6: REATIVAR SITE
 # ============================================================
 Write-Host ''
 Write-Host '>>> Reativando site...' -ForegroundColor Cyan
@@ -286,27 +214,20 @@ try {
     $delReq.Credentials = $credential
     $delReq.Method = [System.Net.WebRequestMethods+Ftp]::DeleteFile
     $delReq.GetResponse().Close()
-    Write-Host '    app_offline.htm removido. Site reativado!' -ForegroundColor Green
+    Write-Host '    Site reativado!' -ForegroundColor Green
 } catch {
     Write-Host '    AVISO: Nao foi possivel remover app_offline.htm automaticamente.' -ForegroundColor Yellow
     Write-Host '    Remova manualmente via FileZilla para o site voltar.' -ForegroundColor Yellow
 }
 
 # ============================================================
-# PASSO 11: NOTIFICAR CONCLUSAO
+# PASSO 7: NOTIFICAR CONCLUSAO
 # ============================================================
-if ($falhas.Count -eq 0) {
-    try {
-        Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('atualizacao', '$versao', 'Sistema atualizado para a versao $versao! Recarregue a pagina para ver as novidades.')"
-        Write-Host '    Notificacao de conclusao enviada!' -ForegroundColor Green
-    } catch {
-        Write-Host '    AVISO: Nao foi possivel enviar notificacao SQL.' -ForegroundColor Yellow
-    }
-} else {
-    Write-Host ''
-    Write-Host "    ATENCAO: $($falhas.Count) arquivo(s) nao foram enviados:" -ForegroundColor Red
-    $falhas | ForEach-Object { Write-Host "      - $_" -ForegroundColor Red }
-    Write-Host '    Verifique e reenvie manualmente se necessario.' -ForegroundColor Red
+try {
+    Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('atualizacao', '$versao', 'Sistema atualizado para a versao $versao! Recarregue a pagina para ver as novidades.')"
+    Write-Host '    Notificacao de conclusao enviada!' -ForegroundColor Green
+} catch {
+    Write-Host '    AVISO: Nao foi possivel enviar notificacao SQL.' -ForegroundColor Yellow
 }
 
 # ============================================================
@@ -320,5 +241,6 @@ if ($falhas.Count -eq 0) {
 } else {
     Write-Host '============================================' -ForegroundColor Yellow
     Write-Host "  Deploy $versao concluido COM AVISOS." -ForegroundColor Yellow
+    Write-Host "  $($falhas.Count) arquivo(s) nao enviado(s) - verifique acima." -ForegroundColor Yellow
     Write-Host '============================================' -ForegroundColor Yellow
 }

@@ -70,8 +70,7 @@ namespace EvolutCRM.Services
         private long _slowQueries;
         private long _exceptions;
 
-        private string _baileysStatus = "Conectando...";
-        private DateTime _baileysConnectedSince = DateTime.Now;
+        private readonly Dictionary<string, (string Status, DateTime? ConnectedSince)> _baileysInstancias = new();
 
         // Evento para notificar o Blazor
         public event Action? OnNewLog;
@@ -97,7 +96,7 @@ namespace EvolutCRM.Services
         // ADICIONA O LOG NA FILA
         // ============================================================
 
-        private void AddEntry(HealthLogEntry entry)
+        private void AddEntry(HealthLogEntry entry, bool countAsException = true)
         {
             var queue = _logs[entry.Category];
 
@@ -106,8 +105,9 @@ namespace EvolutCRM.Services
             while (queue.Count > MaxPerCategory)
                 queue.TryDequeue(out _);
 
-            if (entry.Severity == LogSeverity.Error ||
-                entry.Severity == LogSeverity.Critical)
+            if (countAsException &&
+    (entry.Severity == LogSeverity.Error ||
+     entry.Severity == LogSeverity.Critical))
             {
                 Interlocked.Increment(ref _exceptions);
             }
@@ -171,22 +171,22 @@ namespace EvolutCRM.Services
         // ============================================================
 
         public void LogMsgFailed(
-            LogCategory cat,
-            string id,
-            string reason,
+    LogCategory cat,
+    string id,
+    string reason,
 
-            int? codTicketChamadoC = null,
-            int? codTicketChamadoD = null,
-            int? codCliente = null,
-            string? cliente = null,
-            string? telefoneWhatsApp = null,
-            string? messageIdWhatsApp = null,
-            string? instanciaWhatsApp = null,
-            Exception? exception = null,
+    int? codTicketChamadoC = null,
+    int? codTicketChamadoD = null,
+    int? codCliente = null,
+    string? cliente = null,
+    string? telefoneWhatsApp = null,
+    string? messageIdWhatsApp = null,
+    string? instanciaWhatsApp = null,
+    Exception? exception = null,
 
-            [CallerFilePath] string sourceFile = "",
-            [CallerMemberName] string sourceMember = "",
-            [CallerLineNumber] int sourceLine = 0)
+    [CallerFilePath] string sourceFile = "",
+    [CallerMemberName] string sourceMember = "",
+    [CallerLineNumber] int sourceLine = 0)
         {
             Interlocked.Increment(ref _sendFailures);
 
@@ -221,7 +221,7 @@ namespace EvolutCRM.Services
                 ExceptionLine: exceptionOrigin.Line
             );
 
-            AddEntry(entry);
+            AddEntry(entry, countAsException: false); // ← não duplica no contador Exceptions
         }
 
 
@@ -248,27 +248,35 @@ namespace EvolutCRM.Services
         // ============================================================
 
         public void LogBaileysStatus(
-            string status,
-            bool connected,
+    string instancia,   // ← ex: "5517991816997" ou "Instância #23"
+    string status,
+    bool connected,
 
-            [CallerFilePath] string sourceFile = "",
-            [CallerMemberName] string sourceMember = "",
-            [CallerLineNumber] int sourceLine = 0)
+    [CallerFilePath] string sourceFile = "",
+    [CallerMemberName] string sourceMember = "",
+    [CallerLineNumber] int sourceLine = 0)
         {
-            _baileysStatus = status;
-
-            if (connected)
-                _baileysConnectedSince = DateTime.Now;
-
-            var sev = connected
-                ? LogSeverity.Success
-                : LogSeverity.Error;
+            lock (_baileysInstancias)
+            {
+                if (!_baileysInstancias.ContainsKey(instancia) || connected)
+                {
+                    _baileysInstancias[instancia] = (
+                        status,
+                        connected ? DateTime.Now : _baileysInstancias.GetValueOrDefault(instancia).ConnectedSince
+                    );
+                }
+                else
+                {
+                    var atual = _baileysInstancias[instancia];
+                    _baileysInstancias[instancia] = (status, atual.ConnectedSince);
+                }
+            }
 
             var entry = new HealthLogEntry(
                 Timestamp: DateTime.Now,
-                Severity: sev,
+                Severity: connected ? LogSeverity.Success : LogSeverity.Error,
                 Category: LogCategory.Baileys,
-                Message: $"Gateway: {status}",
+                Message: $"Gateway [{instancia}]: {status}",
 
                 SourceFile: GetFileName(sourceFile),
                 SourceMember: sourceMember,
@@ -277,11 +285,6 @@ namespace EvolutCRM.Services
 
             AddEntry(entry);
         }
-
-
-        // ============================================================
-        // EXCEPTION
-        // ============================================================
 
         public void LogException(
             LogCategory cat,
@@ -356,14 +359,30 @@ namespace EvolutCRM.Services
         // SNAPSHOT
         // ============================================================
 
-        public HealthSnapshot GetSnapshot() => new(
-            MsgsSent: _msgsSent,
-            SendFailures: _sendFailures,
-            SlowQueries: _slowQueries,
-            Exceptions: _exceptions,
-            BaileysStatus: _baileysStatus,
-            BaileysUptime: DateTime.Now - _baileysConnectedSince
-        );
+        public HealthSnapshot GetSnapshot()
+        {
+            List<BaileysInstanciaInfo> instancias;
+            lock (_baileysInstancias)
+            {
+                instancias = _baileysInstancias
+                    .Select(kv => new BaileysInstanciaInfo(
+                        Numero: kv.Key,
+                        Status: kv.Value.Status,
+                        Uptime: kv.Value.ConnectedSince.HasValue
+                            ? DateTime.Now - kv.Value.ConnectedSince.Value
+                            : TimeSpan.Zero
+                    ))
+                    .ToList();
+            }
+
+            return new HealthSnapshot(
+                MsgsSent: _msgsSent,
+                SendFailures: _sendFailures,
+                SlowQueries: _slowQueries,
+                Exceptions: _exceptions,
+                Instancias: instancias
+            );
+        }
 
 
         // ============================================================
@@ -373,39 +392,28 @@ namespace EvolutCRM.Services
         public void ClearAll()
         {
             foreach (var q in _logs.Values)
-            {
-                while (q.TryDequeue(out _))
-                {
-                }
-            }
+                while (q.TryDequeue(out _)) { }
 
             Interlocked.Exchange(ref _msgsSent, 0);
             Interlocked.Exchange(ref _sendFailures, 0);
             Interlocked.Exchange(ref _slowQueries, 0);
             Interlocked.Exchange(ref _exceptions, 0);
+
+            lock (_baileysInstancias)
+                _baileysInstancias.Clear();
+
+            OnNewLog?.Invoke();
         }
-
-
-        // ============================================================
-        // TTL
-        // ============================================================
-
         private void PurgExpired()
         {
             var cutoff = DateTime.Now - LogTtl;
 
             foreach (var queue in _logs.Values)
             {
-                var fresh = queue
-                    .Where(x => x.Timestamp >= cutoff)
-                    .ToList();
+                var expired = queue.Where(x => x.Timestamp < cutoff).Count();
 
-                while (queue.TryDequeue(out _))
-                {
-                }
-
-                foreach (var e in fresh)
-                    queue.Enqueue(e);
+                for (int i = 0; i < expired; i++)
+                    queue.TryDequeue(out _);
             }
         }
 
@@ -483,14 +491,18 @@ namespace EvolutCRM.Services
     }
 
 
+    public record BaileysInstanciaInfo(
+    string Numero,
+    string Status,
+    TimeSpan Uptime
+);
+
     public record HealthSnapshot(
         long MsgsSent,
         long SendFailures,
         long SlowQueries,
         long Exceptions,
-        string BaileysStatus,
-        TimeSpan BaileysUptime
+        List<BaileysInstanciaInfo> Instancias
     );
-
 
 }

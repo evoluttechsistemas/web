@@ -316,6 +316,7 @@ ComissoesPagas AS
     FROM Cliente C
     INNER JOIN PrimeiroPagamento PP
         ON PP.CodCliente = C.Codigo
+        AND PP.OrdemPagamento = 1
     WHERE C.CodEmp = @CodEmp
 ),
 ClientesTestando AS
