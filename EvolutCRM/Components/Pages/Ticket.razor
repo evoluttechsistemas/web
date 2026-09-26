@@ -24,6 +24,8 @@
 @inject EvolutCRM.Services.HealthMonitorService HealthMonitor
 @inject ParametroDinamicoService ParametroService
 @inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
+@inject AdminService AdminService
+
 
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap');
@@ -2355,6 +2357,51 @@ textarea[id^="obsAnotacao_"] {
     height: 38px !important;
     overflow-y: auto !important;
 }
+
+
+    .ticket-versoes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 6px 0;
+    }
+
+    .ticket-versao-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #d9e6f5;
+        background: #eaf4ff;
+        color: #0d47a1;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+        .ticket-versao-badge b {
+            font-weight: 900;
+        }
+
+        .ticket-versao-badge.status-ok {
+            background: #dcfce7;
+            color: #166534;
+            border-color: #bbf7d0;
+        }
+
+        .ticket-versao-badge.status-danger {
+            background: #ffe4e6;
+            color: #b91c1c;
+            border-color: #fecdd3;
+        }
+
+        .ticket-versao-badge.status-empty {
+            background: #f1f5f9;
+            color: #64748b;
+            border-color: #cbd5e1;
+        }
 </style>
 
 @if (Carregando)
@@ -2756,7 +2803,7 @@ else
     var ticketEhWhatsApp = !string.IsNullOrWhiteSpace(TicketAtual.TelefoneWhatsApp);
     var telefoneOrigemWhats = ticketEhWhatsApp ? TicketAtual.TelefoneWhatsApp : NumeroTelefone;
 
-    <div class="container-ticket ticket-modern-container">
+    <div class="container-ticket ticket-modern-container" @onclick="() => _mostrarPopoverVersoes = false">
 
         <header class="ticket-modern-topbar">
             <div class="ticket-header-left">
@@ -2776,6 +2823,65 @@ else
                                     <small>@telefoneOrigemWhats</small>
                                 }
                             </span>
+                        }
+
+                        @if (versoesCliente != null && versoesCliente.Any())
+                        {
+                            var melhorPc = versoesCliente
+                                .Where(p => !string.IsNullOrWhiteSpace(p.Versao))
+                                .OrderByDescending(p => CriarChaveVersao(p.Versao!))
+                                .FirstOrDefault() ?? versoesCliente.First();
+
+                            var totalPcs = versoesCliente.Count;
+
+                            <div style="position:relative;">
+                                <span class="ticket-versao-badge @GetStatusClass(melhorPc)"
+                                      title="Clique para ver todos os computadores"
+                                      style="cursor:pointer;"
+                                      @onclick="() => _mostrarPopoverVersoes = !_mostrarPopoverVersoes"
+                                      @onclick:stopPropagation="true">
+                                    🖥️ @melhorPc.NomeComputador
+                                    <b>@(string.IsNullOrWhiteSpace(melhorPc.Versao) ? "sem versão" : melhorPc.Versao)</b>
+                                    @if (totalPcs > 1)
+                                    {
+                                        <span style="margin-left:4px; background:rgba(0,0,0,.18);
+                                            border-radius:999px; padding:1px 7px; font-size:10px;">
+                                            +@(totalPcs - 1)
+                                        </span>
+                                    }
+                                </span>
+
+                                @if (_mostrarPopoverVersoes)
+                                {
+                                    <div style="position:absolute; top:calc(100% + 8px); left:0; z-index:9999;
+                                        min-width:320px; background:#fff; border:1.5px solid #bfdbfe;
+                                        border-radius:14px; box-shadow:0 12px 32px rgba(13,71,161,.18);
+                                        padding:10px; display:flex; flex-direction:column; gap:6px;"
+                                         @onclick:stopPropagation="true">
+
+                                        <div style="font-size:10px; font-weight:900; color:#64748b;
+                                            text-transform:uppercase; letter-spacing:.06em; margin-bottom:2px;">
+                                            Computadores do cliente
+                                        </div>
+
+                                        @foreach (var pc in versoesCliente.OrderByDescending(p => CriarChaveVersao(p.Versao ?? "")))
+                                        {
+                                            <div style="display:flex; align-items:center; justify-content:space-between;
+                                                gap:10px; padding:7px 10px; border-radius:9px;
+                                                background:@(EstaNaUltimaVersao(pc.Versao) ? "#dcfce7" : string.IsNullOrWhiteSpace(pc.Versao) ? "#f1f5f9" : "#ffe4e6");
+                                                border:1px solid @(EstaNaUltimaVersao(pc.Versao) ? "#bbf7d0" : string.IsNullOrWhiteSpace(pc.Versao) ? "#cbd5e1" : "#fecdd3");">
+                                                <span style="font-size:11px; font-weight:700; color:#0f172a;">
+                                                    🖥️ @pc.NomeComputador
+                                                </span>
+                                                <span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:900;
+                                                    color:@(EstaNaUltimaVersao(pc.Versao) ? "#166534" : string.IsNullOrWhiteSpace(pc.Versao) ? "#64748b" : "#b91c1c");">
+                                                    @(string.IsNullOrWhiteSpace(pc.Versao) ? "sem versão" : pc.Versao)
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
                         }
                     </div>
                 </div>
@@ -3331,28 +3437,26 @@ else
                             <!-- CAMPO DE MENSAGEM -->
                             <textarea id="obsAnotacao_@id"
                                       rows="2"
-                                      value="@NovaAnotacao"
-                                      @oninput="OnInputMensagem"
                                       @onblur="OnBlurMensagem"
-                                      @onfocus="() => _usuarioEstaDigitando = true"
+                                      @onfocus="OnFocusMensagem"
                                       spellcheck="true"
                                       lang="pt-BR"
                                       autocomplete="on"
                                       placeholder="Digite sua mensagem..."
                                       style="flex:1;
-                                        min-width:0;
-                                        border:none !important;
-                                        outline:none;
-                                        resize:none;
-                                        min-height:24px !important;
-                                        max-height:70px !important;
-                                        font-size:15px !important;
-                                        font-family:'IBM Plex Sans',sans-serif;
-                                        line-height:1.5;
-                                        background:transparent !important;
-                                        color:#0f172a !important;
-                                        padding:4px 0;
-                                        box-shadow:none !important;">
+                            min-width:0;
+                            border:none !important;
+                            outline:none;
+                            resize:none;
+                            min-height:24px !important;
+                            max-height:70px !important;
+                            font-size:15px !important;
+                            font-family:'IBM Plex Sans',sans-serif;
+                            line-height:1.5;
+                            background:transparent !important;
+                            color:#0f172a !important;
+                            padding:4px 0;
+                            box-shadow:none !important;">
                         </textarea>
 
 
@@ -4506,25 +4610,53 @@ else
 </script>
 
 <script>
-        window.obsAnotacaoInit = (textareaId, dotnetRef) => {
+    window.iniciarCompositorTicket = (textareaId, dotnetRef) => {
         const el = document.getElementById(textareaId);
         if (!el) return;
 
-        el.addEventListener('keydown', (e) => {
+        if (el._ticketKeyHandler) {
+            el.removeEventListener('keydown', el._ticketKeyHandler);
+        }
+
+        el._ticketKeyHandler = async (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                // Limpa o campo imediatamente no DOM
-                const valor = el.value;
-                el.value = '';
-                // Avisa o Blazor para processar o envio
-                dotnetRef.invokeMethodAsync('EnviarMensagemViaJS', valor);
+                const texto = el.value.trim();
+
+                // Detecta qualquer mídia ou agenda pendente
+                const temMidia = document.querySelector('.btn-remover-midia') !== null;
+                const temAgenda = document.querySelector('input[type="datetime-local"]') !== null;
+                const temAudio = document.querySelector('.audio-mini-player') !== null;
+
+                if (!texto && !temMidia && !temAgenda && !temAudio) return;
+
+                const sucesso = await dotnetRef.invokeMethodAsync('EnviarMensagemViaJS', texto);
+                if (sucesso) {
+                    el.value = '';
+                }
             }
-        });
+        };
+
+        el.addEventListener('keydown', el._ticketKeyHandler);
     };
 </script>
 
-
 @code {
+
+    private bool _mostrarPopoverVersoes = false;
+    private List<AdminComputadorVersaoDto>? versoesCliente;
+    private string VersaoAtualEsperada = "";
+    private string _termoCliente = "";
+    private bool _clienteSelecionado = false;
+    private int _codClienteSelecionado = 0;
+    private List<ClienteModel> _sugestoes = new();
+    private List<WhatsAppContatoDto> _contatosCliente = new();
+    private CancellationTokenSource? _cts;
+    private string _telefoneWhatsApp = "";
+    private string _nomeWhatsApp = "";
+    private bool _contatoSelecionado = false;
+    private bool _mostrarSalvarContato = false;
+
 
     private bool _prevenirEnter = false;
     private bool _usuarioEstaDigitando = false;
@@ -5206,17 +5338,14 @@ private bool _finalizandoViaF2ComInsight = false;
         if (!PodeVisualizarTickets)
             return;
 
-        // Cancela timers do ticket anterior antes de carregar o novo
         _debounceTimer?.Dispose();
         _debounceTimer = null;
-
         _rascunhoTimer?.Dispose();
         _rascunhoTimer = null;
-
-        _rascunhoCarregado = false; // força recarregar o rascunho do novo ticket
+        _rascunhoCarregado = false;
+        _pasteJsInicializado = false; // ← ADD — força re-registro ao trocar de ticket
 
         await CarregarDados();
-
         IniciarControleVisualizacao();
     }
 
@@ -5350,24 +5479,36 @@ private bool _finalizandoViaF2ComInsight = false;
         }
 
         // ── Passo 5: re-renderiza, mas só se usuário não está digitando ───────
-        var usuarioDigitando = !string.IsNullOrWhiteSpace(NovaAnotacao);
+bool usuarioDigitando = false;
+try
+{
+    usuarioDigitando = await JS.InvokeAsync<bool>(
+        "eval",
+        $"document.activeElement?.id === 'obsAnotacao_{id}'");
+}
+catch { /* ignora se o componente foi desmontado */ }
 
-        if (!usuarioDigitando)
+if (!usuarioDigitando)
+{
+    await InvokeAsync(StateHasChanged);
+}
+else
+{
+    _ = Task.Run(async () =>
+    {
+        await Task.Delay(2000);
+        bool aindaDigitando = false;
+        try
         {
-            await InvokeAsync(StateHasChanged);
+            aindaDigitando = await JS.InvokeAsync<bool>(
+                "eval",
+                $"document.activeElement?.id === 'obsAnotacao_{id}'");
         }
-        else
-        {
-            // Agenda um re-render para depois que ele terminar de digitar
-            // O próximo ciclo do timer vai renderizar quando o campo estiver vazio
-            // As mensagens já estão na lista, só não renderizou ainda
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(2000); // espera 2s
-                if (!string.IsNullOrWhiteSpace(NovaAnotacao)) return; // ainda digitando, desiste
-                await InvokeAsync(StateHasChanged);
-            });
-        }
+        catch { }
+        if (aindaDigitando) return;
+        await InvokeAsync(StateHasChanged);
+    });
+}
 
         // ── Passo 6: restante do fluxo (ticket atualizado, badge, etc) ────────
         var ticketAtualizado = await TicketService.BuscarChamadoAsync(id);
@@ -5433,7 +5574,6 @@ private bool _finalizandoViaF2ComInsight = false;
             var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
             var eraNovo = TicketAtual.Novo == "S";
 
-            // ── Queries independentes em paralelo ──
             var tNome = TicketService.BuscarNomeCliente(TicketAtual.CodCliente);
             var tHistorico = TicketService.BuscarHistoricoAsync(id);
             var tTelefone = TicketService.BuscarTelefoneCliente(TicketAtual.CodCliente);
@@ -5448,7 +5588,7 @@ private bool _finalizandoViaF2ComInsight = false;
             if (eraNovo)
             {
                 var usuariosAutomaticos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA" };
+                { "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA" };
 
                 var temResponsavel = !string.IsNullOrWhiteSpace(TicketAtual.Usuario)
                     && !usuariosAutomaticos.Contains(TicketAtual.Usuario.Trim());
@@ -5459,7 +5599,6 @@ private bool _finalizandoViaF2ComInsight = false;
 
                 if (temResponsavel && visivelAgora)
                 {
-                    // ── Marcar lido + contar novos em paralelo ──
                     await Task.WhenAll(
                         TicketService.MarcarComoLidoSuporteAsync(TicketAtual.Codigo, UserState.CurrentUser ?? ""),
                         TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser)
@@ -5469,7 +5608,6 @@ private bool _finalizandoViaF2ComInsight = false;
                     TicketAtual.Novo = "N";
                 }
 
-                // Fire-and-forget — não bloqueia o carregamento
                 if (!string.IsNullOrWhiteSpace(TicketAtual.TelefoneWhatsApp)
                     && TicketAtual.CodInstanciaWhatsApp.HasValue
                     && TicketAtual.CodInstanciaWhatsApp.Value > 0)
@@ -5484,6 +5622,15 @@ private bool _finalizandoViaF2ComInsight = false;
             _codSetorOriginal = TicketAtual.CodSetor;
             _codSituacaoOriginal = TicketAtual.CodSituacao;
             _usuarioOriginal = (TicketAtual.Usuario ?? "").Trim();
+
+            // ← ADICIONADO AQUI — depois que TicketAtual está carregado
+            versoesCliente = await AdminService.ListarComputadoresPorClienteAsync(TicketAtual.CodCliente);
+
+            VersaoAtualEsperada = versoesCliente
+                .Select(p => p.Versao)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .OrderByDescending(v => CriarChaveVersao(v!))
+                .FirstOrDefault() ?? "";
         }
 
         Carregando = false;
@@ -5583,7 +5730,15 @@ private bool _finalizandoViaF2ComInsight = false;
 
     private async Task SalvarAlteracoes()
     {
-        // ── Captura o texto ANTES de qualquer await ──
+        if (!EhNovo && TicketAtual != null)
+        {
+            var valorDom = await JS.InvokeAsync<string>("eval",
+                $"document.getElementById('obsAnotacao_{id}')?.value ?? ''");
+
+            if (!string.IsNullOrWhiteSpace(valorDom))
+                NovaAnotacao = valorDom;
+        }
+
         var textoEnviando = NovaAnotacao;
 
         try
@@ -5703,7 +5858,6 @@ private bool _finalizandoViaF2ComInsight = false;
             {
                 NovaAnotacao = "";
                 await JS.InvokeVoidAsync("ticketRascunho.limpar", id);
-                // Força o DOM a refletir o campo vazio imediatamente
                 await JS.InvokeVoidAsync("eval",
                     $"var el = document.getElementById('obsAnotacao_{id}'); if(el) el.value = '';");
             }
@@ -5774,20 +5928,16 @@ private bool _finalizandoViaF2ComInsight = false;
     private bool PreventEnterSend { get; set; } = false;
 
     private async Task OnKeyDownAnotacao(KeyboardEventArgs e)
+{
+    // Define IMEDIATAMENTE, antes de qualquer await
+    _prevenirEnter = e.Key == "Enter" && !e.ShiftKey;
+
+    if (e.Key == "Enter" && !e.ShiftKey)
     {
-        if (e.Key == "Enter" && !e.ShiftKey)
-        {
-            // Previne a quebra de linha ANTES de qualquer await
-            _prevenirEnter = true;
-
-            await SalvarAlteracoes();
-
-            _prevenirEnter = false;
-            return;
-        }
-
+        await SalvarAlteracoes();
         _prevenirEnter = false;
     }
+}
 
     /// <summary>
     /// 🖼️ Redimensiona e comprime imagens para otimizar o banco de dados
@@ -6684,17 +6834,14 @@ CodTipo == 5 ? NomeWhatsApp : null
         if (!_pasteJsInicializado && !Carregando)
         {
             if (TicketAtual != null)
-            {
-                _pasteRef ??= DotNetObjectReference.Create<object>(this);
-                _dotnetRef = _pasteRef;
-                await JS.InvokeVoidAsync("enablePasteImage", $"obsAnotacao_{id}", _pasteRef);
-
-                // ← ADICIONAR ESTA LINHA
-                await JS.InvokeVoidAsync("obsAnotacaoInit", $"obsAnotacao_{id}", _pasteRef);
-
-                _pasteJsInicializado = true;
-                await JS.InvokeVoidAsync("eval", $"document.getElementById('obsAnotacao_{id}')?.focus()");
-            }
+    {
+        _pasteRef ??= DotNetObjectReference.Create<object>(this);
+        _dotnetRef = _pasteRef;
+        await JS.InvokeVoidAsync("enablePasteImage", $"obsAnotacao_{id}", _pasteRef);
+        await JS.InvokeVoidAsync("iniciarCompositorTicket", $"obsAnotacao_{id}", _pasteRef); // ← ADD
+        _pasteJsInicializado = true;
+        await JS.InvokeVoidAsync("eval", $"document.getElementById('obsAnotacao_{id}')?.focus()");
+    }
             else if (EhNovo)
             {
                 _pasteRef ??= DotNetObjectReference.Create<object>(this);
@@ -7434,7 +7581,6 @@ CodTipo == 5 ? NomeWhatsApp : null
             return;
         }
 
-        // ESC no modal de versão do F2 → cancela tudo
         if (_mostrarModalVersaoF2)
         {
             _mostrarModalVersaoF2 = false;
@@ -7442,14 +7588,12 @@ CodTipo == 5 ? NomeWhatsApp : null
             return;
         }
 
-        // ESC no modal de insight do F2 → finaliza sem insight
         if (_mostrarModalConfirmarF2)
         {
             await ConfirmarF2SemInsight();
             return;
         }
 
-        // ESC no modal F3 → finaliza sem insight
         if (!_mostrarModalConfirmarF3)
             return;
 
@@ -7473,7 +7617,6 @@ CodTipo == 5 ? NomeWhatsApp : null
 
         await InvokeAsync(StateHasChanged);
 
-        // ← Tira o foco do textarea após o modal abrir
         await JS.InvokeVoidAsync("eval", "document.activeElement?.blur()");
     }
 
@@ -7504,6 +7647,7 @@ CodTipo == 5 ? NomeWhatsApp : null
     }
 
     private async Task ConfirmarVersaoF1()
+
     {
         if (string.IsNullOrWhiteSpace(_versaoF1))
         {
@@ -7647,28 +7791,53 @@ CodTipo == 5 ? NomeWhatsApp : null
     AoDigitarMensagem();
 }
 
-    private async Task OnBlurMensagem()
-    {
-        _usuarioEstaDigitando = false;
+    private void OnFocusMensagem()
+{
+    _usuarioEstaDigitando = true;
+}
 
-        // Se tinha renderização pendente, executa agora
-        if (_renderizacaoPendente)
-        {
-            _renderizacaoPendente = false;
-            await InvokeAsync(StateHasChanged);
-        }
+// OnInputMensagem e OnBlurMensagem — mantenha OnBlurMensagem mas retire o sync de valor dele
+// (o valor já vem via JS antes de salvar)
+private async Task OnBlurMensagem()
+{
+    _usuarioEstaDigitando = false;
+    // Sincroniza o valor do campo com o estado Blazor ao perder o foco
+    NovaAnotacao = await JS.InvokeAsync<string>("eval",
+        $"document.getElementById('obsAnotacao_{id}')?.value ?? ''");
+
+    if (_renderizacaoPendente)
+    {
+        _renderizacaoPendente = false;
+        await InvokeAsync(StateHasChanged);
     }
+}
 
     [JSInvokable]
-    public async Task EnviarMensagemViaJS(string texto)
+    public async Task<bool> EnviarMensagemViaJS(string texto)
     {
-        if (string.IsNullOrWhiteSpace(texto))
-            return;
+        var temMidia = ArquivoAnotacao != null
+                   || VideoGravado != null
+                   || (audioGravado != null && audioGravado.Length > 0)
+                   || CriarAgenda;   // ← agenda também é mídia
 
-        // ── Mostra a mensagem imediatamente na tela (optimistic UI) ──
+        if (string.IsNullOrWhiteSpace(texto) && !temMidia)
+            return false;
+
+        NovaAnotacao = texto;
+
+        if (TicketAtual == null || string.IsNullOrWhiteSpace(TicketAtual.Usuario)
+            || EqUser(TicketAtual.Usuario, "NOVO"))
+        {
+            ResponsavelInvalido = true;
+            Mensagem = "Selecione um responsável antes de salvar o ticket.";
+            Sucesso = false;
+            await InvokeAsync(StateHasChanged);
+            return false;
+        }
+
         var mensagemLocal = new TicketChamadoDModel
         {
-            Codigo = -1, // temporário, substituído após salvar
+            Codigo = -1,
             CodTicketChamadoC = id,
             Anotacao = texto,
             DataHora = DateTime.Now,
@@ -7681,16 +7850,139 @@ CodTipo == 5 ? NomeWhatsApp : null
         };
 
         Historico.Insert(0, mensagemLocal);
-        await InvokeAsync(StateHasChanged); // aparece na tela imediatamente
+        await InvokeAsync(StateHasChanged);
 
-        // ── Agora salva no banco ──
-        NovaAnotacao = texto;
         await SalvarAlteracoes();
 
-        // ── Substitui a mensagem temporária pelo histórico real ──
         Historico = await TicketService.BuscarHistoricoAsync(id);
         _ultimoCodigoHistorico = Historico.Count > 0 ? Historico.Max(h => h.Codigo) : 0;
         await InvokeAsync(StateHasChanged);
+
+        return true;
     }
 
+private async Task OnTermoClienteChange(ChangeEventArgs e)
+    {
+        _termoCliente = e.Value?.ToString() ?? "";
+        _clienteSelecionado = false;
+        _codClienteSelecionado = 0;
+        _contatosCliente = new();
+        _contatoSelecionado = false;
+        _telefoneWhatsApp = "";
+        _nomeWhatsApp = "";
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+
+        if (_termoCliente.Length < 2)
+        {
+            _sugestoes = new();
+            return;
+        }
+
+        var termoBusca = _termoCliente;
+
+        await Task.Delay(250, token).ContinueWith(async t =>
+        {
+            if (t.IsCanceled) return;
+
+            var resultado = await TicketService.BuscarClientesComTelefoneAsync(termoBusca);
+
+            var termoSoDigitos = new string(termoBusca.Where(char.IsDigit).ToArray());
+
+            foreach (var cli in resultado)
+            {
+                var contatos = await TicketService.BuscarTelefonesWhatsAppClienteAsync(cli.Codigo);
+
+                WhatsAppContatoDto? contatoMatch = null;
+                int qtdMatch = 0;
+
+                if (termoSoDigitos.Length >= 8)
+                {
+                    var matches = contatos.Where(x =>
+                        x.Telefone.Contains(termoSoDigitos) || termoSoDigitos.Contains(x.Telefone)).ToList();
+                    contatoMatch = matches.FirstOrDefault();
+                    qtdMatch = matches.Count;
+                }
+                else
+                {
+                    var matches = contatos.Where(x =>
+                        x.Nome.Contains(termoBusca, StringComparison.OrdinalIgnoreCase)).ToList();
+                    contatoMatch = matches.FirstOrDefault();
+                    qtdMatch = matches.Count;
+                }
+
+                if (contatoMatch != null)
+                {
+                    if (qtdMatch > 1)
+                        cli.Nome = $"{cli.Nome} — {contatoMatch.Nome} (+{qtdMatch - 1} contato{(qtdMatch > 2 ? "s" : "")})";
+                    else
+                        cli.Nome = $"{cli.Nome} — {contatoMatch.Nome}";
+                }
+            }
+
+            await InvokeAsync(() =>
+            {
+                _sugestoes = resultado;
+
+                var digits = new string(termoBusca.Where(char.IsDigit).ToArray());
+                _mostrarSalvarContato = resultado.Count == 0 && digits.Length >= 8;
+
+                StateHasChanged();
+            });
+        });
+    }
+
+
+    private Version CriarChaveVersao(string versao)
+    {
+        var limpa = NormalizarVersao(versao);
+
+        var partes = limpa
+            .Split('.', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p =>
+            {
+                var numero = new string(p.Where(char.IsDigit).ToArray());
+                return int.TryParse(numero, out var n) ? n : 0;
+            })
+            .ToList();
+
+        while (partes.Count < 4)
+            partes.Add(0);
+
+        return new Version(partes[0], partes[1], partes[2], partes[3]);
+    }
+
+    private string NormalizarVersao(string versao)
+    {
+        return versao
+            .Trim()
+            .ToUpper()
+            .Replace("VERSAO", "")
+            .Replace("VERSÃO", "")
+            .Replace("V", "")
+            .Replace(" ", "");
+    }
+
+    private string GetStatusClass(AdminComputadorVersaoDto pc)
+    {
+        if (string.IsNullOrWhiteSpace(pc.Versao))
+            return "status-empty";
+
+        return EstaNaUltimaVersao(pc.Versao)
+            ? "status-ok"
+            : "status-danger";
+    }
+
+    private bool EstaNaUltimaVersao(string? versao)
+    {
+        if (string.IsNullOrWhiteSpace(versao) || string.IsNullOrWhiteSpace(VersaoAtualEsperada))
+            return false;
+
+        var versaoInstalada = CriarChaveVersao(versao);
+        var versaoEsperada = CriarChaveVersao(VersaoAtualEsperada);
+
+        return versaoInstalada >= versaoEsperada;
+    }
 }

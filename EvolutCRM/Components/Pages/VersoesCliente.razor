@@ -945,7 +945,17 @@
                         </a>
                     }
                 </div>
-                <span class="badge">@cliente.Computadores.Count computador(es)</span>
+                <span class="badge">@cliente.Computadores.Count computador(es) filtrado(s)</span>
+                @{
+                    var totalAtualizadosCliente = _atualizadosPorCliente
+                        .GetValueOrDefault(cliente.CodCliente, 0);
+                }
+                @if (totalAtualizadosCliente > 0)
+                {
+                    <span class="badge status-ok" style="margin-left:8px;">
+                        @totalAtualizadosCliente atualizado(s)
+                    </span>
+                }
             </div>
 
             <div class="table-wrap">
@@ -979,6 +989,14 @@
             </div>
         </div>
     }
+
+    @if (VersoesFiltradas.Any())
+    {
+        <div style="margin-top:16px;font-size:12px;color:var(--muted);font-weight:600;text-align:right;">
+            Exibindo @VersoesFiltradas.Count() cliente(s) ·
+            @VersoesFiltradas.Sum(c => c.Computadores.Count) computador(es)
+        </div>
+    }
 </div>
 
 @code {
@@ -1006,6 +1024,8 @@
             VersoesClientes = await AdminService.ListarVersoesClientesAsync();
 
             VersaoAtualEsperada = ObterUltimaVersaoDetectada();
+
+        RecalcularAtualizados();
 
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(20));
         _ = AutoRefreshLoop();
@@ -1039,6 +1059,8 @@
                             VersaoAtualEsperada = string.IsNullOrWhiteSpace(versaoDigitada)
                                 ? ObterUltimaVersaoDetectada()
                                 : versaoDigitada;
+
+                        RecalcularAtualizados();
 
                             StateHasChanged();
                         
@@ -1237,5 +1259,15 @@
             partes.Add(0);
 
         return new Version(partes[0], partes[1], partes[2], partes[3]);
+    }
+
+    private Dictionary<int, int> _atualizadosPorCliente = new();
+
+    private void RecalcularAtualizados()
+    {
+        _atualizadosPorCliente = VersoesClientes.ToDictionary(
+            c => c.CodCliente,
+            c => c.Computadores.Count(pc => EstaNaUltimaVersao(pc.Versao))
+        );
     }
 }

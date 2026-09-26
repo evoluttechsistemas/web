@@ -118,7 +118,7 @@ namespace EvolutCRM.APIEvolutTech.Controllers
         }
 
         [HttpGet("listar")]
-        public async Task<IActionResult> Listar([FromQuery] int codEmp = 0)
+        public async Task<IActionResult> Listar([FromQuery] int codEmp = 0, [FromQuery] bool todos = false)
         {
             try
             {
@@ -127,14 +127,21 @@ namespace EvolutCRM.APIEvolutTech.Controllers
                 using var conn = GetConn();
                 await conn.OpenAsync();
 
-                using var cmd = new SqlCommand(@"
-SELECT
-    Codigo, Nome, PastaAuth, Status,
-    Numero, DataCriacao, DataConexao, DataUltimoPing, QrCodeBase64, CodEmp
-FROM WhatsAppInstancia
-WHERE CodEmp = @CodEmp
-ORDER BY Codigo ASC", conn);
-                AddCodEmpOpcional(cmd, ResolverCodEmp(codEmp));
+                var sql = todos
+                    ? @"SELECT Codigo, Nome, PastaAuth, Status,
+                       Numero, DataCriacao, DataConexao, DataUltimoPing, QrCodeBase64, CodEmp
+                FROM WhatsAppInstancia
+                ORDER BY Codigo ASC"
+                    : @"SELECT Codigo, Nome, PastaAuth, Status,
+                       Numero, DataCriacao, DataConexao, DataUltimoPing, QrCodeBase64, CodEmp
+                FROM WhatsAppInstancia
+                WHERE CodEmp = @CodEmp
+                ORDER BY Codigo ASC";
+
+                using var cmd = new SqlCommand(sql, conn);
+
+                if (!todos)
+                    AddCodEmpOpcional(cmd, ResolverCodEmp(codEmp));
 
                 using var rd = await cmd.ExecuteReaderAsync();
                 while (await rd.ReadAsync())

@@ -483,15 +483,15 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
                 var paramNomes = variantes.Select((_, i) => "@T" + i).ToList();
 
                 using var cmdBusca = new SqlCommand($@"
-    SELECT TOP 1 CodCliente
-    FROM TicketChamadoC
-    WHERE CodEmp = @CodEmp
-      AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-              ISNULL(TelefoneWhatsApp,''),
-          '(',''),')',''),'-',''),' ',''),'+','')
-          IN ({string.Join(",", paramNomes)})
-      AND ISNULL(CodCliente,0) > 0
-    ORDER BY Codigo DESC", con);
+SELECT TOP 1 CodCliente
+FROM TicketChamadoC
+WHERE CodEmp = @CodEmp
+  AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+          ISNULL(TelefoneWhatsApp,''),
+      '(',''),')',''),'-',''),' ',''),'+','')
+      IN ({string.Join(",", paramNomes)})
+  AND ISNULL(CodCliente,0) > 0
+ORDER BY Codigo DESC", con);
 
                 AddCodEmp(cmdBusca, codEmpMensagem);
                 for (int i = 0; i < variantes.Count; i++)
@@ -503,31 +503,28 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
             }
 
             // ── 1b. Fallback: busca cliente pela coluna Celular na tabela Cliente ─
-            //        Cobre o caso em que NUNCA houve ticket vinculado com cliente,
-            //        mas o celular está cadastrado no cliente.
             if (codClienteRelacionando == null && variantes.Any())
             {
                 var paramNomes2 = variantes.Select((_, i) => "@C" + i).ToList();
 
-                // Limpeza completa: ( ) - espaço + . /
                 const string LIMPA = @"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-        ISNULL({0},''),
-    '(',''),')',''),'-',''),' ',''),'+',''),'.',''),'/','')";
+    ISNULL({0},''),
+'(',''),')',''),'-',''),' ',''),'+',''),'.',''),'/','')";
 
                 var limpaCelular = string.Format(LIMPA, "Celular");
                 var limpaTelefone = string.Format(LIMPA, "Telefone");
 
                 using var cmdCliente = new SqlCommand($@"
-        SELECT TOP 1 Codigo
-        FROM Cliente
-        WHERE CodEmp = @CodEmp
-          AND (
-               {limpaCelular}  IN ({string.Join(",", paramNomes2)})
-            OR {limpaTelefone} IN ({string.Join(",", paramNomes2)})
-          )
-        ORDER BY
-            CASE WHEN ISNULL(ClienteMensalista,'N') = 'S' THEN 0 ELSE 1 END,
-            Codigo DESC", con);
+SELECT TOP 1 Codigo
+FROM Cliente
+WHERE CodEmp = @CodEmp
+  AND (
+       {limpaCelular}  IN ({string.Join(",", paramNomes2)})
+    OR {limpaTelefone} IN ({string.Join(",", paramNomes2)})
+  )
+ORDER BY
+    CASE WHEN ISNULL(ClienteMensalista,'N') = 'S' THEN 0 ELSE 1 END,
+    Codigo DESC", con);
 
                 AddCodEmp(cmdCliente, codEmpMensagem);
                 for (int i = 0; i < variantes.Count; i++)
@@ -539,6 +536,57 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
                     codClienteRelacionando = Convert.ToInt32(resultCliente);
                     Log($"[CLIENTE] Encontrado via tabela Cliente: CodCliente={codClienteRelacionando}");
                 }
+            }
+
+            Log("CodCliente relacionado: " + (codClienteRelacionando?.ToString() ?? "nenhum"));
+
+            // ── 1c. Busca nome do contato pelo histórico de tickets do cliente ────
+            // ── 1c. Busca nome do contato pelo telefone usando o mesmo método do modal ────
+            string? nomeContato = null;
+            if (codClienteRelacionando.HasValue)
+            {
+                var paramNomes3 = variantes.Select((_, i) => "@N" + i).ToList();
+
+                using var cmdContato = new SqlCommand($@"
+        SELECT TOP 1
+            ISNULL(
+                NULLIF(
+                    CASE
+                        WHEN LTRIM(RTRIM(ISNULL(UsuarioAbertura,''))) <> ''
+                         AND NOT EXISTS (
+                            SELECT 1 FROM Usuario U
+                            WHERE U.CodEmp = @CodEmp
+                              AND UPPER(LTRIM(RTRIM(U.Usuario)))
+                                = UPPER(LTRIM(RTRIM(UsuarioAbertura)))
+                              AND ISNULL(U.Inativo,'N') = 'N'
+                              AND ISNULL(U.Help,'N') = 'S'
+                         )
+                        THEN LTRIM(RTRIM(UsuarioAbertura))
+                        ELSE NULL
+                    END
+                ,''),
+                'Contato'
+            ) AS Nome
+        FROM TicketChamadoC
+        WHERE CodEmp = @CodEmp
+          AND CodCliente = @CodCliente
+          AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                  ISNULL(TelefoneWhatsApp,''),
+              '(',''),')',''),'-',''),' ',''),'+','')
+              IN ({string.Join(",", paramNomes3)})
+          AND ISNULL(TelefoneWhatsApp,'') <> ''
+        ORDER BY Codigo DESC", con);
+
+                AddCodEmp(cmdContato, codEmpMensagem);
+                cmdContato.Parameters.AddWithValue("@CodCliente", codClienteRelacionando.Value);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmdContato.Parameters.AddWithValue(paramNomes3[i], variantes[i]);
+
+                var r = await cmdContato.ExecuteScalarAsync();
+                var nome = r?.ToString()?.Trim();
+                // Ignora o fallback genérico "Contato"
+                nomeContato = nome == "Contato" ? null : nome;
+                Log($"[CONTATO] Nome encontrado: '{nomeContato}' para cliente {codClienteRelacionando}");
             }
 
             Log("CodCliente relacionado: " + (codClienteRelacionando?.ToString() ?? "nenhum"));
@@ -629,22 +677,24 @@ ORDER BY ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
             DECLARE @NovoTicket TABLE (Codigo INT);
 
             INSERT INTO TicketChamadoC
-            (CodEmp, 
-                Status, CodSetor, CodCategoria,
-                DataAbertura, DataHoraAbertura,
-                Usuario, UsuarioUltimaGravacao, DataHoraUltimaGravacao,
-                CodCliente, TelefoneWhatsApp, Assunto,
-                CodSituacao, Novo, CodTipo, CodInstanciaWhatsApp
-            )
-            OUTPUT INSERTED.Codigo INTO @NovoTicket
-            VALUES
-            (
-                @CodEmp, 1, 1, NULL,
-                GETDATE(), GETDATE(),
-                'WHATSAPP', 'WHATSAPP', GETDATE(),
-                @CodCliente, @Telefone, @Assunto,
-                1, 'S', 5, @CodInstancia
-            );
+(CodEmp, 
+    Status, CodSetor, CodCategoria,
+    DataAbertura, DataHoraAbertura,
+    Usuario, UsuarioUltimaGravacao, DataHoraUltimaGravacao,
+    CodCliente, TelefoneWhatsApp, Assunto,
+    CodSituacao, Novo, CodTipo, CodInstanciaWhatsApp,
+    UsuarioAbertura
+)
+OUTPUT INSERTED.Codigo INTO @NovoTicket
+VALUES
+(
+    @CodEmp, 1, 1, NULL,
+    GETDATE(), GETDATE(),
+    'WHATSAPP', 'WHATSAPP', GETDATE(),
+    @CodCliente, @Telefone, @Assunto,
+    1, 'S', 5, @CodInstancia,
+    @NomeContato
+);
 
             SELECT Codigo FROM @NovoTicket;", con))
                 {
@@ -1222,6 +1272,7 @@ SELECT T.Codigo, T.Status, T.CodSetor, ISNULL(T.CodCategoria,0),
        ISNULL(T.SentimentoCliente,'') AS SentimentoCliente,
        ISNULL(T.SentimentoEmoji,'') AS SentimentoEmoji,
        ISNULL(T.AssuntoSugeridoStatus,'') AS AssuntoSugeridoStatus,
+       ISNULL(T.UsuarioAbertura,'') AS UsuarioAbertura,
        T.CodInstanciaWhatsApp,
        F.FotoUrl AS FotoClienteUrl
 FROM TicketChamadoC T
@@ -1264,8 +1315,9 @@ WHERE T.Codigo = @Id AND T.CodEmp = @CodEmp
                     SentimentoCliente = rd.IsDBNull(19) ? "" : rd.GetString(19),
                     SentimentoEmoji = rd.IsDBNull(20) ? "" : rd.GetString(20),
                     AssuntoSugeridoStatus = rd.IsDBNull(21) ? "" : rd.GetString(21),
-                    CodInstanciaWhatsApp = rd.IsDBNull(22) ? null : (int?)rd.GetInt32(22),
-                    FotoClienteUrl = rd.IsDBNull(23) ? null : rd.GetString(23)
+                    UsuarioAbertura = rd.IsDBNull(22) ? "" : rd.GetString(22),
+                    CodInstanciaWhatsApp = rd.IsDBNull(23) ? null : (int?)rd.GetInt32(23),
+                    FotoClienteUrl = rd.IsDBNull(24) ? null : rd.GetString(24)
                 };
             }
             return null;
@@ -1765,6 +1817,8 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn))
                 mensagens.Add(anotacao.Trim());
             else if (criarAgenda && dataHoraAgenda.HasValue)
                 mensagens.Add("📅 Agenda criada para este ticket.");
+            else if (temImagem || temVideo || temAudio)
+                mensagens.Add("");
 
             foreach (var msg in mensagens)
             {

@@ -184,19 +184,31 @@ END";
             var sql = @"
 SELECT
     C.Codigo AS CodCliente,
-    ISNULL(C.Nome, '') AS RazaoSocial,
-    ISNULL(C.Apelido, '') AS NomeFantasia,
+    ISNULL(C.Nome, '')     AS RazaoSocial,
+    ISNULL(C.Apelido, '')  AS NomeFantasia,
     ISNULL(C.Telefone, '') AS Telefone,
     ISNULL(CM.NomeComputador, '') AS NomeComputador,
-    ISNULL(CM.[Versao], '') AS Versao,
+    ISNULL(CM.Versao, '')  AS Versao,
     CM.DataHoraUltimoAcesso
 FROM Cliente C
-LEFT JOIN ControleMensalista CM 
-    ON CM.CodCliente = C.Codigo
-   AND CM.CodEmp = C.CodEmp
-   AND ISNULL(CM.Ativo, 'N') = 'S'
-WHERE C.CodEmp = @CodEmp
-  AND ISNULL(C.ClienteMensalista, 'N') = 'S'
+LEFT JOIN (
+    SELECT
+        CodCliente,
+        CodEmp,
+        NomeComputador,
+        Versao,
+        DataHoraUltimoAcesso,
+        ROW_NUMBER() OVER (
+            PARTITION BY CodEmp, CodCliente, NomeComputador
+            ORDER BY DataHoraUltimoAcesso DESC
+        ) AS RN
+    FROM ControleMensalista
+    WHERE Ativo = 'S'
+) CM ON CM.CodCliente = C.Codigo
+     AND CM.CodEmp    = C.CodEmp
+     AND CM.RN        = 1
+WHERE C.CodEmp           = @CodEmp
+  AND C.ClienteMensalista = 'S'
 ORDER BY C.Apelido, CM.NomeComputador;";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -673,6 +685,57 @@ WHERE U.CodEmp = @CodEmp
             }
 
             return perms;
+        }
+
+
+        public async Task<List<AdminComputadorVersaoDto>> ListarComputadoresPorClienteAsync(int codCliente)
+        {
+            var lista = new List<AdminComputadorVersaoDto>();
+
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+SELECT
+    ISNULL(NomeComputador, '') AS NomeComputador,
+    ISNULL(Versao, '')         AS Versao,
+    DataHoraUltimoAcesso
+FROM (
+    SELECT
+        NomeComputador,
+        Versao,
+        DataHoraUltimoAcesso,
+        ROW_NUMBER() OVER (
+            PARTITION BY NomeComputador
+            ORDER BY DataHoraUltimoAcesso DESC
+        ) AS RN
+    FROM ControleMensalista
+    WHERE CodEmp     = @CodEmp
+      AND CodCliente = @CodCliente
+      AND Ativo      = 'S'
+) X
+WHERE RN = 1
+ORDER BY NomeComputador;";
+
+            using var cmd = new SqlCommand(sql, conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                lista.Add(new AdminComputadorVersaoDto
+                {
+                    NomeComputador = reader["NomeComputador"]?.ToString() ?? "",
+                    Versao = reader["Versao"]?.ToString() ?? "",
+                    DataHoraUltimoAcesso = reader["DataHoraUltimoAcesso"] == DBNull.Value
+                        ? null
+                        : Convert.ToDateTime(reader["DataHoraUltimoAcesso"])
+                });
+            }
+
+            return lista;
         }
     }
 }

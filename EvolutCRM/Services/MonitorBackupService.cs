@@ -75,8 +75,8 @@ namespace EvolutCRM.Services
 SELECT
     b.CodCliente,
     b.Cnpj,
-    b.NomeCliente,
-    ISNULL(c.Apelido, '')               AS Apelido,
+    c.Nome                             AS NomeCliente,
+    ISNULL(c.Apelido, '')              AS Apelido,
     MAX(b.DataHoraUltimaSincronizacao) AS DataHoraUltimaSincronizacao,
     MAX(b.Arquivo)                     AS Arquivo,
     MAX(b.TamanhoBytes)                AS TamanhoBytes,
@@ -85,17 +85,15 @@ SELECT
     SUM(b.QuantidadeSincronizacoes)    AS QuantidadeSincronizacoes
 FROM ControleBackupCliente b
 INNER JOIN Cliente c
-        ON c.CodEmp = b.CodEmp
-       AND (
-            REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cnpj)), '.', ''), '/', ''), '-', '')
-                = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
-            OR REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(c.Cpf)), '.', ''), '/', ''), '-', '')
-                = REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(b.Cnpj)), '.', ''), '/', ''), '-', '')
-       )
+    ON c.CodEmp = b.CodEmp
+    AND (
+        c.CnpjLimpo = b.CnpjLimpo
+        OR c.CpfLimpo = b.CnpjLimpo
+    )
 WHERE b.CodEmp = @CodEmp
   AND c.CodEmp = @CodEmp
   AND c.ClienteMensalista = 'S'
-GROUP BY b.CodCliente, b.Cnpj, b.NomeCliente, c.Apelido
+GROUP BY b.CodCliente, b.Cnpj, c.Nome, c.Apelido
 ORDER BY MAX(b.DataHoraUltimaSincronizacao) ASC";
 
             await using var con = new SqlConnection(_conn);
@@ -115,7 +113,7 @@ ORDER BY MAX(b.DataHoraUltimaSincronizacao) ASC";
                 {
                     CodCliente = rd.IsDBNull("CodCliente") ? 0 : int.TryParse(rd["CodCliente"]?.ToString(), out var cod) ? cod : 0,
                     Cnpj = rd.IsDBNull("Cnpj") ? "" : rd.GetString("Cnpj"),
-                    NomeCliente = rd.IsDBNull("NomeCliente") ? "" : rd.GetString("NomeCliente"),
+                    NomeCliente = rd.IsDBNull("NomeCliente") ? "" : rd.GetString("NomeCliente"), 
                     Apelido = rd.IsDBNull("Apelido") ? "" : rd.GetString("Apelido"),
                     DataHoraUltimaSincronizacao = ultima,
                     Arquivo = rd.IsDBNull("Arquivo") ? "" : rd.GetString("Arquivo"),
