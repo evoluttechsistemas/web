@@ -2764,33 +2764,7 @@ else if (EhNovo)
 
             </main>
 
-            <!-- DIREITA: perfil do atendente -->
-            <aside class="ticket-modern-panel ticket-modern-right">
-
-                <div class="ticket-info-profile">
-                    <div class="ticket-info-avatar">
-                        @((UserState.CurrentUser ?? "?").Trim().Length >= 2
-                            ? UserState.CurrentUser!.Trim()[..2].ToUpper()
-                            : "?")
-                    </div>
-                    <div style="min-width:0;">
-                        <div style="font-size:.72rem; color:#64748b; font-weight:800;">Criado por</div>
-                        <div style="font-weight:950; color:#0d47a1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                            @UserState.CurrentUser
-                        </div>
-                        <div style="font-size:.72rem; color:#16a34a; font-weight:900;">● Atendente</div>
-                    </div>
-                </div>
-
-                <div class="ticket-info-stats">
-                    <div class="ticket-info-stat"><strong>—</strong><span>Tickets hoje</span></div>
-                    <div class="ticket-info-stat"><strong>—</strong><span>Em aberto</span></div>
-                    <div class="ticket-info-stat"><strong>—</strong><span>Finalizados</span></div>
-                </div>
-
-
-            </aside>
-
+            
         </div>
     </div>
 }
@@ -3437,11 +3411,13 @@ else
                             <!-- CAMPO DE MENSAGEM -->
                             <textarea id="obsAnotacao_@id"
                                       rows="2"
+                                      value="@NovaAnotacao"
                                       @onblur="OnBlurMensagem"
                                       @onfocus="OnFocusMensagem"
                                       spellcheck="true"
                                       lang="pt-BR"
                                       autocomplete="on"
+                                      autocapitalize="sentences"
                                       placeholder="Digite sua mensagem..."
                                       style="flex:1;
                             min-width:0;
@@ -4618,6 +4594,23 @@ else
             el.removeEventListener('keydown', el._ticketKeyHandler);
         }
 
+        if (el._ticketInputHandler) {
+        el.removeEventListener('input', el._ticketInputHandler);
+    }
+
+    el._ticketInputHandler = () => {
+        if (el.value.length > 0 && el.value[0] !== el.value[0].toUpperCase()) {
+            const pos = el.selectionStart;
+            el.value = el.value[0].toUpperCase() + el.value.slice(1);
+            el.setSelectionRange(pos, pos);
+        }
+
+            const ticketId = textareaId.replace('obsAnotacao_', '');
+            window.salvarRascunhoSemEsperar(ticketId, el.value);
+    };
+
+    el.addEventListener('input', el._ticketInputHandler);
+
         el._ticketKeyHandler = async (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -5238,6 +5231,7 @@ private bool _finalizandoViaF2ComInsight = false;
     private System.Threading.Timer? _debounceTimer;
 
     private PeriodicTimer? _timer;
+    private bool _renderPendente;
     private bool _atualizando = false;
     public string Versao { get; set; } = "";
     TicketInsight? _insight;
@@ -5280,6 +5274,9 @@ private bool _finalizandoViaF2ComInsight = false;
 
     protected override async Task OnInitializedAsync()
     {
+        // Guarda a rota da aba deste ticket logo ao abrir (é a aba ativa nesse momento)
+        _minhaRotaAba ??= Abas.RotaAtiva;
+
         await CarregarClassificacoesTicketAsync();
 
         var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
@@ -5418,16 +5415,26 @@ private bool _finalizandoViaF2ComInsight = false;
             Nav.NavigateTo("tickets");
     }
 
+    // Rota da aba deste ticket (gravada quando a aba foi aberta) — usada para saber se ela está na tela
+    private string? _minhaRotaAba;
+    private bool AbaAtiva => _minhaRotaAba == null || (Abas.RotaAtiva ?? "") == _minhaRotaAba;
+
     private async Task AtualizarAutomaticamente()
     {
         if (EhNovo) return;
 
+        _minhaRotaAba ??= Abas.RotaAtiva;
         _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
 
         try
         {
             while (await _timer.WaitForNextTickAsync())
             {
+                // Aba escondida (outro ticket/tela na frente): não consulta nada.
+                // Avisos de mensagem nova continuam vindo do MainLayout; ao voltar, atualiza em até 3s.
+                if (!AbaAtiva)
+                    continue;
+
                 if (_atualizando)
                     continue;
 
@@ -5459,14 +5466,22 @@ private bool _finalizandoViaF2ComInsight = false;
 
         // ── Passo 2: se não mudou nada, para aqui — zero queries adicionais ──
         if (!historicoMudou)
+        {
+            // tem mensagem nova que ainda não apareceu? tenta mostrar agora (sem consultar o banco)
+            if (_renderPendente && !await UsuarioDigitandoAsync())
+            {
+                _renderPendente = false;
+                await InvokeAsync(StateHasChanged);
+            }
             return;
+        }
 
         // ── Passo 3: só chega aqui quando há mensagem nova ───────────────────
         var novas = await TicketService.BuscarHistoricoNovasAsync(id, _ultimoCodigoHistorico);
 
         var codigosExistentes = Historico.Select(h => h.Codigo).ToHashSet();
-        foreach (var nova in novas.Where(h => !codigosExistentes.Contains(h.Codigo)))
-            Historico.Insert(0, nova);
+        // insere o bloco inteiro no topo mantendo a ordem do banco (mais nova primeiro)
+        Historico.InsertRange(0, novas.Where(h => !codigosExistentes.Contains(h.Codigo)));
 
         _ultimoCodigoHistorico = Historico.Count > 0 ? Historico.Max(h => h.Codigo) : 0;
 
@@ -5479,36 +5494,16 @@ private bool _finalizandoViaF2ComInsight = false;
         }
 
         // ── Passo 5: re-renderiza, mas só se usuário não está digitando ───────
-bool usuarioDigitando = false;
-try
-{
-    usuarioDigitando = await JS.InvokeAsync<bool>(
-        "eval",
-        $"document.activeElement?.id === 'obsAnotacao_{id}'");
-}
-catch { /* ignora se o componente foi desmontado */ }
-
-if (!usuarioDigitando)
-{
-    await InvokeAsync(StateHasChanged);
-}
-else
-{
-    _ = Task.Run(async () =>
-    {
-        await Task.Delay(2000);
-        bool aindaDigitando = false;
-        try
+        if (!await UsuarioDigitandoAsync())
         {
-            aindaDigitando = await JS.InvokeAsync<bool>(
-                "eval",
-                $"document.activeElement?.id === 'obsAnotacao_{id}'");
+            _renderPendente = false;
+            await InvokeAsync(StateHasChanged);
         }
-        catch { }
-        if (aindaDigitando) return;
-        await InvokeAsync(StateHasChanged);
-    });
-}
+        else
+        {
+            _renderPendente = true;   // mostra na próxima rodada (3s) em que não estiver digitando
+        }
+
 
         // ── Passo 6: restante do fluxo (ticket atualizado, badge, etc) ────────
         var ticketAtualizado = await TicketService.BuscarChamadoAsync(id);
@@ -6742,32 +6737,25 @@ CodTipo == 5 ? NomeWhatsApp : null
     {
         try
         {
-            var usuario = (UserState.CurrentUser ?? "").Trim().ToUpper();
+            // Agendas vencidas já são avisadas pelo MainLayout (toast, painel, som) a cada 30s.
+            // Aqui era repetido em CADA ticket aberto, com alert() que travava a tela.
 
-            if (string.IsNullOrWhiteSpace(usuario))
+            // Só recarrega o histórico (status ✓✓, edições, agendas resolvidas) do ticket que está na tela
+            if (EhNovo || TicketAtual == null || !AbaAtiva)
                 return;
 
-            var agendas = await TicketService.BuscarAgendasVencidasAsync(usuario);
-
-            foreach (var agenda in agendas)
+            // Roda dentro do contexto do Blazor para não alterar o Historico no meio de um redesenho
+            await InvokeAsync(async () =>
             {
-                await JS.InvokeVoidAsync(
-                    "alert",
-                    $"⏰ Agenda vencida\n\nTicket: #{agenda.CodTicketChamadoC}\nPrazo: {agenda.DataHoraAgenda:dd/MM/yyyy HH:mm}\n\n{agenda.Anotacao}"
-                );
+                if (TicketAtual == null) return;
 
-                await TicketService.AtualizarUltimaNotificacaoAgendaAsync(agenda.Codigo);
-            }
-
-            if (!EhNovo && TicketAtual != null)
-            {
                 Historico = await TicketService.BuscarHistoricoAsync(TicketAtual.Codigo);
 
                 if (!_usuarioEstaDigitando)
-                    await InvokeAsync(StateHasChanged);
+                    StateHasChanged();
                 else
                     _renderizacaoPendente = true;
-            }
+            });
         }
         catch (Exception ex)
         {
@@ -6827,6 +6815,12 @@ CodTipo == 5 ? NomeWhatsApp : null
             if (!string.IsNullOrWhiteSpace(rascunho) && string.IsNullOrWhiteSpace(NovaAnotacao))
             {
                 NovaAnotacao = rascunho;
+
+                // ✅ Injeta o valor diretamente no DOM — o textarea não tem @bind
+                var rascunhoJson = System.Text.Json.JsonSerializer.Serialize(rascunho);
+                await JS.InvokeVoidAsync("eval",
+                    $"var el = document.getElementById('obsAnotacao_{id}'); if(el) el.value = {rascunhoJson};");
+
                 await InvokeAsync(StateHasChanged);
             }
         }
@@ -7933,6 +7927,9 @@ private async Task OnTermoClienteChange(ChangeEventArgs e)
             });
         });
     }
+
+    private Task<bool> UsuarioDigitandoAsync()
+        => Task.FromResult((DateTime.Now - _ultimaDigitacao).TotalSeconds < 2);
 
 
     private Version CriarChaveVersao(string versao)

@@ -1,0 +1,31 @@
+﻿namespace EvolutCRM.Blog;
+
+public class PageSection
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N")[..8];
+    public string Tipo { get; set; } = "texto"; // texto | hero | colunas | caixa | banner | cta | divider
+    public string Titulo { get; set; } = "";
+    public string Corpo { get; set; } = "";
+    public string Coluna2 { get; set; } = ""; // só para tipo=colunas
+    public string CorFundo { get; set; } = "#ffffff";
+    public string CorTexto { get; set; } = "#0f172a";
+    public string CorBorda { get; set; } = "transparent";
+    public string DecoracaoTopo { get; set; } = "nenhuma"; // nenhuma | onda | triangulo | curva
+    public string DecoracaoBase { get; set; } = "nenhuma";
+    public int PaddingV { get; set; } = 40; // px
+    public string Imagem { get; set; } = ""; // url
+    public string ImagemPosicao { get; set; } = "direita"; // esquerda | direita | fundo
+    public bool TextoCentralizado { get; set; } = false;
+    public string IconeCaixa { get; set; } = "💡"; // só para tipo=caixa
+    public int Ordem { get; set; }
+}
+
+public class PostLayout
+{
+    public string TemplateBase { get; set; } = "artigo"; // artigo | magazine | minimal
+    public List<PageSection> Secoes { get; set; } = new();
+    public string CorPrimaria { get; set; } = "#6366f1";
+    public string CorFundoGeral { get; set; } = "#f8f9fb";
+    public string FonteCorpo { get; set; } = "IBM Plex Sans";
+    public int LarguraMaxima { get; set; } = 780; // px
+}

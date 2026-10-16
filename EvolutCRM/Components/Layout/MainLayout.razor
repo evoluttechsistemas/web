@@ -16,6 +16,7 @@
 @using Microsoft.JSInterop
 @inject EvolutCRM.Services.MonitorBackupService MonitorBackupService
 @inject EvolutCRM.Services.DeployNotificacaoState DeployState
+@inject EvolutCRM.Services.MiniChatState MiniChat
 
 
 @* ── CSS ─────────────────────────────────────────────────────────────────── *@
@@ -101,6 +102,19 @@
         position: relative;
     }
 
+    /* linha do topo: abas à esquerda, equipe/status à direita */
+    .aba-topo {
+        display: flex;
+        align-items: stretch;
+        flex-shrink: 0;
+        min-width: 0;
+    }
+
+        .aba-topo > .aba-strip {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+
     .aba-ghost {
         position: fixed;
         pointer-events: none;
@@ -145,6 +159,7 @@
     <BodyContent>
         <div class="aba-wrapper">
 
+            <div class="aba-topo">
             <div class="aba-strip" @ref="_abaStrip">
                 @foreach (var aba in Abas.Abas)
                 {
@@ -176,6 +191,10 @@
                         <span class="aba-titulo">@(Abas.Abas.FirstOrDefault(a => a.Rota == _abaDragging)?.Titulo)</span>
                     </div>
                 }
+            </div>
+
+                @* Equipe: quem está logado, status e quantos disponíveis *@
+                <EquipeBarra />
             </div>
 
             <div class="aba-conteudo">
@@ -302,6 +321,9 @@
 
     const _onDragMove = (e) => {
         if (!_dragDotNet) return;
+
+        // Botão já foi solto (mouseup perdido por latência) → encerra o drag
+        if ((e.buttons & 1) === 0) { _onDragUp(); return; }
 
         if (!_dragStarted) {
             if (Math.abs(e.clientX - _dragStartX) < DRAG_THRESHOLD &&
@@ -440,6 +462,9 @@
     private string CodEmp => UserState.CurrentCompanyId.ToString();
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+
+        if (firstRender)
+            await SafeJs("helpMarcarConectado");
         await SafeJs("crmLog",
             $"[Layout] Render | firstRender={firstRender} | IsReady={UserState.IsReady}");
 
@@ -469,7 +494,7 @@
             }
 
             // Carrega uma vez e compartilha na carga inicial também
-            var ticketsIniciais = await TicketService.ListarChamadosAsync();
+            var ticketsIniciais = await TicketService.ListarChamadosParaNotificacaoAsync();
             await AtualizarTickets(ticketsIniciais);
             await AtualizarChatInterno();
             await AtualizarNotificacoesAgendas();
@@ -512,14 +537,17 @@
                         {
                             if (!_disposed)
                             {
-                                // Uma única query pesada por ciclo de 5s
-                                var tickets = await TicketService.ListarChamadosAsync();
+                                var tickets = await TicketService.ListarChamadosParaNotificacaoAsync();
                                 await AtualizarTickets(tickets);
                                 await AtualizarChatInterno();
                                 await AtualizarNotificacoesTicketsSemResponsavel(tickets);
                                 await AtualizarNotificacoesMensagensPresasAsync();
                             }
                         });
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await InvokeAsync(() => SafeJs("crmLog", $"[TimerTickets] Erro ciclo: {ex.Message}"));
                     }
                     finally
                     {
@@ -553,6 +581,10 @@
                             if (!_disposed)
                                 await AtualizarNotificacoesCards();
                         });
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await InvokeAsync(() => SafeJs("crmLog", $"[TimerCards] Erro ciclo: {ex.Message}"));
                     }
                     finally
                     {
@@ -588,6 +620,10 @@
                             await AtualizarNotificacoesAgendas();
                             await AtualizarNotificacoesAgendasTicket();
                         });
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        await InvokeAsync(() => SafeJs("crmLog", $"[TimerOutros] Erro ciclo: {ex.Message}"));
                     }
                     finally
                     {
@@ -627,7 +663,7 @@
             if (qtdNovos == 0)
                 return;
 
-            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosAsync();
+            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosParaNotificacaoAsync();
 
 
             var rotaAtiva = Abas.RotaAtiva ?? "";
@@ -684,19 +720,7 @@
                 return;
             }
 
-            var qtdAtual = tickets.Count(t =>
-t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
-!string.IsNullOrWhiteSpace(t.Usuario) &&
-(t.Usuario.Trim().ToUpperInvariant() == usuario ||
- new[] { "", "NOVO", "WHATSAPP", "CLIENTE" }
-     .Contains(t.Usuario.Trim().ToUpperInvariant())));
-
-            if (qtdAtual != _ultimaQtdNovosTickets)
-            {
-                _ultimaQtdNovosTickets = qtdAtual;
-                TicketNotify.SetNovos(qtdAtual);
-                await SafeJs("crmSetBadge", qtdAtual);
-            }
+            // (contador já atualizado acima pelo GetQuantidadeTicketsNovosAsync — um critério só)
 
 
             var tarefas = novosParaNotificar
@@ -796,7 +820,7 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
 
         try
         {
-            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosAsync();
+            var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosParaNotificacaoAsync();
 
             var agora = DateTime.Now;
 
@@ -992,10 +1016,10 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
                 foreach (var kv in todasUltimas)
                     _cardsMensagensNotificadas[kv.Key] = kv.Value.DataHora;
 
-                _cardsConhecidos = cards
-                    .Where(c => todasUltimas.ContainsKey(c.Codigo))
-                    .Select(c => c.Codigo)
-                    .ToHashSet();
+                // Todos os cards que já existem no login são "conhecidos". Antes só os que tinham
+                // mensagem do cliente entravam, e no ciclo seguinte os demais (cards manuais/
+                // importados) disparavam em massa o alerta falso de "Novo contato no CRM".
+                _cardsConhecidos = idsAtuais;
 
                 await SafeJs("crmLog", $"[CardNotify] Primeira carga: {_cardsConhecidos.Count} card(s).");
                 return;
@@ -1661,7 +1685,9 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
         {
             var usuario = UserState.CurrentUser.Trim();
 
-            await ChatInternoService.AtualizarPresencaAsync(usuario, CodEmp);
+            // Presença (5s): também registra a atividade do HELP (substitui o heartbeat de 15s do menu)
+            // e não sobrescreve quem escolheu ficar Offline
+            await ChatInternoService.AtualizarPresencaAsync(usuario, CodEmp, manterOnline: UserState.IsOnline);
 
             // DEPOIS:
             var qtdNovas = await ChatInternoService
@@ -1683,6 +1709,10 @@ t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
                 return;
 
             if ((Abas.RotaAtiva ?? "") == "chat-interno")
+                return;
+
+            // Conversa já aberta na janelinha da faixa da equipe: não precisa de aviso
+            if (MiniChat.CodConversaAberta == ultima.CodConversa)
                 return;
 
             if (_chatNotificadoLayout.ContainsKey(ultima.Codigo))
@@ -1837,21 +1867,19 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
         _deployCountdownCts = new CancellationTokenSource();
         var token = _deployCountdownCts.Token;
 
-        _segundosRestantes = 30;
-        _percentualBarra = 100;
+        // Conta ate o horario calculado pelo servidor (nao "30 a partir de agora"),
+        // assim a tela termina junto com o script mesmo recebendo o aviso atrasado.
+        var fim = DeployState.FimUtc ?? DateTime.UtcNow.AddSeconds(30);
 
-        while (_segundosRestantes > 0 && !token.IsCancellationRequested)
+        while (!token.IsCancellationRequested)
         {
-            await Task.Delay(1000, token).ContinueWith(_ => { });
-            if (token.IsCancellationRequested) break;
-            _segundosRestantes--;
-            _percentualBarra = (_segundosRestantes / 30.0) * 100;
+            var restante = fim - DateTime.UtcNow;
+            _segundosRestantes = Math.Max(0, (int)Math.Ceiling(restante.TotalSeconds));
+            _percentualBarra = Math.Round(Math.Clamp(restante.TotalSeconds / 30.0 * 100, 0, 100));
             await InvokeAsync(StateHasChanged);
-        }
 
-        if (!token.IsCancellationRequested)
-        {
-            await JS.InvokeVoidAsync("location.reload");
+            if (restante <= TimeSpan.Zero) break;
+            try { await Task.Delay(250, token); } catch (TaskCanceledException) { break; }
         }
     }
 

@@ -1,0 +1,2229 @@
+﻿@using EvolutCRM.Blog
+@page "/blog/novo"
+@page "/blog/editar/{Id:int}"
+@inject BlogRepository BlogRepo
+@inject IHttpClientFactory HttpFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@using Microsoft.JSInterop
+@using Microsoft.AspNetCore.Components.Forms
+@using System.IO
+@inject AbaService Abas
+
+<style>
+    * {
+        box-sizing: border-box;
+    }
+
+    .blog-editor-root {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        height: 100vh;
+        background: #f8f9fb;
+        font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+        color: #0f172a;
+    }
+
+    /* ── Topbar ── */
+    .be-topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 20px;
+        height: 52px;
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        z-index: 200;
+    }
+
+    .be-topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+    }
+
+    .be-btn-back {
+        width: 30px;
+        height: 30px;
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+        background: #fff;
+        color: #475569;
+        font-size: 16px;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+    }
+
+        .be-btn-back:hover {
+            background: #f1f5f9;
+        }
+
+    .be-post-title-input {
+        border: none;
+        outline: none;
+        font-size: 15px;
+        font-weight: 700;
+        color: #0f172a;
+        background: transparent;
+        min-width: 200px;
+        max-width: 420px;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-post-title-input::placeholder {
+            color: #94a3b8;
+        }
+
+    .be-topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .be-badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 8px;
+        border-radius: 5px;
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+        .be-badge.publicado {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+    .be-btn {
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        border-radius: 7px;
+        padding: 7px 13px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-btn:hover {
+            background: #f8fafc;
+        }
+
+        .be-btn.primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
+
+            .be-btn.primary:hover {
+                background: #1d4ed8;
+            }
+
+        .be-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed;
+        }
+
+    .be-select {
+        border: 1px solid #e2e8f0;
+        border-radius: 7px;
+        background: #fff;
+        color: #374151;
+        font-size: 13px;
+        font-weight: 700;
+        padding: 7px 10px;
+        cursor: pointer;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    /* ── Body layout ── */
+    .be-body {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .be-sidebar {
+        border-right: 1px solid #e2e8f0;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 16px 14px;
+        gap: 16px;
+    }
+
+    .be-sidebar-section {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .be-sidebar-label {
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: #94a3b8;
+        padding: 0 2px;
+    }
+
+    .be-field {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .be-field-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #64748b;
+    }
+
+    .be-input, .be-textarea, .be-select-sm {
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 7px 9px;
+        font-size: 12px;
+        color: #0f172a;
+        background: #fff;
+        outline: none;
+        width: 100%;
+        transition: border-color .15s;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-input:focus, .be-textarea:focus, .be-select-sm:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+        }
+
+    .be-textarea {
+        min-height: 76px;
+        resize: vertical;
+        font-size: 12px;
+        line-height: 1.4;
+    }
+
+    .be-alert {
+        padding: 10px 12px;
+        border-radius: 7px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+        .be-alert.success {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+
+        .be-alert.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+    /* ── Imagem de capa ── */
+    .be-cover-preview {
+        width: 100%;
+        aspect-ratio: 16/9;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #f1f5f9;
+        border: 1.5px dashed #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 600;
+        position: relative;
+        cursor: pointer;
+    }
+
+        .be-cover-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+    .be-cover-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .be-cover-btn {
+        flex: 1;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        border-radius: 6px;
+        padding: 6px 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-cover-btn:hover {
+            background: #f8fafc;
+        }
+
+        .be-cover-btn.danger {
+            color: #b91c1c;
+            border-color: #fecaca;
+        }
+
+    /* ── Editor area ── */
+    .be-editor-wrap {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #f8f9fb;
+    }
+
+    /* ── Toolbar ── */
+    .be-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 6px 16px;
+        background: #fff;
+        border-bottom: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+    }
+
+    .be-tb-btn {
+        border: none;
+        background: transparent;
+        color: #475569;
+        border-radius: 5px;
+        width: 30px;
+        height: 28px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: background .12s;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-tb-btn:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+    .be-tb-sep {
+        width: 1px;
+        height: 20px;
+        background: #e2e8f0;
+        margin: 0 4px;
+        flex-shrink: 0;
+    }
+
+    .be-tb-select {
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        background: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+        padding: 4px 6px;
+        cursor: pointer;
+        height: 28px;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    .be-tb-insert-btn {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        background: #fff;
+        color: #374151;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 9px;
+        height: 28px;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-tb-insert-btn:hover {
+            background: #f1f5f9;
+        }
+
+    /* ── Content editable ── */
+    .be-content-scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 40px 0 80px;
+    }
+
+    .be-content-inner {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 0 32px;
+    }
+
+    .be-editor {
+        min-height: 600px;
+        outline: none;
+        font-size: 15px;
+        line-height: 1.7;
+        color: #1e293b;
+        caret-color: #2563eb;
+    }
+
+        .be-editor h1 {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 1.4em 0 .4em;
+            color: #0f172a;
+        }
+
+        .be-editor h2 {
+            font-size: 1.45rem;
+            font-weight: 700;
+            margin: 1.2em 0 .35em;
+            color: #0f172a;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: .3em;
+        }
+
+        .be-editor h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 1em 0 .3em;
+            color: #0f172a;
+        }
+
+        .be-editor p {
+            margin: .5em 0;
+        }
+
+        .be-editor ul, .be-editor ol {
+            margin: .5em 0;
+            padding-left: 1.5em;
+        }
+
+        .be-editor li {
+            margin: .25em 0;
+        }
+
+        .be-editor blockquote {
+            border-left: 3px solid #2563eb;
+            margin: 1em 0;
+            padding: .5em 1em;
+            background: #eff6ff;
+            border-radius: 0 6px 6px 0;
+            color: #1e40af;
+            font-style: italic;
+        }
+
+        .be-editor pre {
+            background: #1e293b;
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 14px 16px;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+
+        .be-editor code {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: .88em;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .be-editor pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            font-size: inherit;
+            color: inherit;
+        }
+
+        .be-editor hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 1.5em 0;
+        }
+
+        .be-editor mark {
+            background: #fef08a;
+            color: #713f12;
+            border-radius: 2px;
+            padding: 1px 2px;
+        }
+
+        .be-editor a {
+            color: #2563eb;
+            text-decoration: underline;
+        }
+
+        .be-editor .be-img-wrap {
+            display: inline-block;
+            position: relative;
+            margin: 8px 0;
+            max-width: 100%;
+            line-height: 0;
+        }
+
+            .be-editor .be-img-wrap img {
+                border-radius: 6px;
+                display: block;
+                max-width: 100%;
+                cursor: default;
+            }
+
+            .be-editor .be-img-wrap.selected img {
+                outline: 2px solid #2563eb;
+                outline-offset: 2px;
+            }
+
+    .be-resize-handle {
+        position: absolute;
+        right: -5px;
+        bottom: -5px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #2563eb;
+        cursor: se-resize;
+        border: 2px solid #fff;
+        display: none;
+    }
+
+    .be-img-wrap.selected .be-resize-handle {
+        display: block;
+    }
+
+    .be-img-controls {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        display: none;
+        gap: 4px;
+        background: rgba(0,0,0,.55);
+        border-radius: 5px;
+        padding: 3px 5px;
+    }
+
+    .be-img-wrap:hover .be-img-controls,
+    .be-img-wrap.selected .be-img-controls {
+        display: flex;
+    }
+
+    .be-img-ctrl-btn {
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 11px;
+        cursor: pointer;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-weight: 700;
+    }
+
+        .be-img-ctrl-btn:hover {
+            background: rgba(255,255,255,.2);
+        }
+
+    .be-video-wrap {
+        margin: 12px 0;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #000;
+        position: relative;
+    }
+
+        .be-video-wrap iframe {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+            display: block;
+        }
+
+        .be-video-wrap video {
+            width: 100%;
+            display: block;
+            border-radius: 10px;
+        }
+
+    .be-video-controls {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: none;
+        gap: 4px;
+    }
+
+    .be-video-wrap:hover .be-video-controls {
+        display: flex;
+    }
+
+    .be-video-ctrl-btn {
+        background: rgba(0,0,0,.6);
+        border: none;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        border-radius: 5px;
+        padding: 4px 8px;
+        cursor: pointer;
+    }
+
+    .be-callout {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 12px 14px;
+        border-radius: 8px;
+        margin: 10px 0;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+    }
+
+    .be-callout-icon {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    .be-callout[data-type="warning"] {
+        background: #fffbeb;
+        border-color: #fde68a;
+    }
+
+    .be-callout[data-type="danger"] {
+        background: #fee2e2;
+        border-color: #fecaca;
+    }
+
+    .be-callout[data-type="success"] {
+        background: #f0fdf4;
+        border-color: #bbf7d0;
+    }
+
+    .be-table-wrap {
+        overflow-x: auto;
+        margin: 12px 0;
+    }
+
+    .be-editor table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 400px;
+    }
+
+    .be-editor th {
+        background: #f1f5f9;
+        font-weight: 700;
+    }
+
+    .be-editor td, .be-editor th {
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        font-size: 13px;
+        text-align: left;
+    }
+
+        .be-editor td:focus {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+        }
+
+    /* Slash menu */
+    .be-slash-menu {
+        position: absolute;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 9px;
+        box-shadow: 0 8px 32px rgba(15,23,42,.12);
+        z-index: 999;
+        width: 240px;
+        padding: 6px;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .be-slash-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+
+        .be-slash-item:hover, .be-slash-item.active {
+            background: #f1f5f9;
+        }
+
+    .be-slash-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: #f1f5f9;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        flex-shrink: 0;
+    }
+
+    .be-slash-label {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .be-slash-desc {
+        font-size: 11px;
+        color: #64748b;
+    }
+
+    .be-placeholder::before {
+        content: attr(data-placeholder);
+        color: #94a3b8;
+        pointer-events: none;
+        position: absolute;
+    }
+
+    /* Modal vídeo */
+    .be-modal-bg {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.5);
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .be-modal {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        width: 440px;
+        max-width: 95vw;
+        box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+
+        .be-modal h3 {
+            margin: 0 0 14px;
+            font-size: 16px;
+        }
+
+    .be-modal-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 14px;
+    }
+
+    @@media(max-width: 900px) {
+        .be-body {
+            grid-template-columns: 1fr;
+        }
+
+        .be-sidebar {
+            display: none;
+        }
+    }
+
+    /* ── Page Builder Drawer ── */
+    .pb-drawer {
+        position: fixed;
+        left: 0;
+        top: 0;
+        height: 100vh;
+        width: 320px;
+        background: #fff;
+        border-right: 1px solid #e2e8f0;
+        box-shadow: 4px 0 24px rgba(15,23,42,0.13);
+        z-index: 9000;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .pb-drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8f9fb;
+        flex-shrink: 0;
+    }
+
+    .pb-drawer-body {
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .pb-drawer-tab {
+        display: flex;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8f9fb;
+        flex-shrink: 0;
+    }
+
+    .pb-drawer-tab-btn {
+        flex: 1;
+        padding: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        border: none;
+        background: transparent;
+        color: #64748b;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .pb-drawer-tab-btn.ativo {
+            color: #6366f1;
+            border-bottom-color: #6366f1;
+            background: #fff;
+        }
+
+    .pb-drawer-content {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        flex: 1;
+    }
+
+    /* Preview inline no canvas */
+    .pb-preview-overlay {
+        position: fixed;
+        left: 320px;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        background: #f1f5f9;
+        z-index: 8999;
+        overflow-y: auto;
+        padding: 20px;
+    }
+
+    .pb-preview-inner {
+        max-width: 780px;
+        margin: 0 auto;
+    }
+
+    .pb-preview-secao {
+        margin-bottom: 8px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px solid transparent;
+        cursor: pointer;
+        transition: border-color .15s;
+    }
+
+        .pb-preview-secao:hover {
+            border-color: #6366f1;
+        }
+
+        .pb-preview-secao.selecionada {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 3px #eef2ff;
+        }
+
+    .pb-preview-secao-inner {
+        padding: 24px;
+    }
+
+    .be-btn-secondary {
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #374151;
+        border-radius: 7px;
+        padding: 7px 13px;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+        .be-btn-secondary:hover {
+            background: #f8fafc;
+            border-color: #6366f1;
+            color: #6366f1;
+        }
+
+    .pb-sidebar-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .pb-sidebar-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .pb-template-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .pb-template-card {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1.5px solid #e2e8f0;
+        cursor: pointer;
+        background: #fff;
+        transition: border-color .15s;
+    }
+
+        .pb-template-card:hover {
+            border-color: #6366f1;
+        }
+
+    .pb-template-ativo {
+        border-color: #6366f1 !important;
+        background: #eef2ff !important;
+    }
+
+    .pb-campo-linha {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: #475569;
+    }
+
+        .pb-campo-linha label {
+            min-width: 70px;
+            font-size: 12px;
+        }
+
+        .pb-campo-linha input[type=color] {
+            width: 32px;
+            height: 28px;
+            border: 1px solid #e2e8f0;
+            border-radius: 5px;
+            cursor: pointer;
+            padding: 2px;
+        }
+
+    .pb-add-secoes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .pb-btn-add-secao {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        font-size: 12px;
+        cursor: pointer;
+        color: #374151;
+    }
+
+        .pb-btn-add-secao:hover {
+            border-color: #6366f1;
+            color: #6366f1;
+            background: #eef2ff;
+        }
+
+    .pb-secao-card {
+        border: 1.5px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+        transition: border-color .15s;
+        overflow: hidden;
+    }
+
+        .pb-secao-card:hover {
+            border-color: #6366f1;
+        }
+
+    .pb-secao-ativa {
+        border-color: #6366f1 !important;
+        box-shadow: 0 0 0 3px #eef2ff;
+    }
+
+    .pb-secao-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 12px;
+    }
+
+    .pb-drag-handle {
+        color: #94a3b8;
+        cursor: grab;
+        font-size: 16px;
+    }
+
+    .pb-secao-tipo-badge {
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 4px;
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+    .pb-btn-mover {
+        width: 26px;
+        height: 26px;
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        background: #f8f9fb;
+        cursor: pointer;
+        font-size: 13px;
+        color: #475569;
+    }
+
+        .pb-btn-mover:hover {
+            background: #e2e8f0;
+        }
+
+    .pb-btn-remover {
+        width: 26px;
+        height: 26px;
+        border: 1px solid #fee2e2;
+        border-radius: 5px;
+        background: #fff0f0;
+        cursor: pointer;
+        font-size: 12px;
+        color: #ef4444;
+    }
+
+        .pb-btn-remover:hover {
+            background: #fee2e2;
+        }
+
+    .pb-painel-titulo {
+        font-size: 13px;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    .pb-campo {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+        .pb-campo label {
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+            text-transform: uppercase;
+        }
+
+        .pb-campo input, .pb-campo textarea, .pb-campo select {
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 7px 10px;
+            font-size: 13px;
+            font-family: inherit;
+            color: #0f172a;
+            background: #fff;
+            outline: none;
+            width: 100%;
+        }
+
+            .pb-campo input:focus, .pb-campo textarea:focus, .pb-campo select:focus {
+                border-color: #6366f1;
+            }
+
+    .pb-secao-grupo {
+        border: 1px solid #f1f5f9;
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .pb-btn-salvar {
+        padding: 8px 18px;
+        border-radius: 8px;
+        border: none;
+        background: #6366f1;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .pb-btn-salvar:hover {
+            background: #4f46e5;
+        }
+
+    .pb-btn-fechar {
+        width: 34px;
+        height: 34px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+        font-size: 16px;
+        color: #64748b;
+    }
+
+        .pb-btn-fechar:hover {
+            background: #f1f5f9;
+        }
+</style>
+
+<div class="blog-editor-root">
+
+    <!-- Topbar -->
+    <div class="be-topbar">
+        <div class="be-topbar-left">
+            <button class="be-btn-back" @onclick="Voltar" title="Voltar">←</button>
+            <input class="be-post-title-input"
+                   placeholder="Título do post..."
+                   @bind="titulo"
+                   @bind:event="oninput" />
+            <span class="be-badge @status">
+                @(status == "publicado" ? "Publicado" : "Rascunho")
+            </span>
+
+            <button class="be-btn-secondary" @onclick="() => _modalLayoutAberto = true" style="gap:6px; display:flex; align-items:center;">
+                <span>🎨</span> Editar Layout
+            </button>
+        </div>
+        <div class="be-topbar-right">
+            @if (!string.IsNullOrWhiteSpace(mensagem))
+            {
+                <span class="be-alert @tipoMensagem" style="margin:0; padding:6px 10px;">@mensagem</span>
+            }
+            <select class="be-select" @bind="status">
+                <option value="rascunho">Rascunho</option>
+                <option value="publicado">Publicado</option>
+            </select>
+            <button class="be-btn primary" disabled="@salvando" @onclick="Salvar">
+                @(salvando ? "Salvando..." : "Salvar")
+            </button>
+        </div>
+    </div>
+
+    <div class="be-body">
+
+        <!-- Sidebar -->
+        <aside class="be-sidebar">
+
+            <div class="be-sidebar-section">
+                <div class="be-sidebar-label">Metadados</div>
+
+                <div class="be-field">
+                    <div class="be-field-label">Slug (URL)</div>
+                    <input class="be-input" @bind="slug" placeholder="titulo-do-post" />
+                </div>
+
+                <div class="be-field">
+                    <div class="be-field-label">Imagem de Capa</div>
+                    <div class="be-cover-preview" @onclick="TriggerCoverInput">
+                        @if (!string.IsNullOrEmpty(imagemPath))
+                        {
+                            <img src="@imagemPath" alt="Capa" />
+                        }
+                        else
+                        {
+                            <span>🖼 Clique para enviar imagem</span>
+                        }
+                    </div>
+                    @if (!string.IsNullOrEmpty(imagemPath))
+                    {
+                        <div class="be-cover-actions">
+                            <button type="button" class="be-cover-btn" @onclick="TriggerCoverInput">Trocar</button>
+                            <button type="button" class="be-cover-btn danger" @onclick="() => imagemPath = null">Remover</button>
+                        </div>
+                    }
+                    <InputFile id="be-cover-input" OnChange="UploadCover"
+                               accept="image/png,image/jpeg,image/webp,image/gif"
+                               style="display:none" />
+                </div>
+
+                <div class="be-field">
+                    <div class="be-field-label">Resumo / Descrição</div>
+                    <textarea class="be-textarea" @bind="resumo"
+                              placeholder="Breve resumo exibido na listagem..."></textarea>
+                </div>
+            </div>
+
+            <div class="be-sidebar-section">
+                <div class="be-sidebar-label">Dicas de uso</div>
+                <div style="font-size:11px; color:#64748b; line-height:1.5;">
+                    <p style="margin:0 0 6px;">Digite <strong>/</strong> para inserir blocos: títulos, imagens, vídeos, tabelas, destaques.</p>
+                    <p style="margin:0 0 6px;">Cole prints diretamente com <strong>Ctrl+V</strong>.</p>
+                    <p style="margin:0;">Arraste a alça no canto da imagem para redimensionar.</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor -->
+        <div class="be-editor-wrap">
+
+            <!-- Toolbar -->
+            <div class="be-toolbar">
+                <select class="be-tb-select" title="Tipo de bloco" @onchange="OnBlockTypeChange">
+                    <option value="p">Parágrafo</option>
+                    <option value="h1">Título 1</option>
+                    <option value="h2">Título 2</option>
+                    <option value="h3">Título 3</option>
+                    <option value="pre">Código</option>
+                </select>
+
+                <div class="be-tb-sep"></div>
+
+                <button class="be-tb-btn" title="Negrito (Ctrl+B)" @onclick='() => ExecCmd("bold")'><strong>B</strong></button>
+                <button class="be-tb-btn" title="Itálico (Ctrl+I)" @onclick='() => ExecCmd("italic")'><em>I</em></button>
+                <button class="be-tb-btn" title="Link (Ctrl+K)" @onclick="AbrirModalLink">🔗</button>
+                <button class="be-tb-btn" title="Sublinhado (Ctrl+U)" @onclick='() => ExecCmd("underline")' style="text-decoration:underline;">U</button>
+                <button class="be-tb-btn" title="Riscado" @onclick='() => ExecCmd("strikethrough")' style="text-decoration:line-through;">S</button>
+                <button class="be-tb-btn" title="Destacar" @onclick="AplicarDestaque">M</button>
+
+                <div class="be-tb-sep"></div>
+
+                <button class="be-tb-btn" title="Lista com marcadores" @onclick='() => ExecCmd("insertUnorderedList")'>≡</button>
+                <button class="be-tb-btn" title="Lista numerada" @onclick='() => ExecCmd("insertOrderedList")'>1.</button>
+                <button class="be-tb-btn" title="Citação" @onclick="InserirBlockquote">❝</button>
+
+                <div class="be-tb-sep"></div>
+
+                <button class="be-tb-btn" title="Alinhar à esquerda" @onclick='() => ExecCmd("justifyLeft")'>⬛</button>
+                <button class="be-tb-btn" title="Centralizar" @onclick='() => ExecCmd("justifyCenter")'>☰</button>
+
+                <div class="be-tb-sep"></div>
+
+                <button class="be-tb-insert-btn" @onclick="TriggerImageInput">🖼 Imagem</button>
+                <button class="be-tb-insert-btn" @onclick="AbrirModalVideo">▶ Vídeo</button>
+                <button class="be-tb-insert-btn" @onclick="InserirTabela">⊞ Tabela</button>
+                <button class="be-tb-insert-btn" @onclick='() => ExecCmd("insertHorizontalRule")'>— Divisor</button>
+                <button class="be-tb-insert-btn" @onclick="InserirCallout">💡 Destaque</button>
+
+                <InputFile id="be-img-input" OnChange="OnImagemSelecionada"
+                           accept="image/png,image/jpeg,image/webp,image/gif"
+                           style="display:none" />
+            </div>
+
+            <!-- Área do editor -->
+            <div class="be-content-scroll">
+                <div class="be-content-inner">
+                    <div @key="@("be-editor-fixo")"
+                         id="be-editor"
+                         class="be-editor"
+                         contenteditable="true"
+                         spellcheck="true"
+                         data-placeholder="Comece a escrever ou digite / para inserir blocos...">
+                        @((MarkupString)_htmlInicial)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_modalLayoutAberto)
+{
+    <!-- Drawer esquerdo -->
+    <div class="pb-drawer">
+        <div class="pb-drawer-header">
+            <span style="font-size:15px; font-weight:700;">🎨 Page Builder</span>
+            <div style="display:flex; gap:6px;">
+                <button class="pb-btn-salvar" @onclick="SalvarLayout">💾 Salvar</button>
+                <button class="pb-btn-fechar" @onclick="() => _modalLayoutAberto = false">✕</button>
+            </div>
+        </div>
+
+        <!-- Abas: Seções | Editar | Geral -->
+        <div class="pb-drawer-tab">
+            <button class="pb-drawer-tab-btn @(_abaDrawer == "secoes" ? "ativo" : "")" @onclick='() => _abaDrawer = "secoes"'>📋 Seções</button>
+            <button class="pb-drawer-tab-btn @(_abaDrawer == "editar" ? "ativo" : "")" @onclick='() => _abaDrawer = "editar"'>✏️ Editar</button>
+            <button class="pb-drawer-tab-btn @(_abaDrawer == "geral" ? "ativo" : "")" @onclick='() => _abaDrawer = "geral"'>⚙️ Geral</button>
+        </div>
+
+        <div class="pb-drawer-body">
+            <div class="pb-drawer-content">
+
+                @if (_abaDrawer == "secoes")
+                {
+                    <!-- Templates -->
+                    <div class="pb-sidebar-section">
+                        <div class="pb-sidebar-label">Templates base</div>
+                        <div class="pb-template-cards">
+                            @foreach (var (key, icon, nome, desc) in new[]{
+                                ("artigo","📝","Artigo","Hero + texto + dica + CTA"),
+                                ("magazine","📰","Magazine","Manchete + colunas + banner"),
+                                ("minimal","✍️","Minimal","Texto limpo sem decoração"),
+                            })
+                            {
+                                <div class="pb-template-card @(_layout.TemplateBase == key ? "pb-template-ativo" : "")"
+                                     @onclick="() => SelecionarTemplate(key)">
+                                    <span style="font-size:20px;">@icon</span>
+                                    <div>
+                                        <div style="font-weight:600; font-size:12px;">@nome</div>
+                                        <div style="font-size:10px; color:#64748b;">@desc</div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Lista de seções -->
+                    <div class="pb-sidebar-section">
+                        <div class="pb-sidebar-label">Seções do post</div>
+                        @if (!_layout.Secoes.Any())
+                        {
+                            <div style="color:#94a3b8; font-size:12px; text-align:center; padding:20px 0;">
+                                Selecione um template ou adicione seções
+                            </div>
+                        }
+                        @foreach (var s in _layout.Secoes.OrderBy(x => x.Ordem))
+                        {
+                            <div class="pb-secao-card @(_secaoEditando?.Id == s.Id ? "pb-secao-ativa" : "")"
+                                     @onclick="() => SelecionarSecao(s)">
+                                <div class="pb-secao-header">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span class="pb-drag-handle">⣿</span>
+                                        <span class="pb-secao-tipo-badge">@s.Tipo.ToUpper()</span>
+                                        <span style="font-size:12px; font-weight:600;">@(string.IsNullOrEmpty(s.Titulo) ? "(sem título)" : s.Titulo)</span>
+                                    </div>
+                                    <div style="display:flex; gap:3px;">
+                                        <button class="pb-btn-mover" @onclick:stopPropagation="true" @onclick="() => MoverSecaoAcima(s.Id)">↑</button>
+                                        <button class="pb-btn-mover" @onclick:stopPropagation="true" @onclick="() => MoverSecaoAbaixo(s.Id)">↓</button>
+                                        <button class="pb-btn-remover" @onclick:stopPropagation="true" @onclick="() => RemoverSecao(s.Id)">✕</button>
+                                    </div>
+                                </div>
+                                <div style="height:3px; background:@s.CorFundo; border-top:1px solid #e2e8f0;"></div>
+                            </div>
+                        }
+                    </div>
+
+                    <!-- Adicionar seção -->
+                    <div class="pb-sidebar-section">
+                        <div class="pb-sidebar-label">Adicionar seção</div>
+                        <div class="pb-add-secoes">
+                            @foreach (var (tipo, icon, nome) in new[]{
+                                ("texto","📄","Texto"),
+                                ("hero","🌟","Hero"),
+                                ("colunas","⬜⬜","2 Cols"),
+                                ("caixa","💡","Caixa"),
+                                ("banner","🖼️","Banner"),
+                                ("cta","🎯","CTA"),
+                                ("divider","➖","Divisor"),
+                            })
+                            {
+                                <button class="pb-btn-add-secao" @onclick="() => AdicionarSecao(tipo)">
+                                    <span>@icon</span> @nome
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (_abaDrawer == "editar")
+                {
+                    @if (_secaoEditando is null)
+                    {
+                        <div style="color:#94a3b8; font-size:12px; text-align:center; margin-top:40px;">
+                            Clique em uma seção para editar
+                        </div>
+                    }
+                    else
+                    {
+                        var s = _secaoEditando;
+                        <div class="pb-painel-titulo">Editando: <strong>@s.Tipo</strong></div>
+
+                        <div class="pb-campo">
+                            <label>Título</label>
+                            <input type="text" @bind="s.Titulo" @bind:event="oninput" placeholder="Título da seção" />
+                        </div>
+
+                        @if (s.Tipo != "divider")
+                        {
+                            <div class="pb-campo">
+                                <label>Conteúdo</label>
+                                <textarea @bind="s.Corpo" @bind:event="oninput" rows="4" placeholder="Texto..."></textarea>
+                            </div>
+                        }
+
+                        @if (s.Tipo == "colunas")
+                        {
+                            <div class="pb-campo">
+                                <label>Coluna 2</label>
+                                <textarea @bind="s.Coluna2" @bind:event="oninput" rows="3" placeholder="Coluna direita..."></textarea>
+                            </div>
+                        }
+
+                        @if (s.Tipo == "caixa")
+                        {
+                            <div class="pb-campo">
+                                <label>Ícone</label>
+                                <input type="text" @bind="s.IconeCaixa" @bind:event="oninput" style="width:60px; font-size:18px;" />
+                            </div>
+                        }
+
+                        <div class="pb-secao-grupo">
+                            <div class="pb-sidebar-label" style="margin-bottom:8px;">Cores</div>
+                            <div class="pb-campo-linha"><label>Fundo</label><input type="color" @bind="s.CorFundo" /></div>
+                            <div class="pb-campo-linha"><label>Texto</label><input type="color" @bind="s.CorTexto" /></div>
+                            <div class="pb-campo-linha"><label>Borda</label><input type="color" @bind="s.CorBorda" /></div>
+                        </div>
+
+                        <div class="pb-secao-grupo">
+                            <div class="pb-sidebar-label" style="margin-bottom:8px;">Decoração</div>
+                            <div class="pb-campo-linha">
+                                <label>Topo</label>
+                                <select @bind="s.DecoracaoTopo">
+                                    <option value="nenhuma">Nenhuma</option>
+                                    <option value="onda">Onda</option>
+                                    <option value="triangulo">Triângulo</option>
+                                    <option value="curva">Curva</option>
+                                </select>
+                            </div>
+                            <div class="pb-campo-linha">
+                                <label>Base</label>
+                                <select @bind="s.DecoracaoBase">
+                                    <option value="nenhuma">Nenhuma</option>
+                                    <option value="onda">Onda</option>
+                                    <option value="triangulo">Triângulo</option>
+                                    <option value="curva">Curva</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="pb-secao-grupo">
+                            <div class="pb-sidebar-label" style="margin-bottom:8px;">Layout</div>
+                            <div class="pb-campo-linha">
+                                <label>Padding V</label>
+                                <input type="range" @bind="s.PaddingV" min="0" max="120" style="width:80px;" />
+                                <span style="font-size:11px;">@s.PaddingV px</span>
+                            </div>
+                            <div class="pb-campo-linha">
+                                <label>Centralizado</label>
+                                <input type="checkbox" @bind="s.TextoCentralizado" />
+                            </div>
+                        </div>
+
+                        @if (s.Tipo != "divider")
+                        {
+                            <div class="pb-secao-grupo">
+                                <div class="pb-sidebar-label" style="margin-bottom:8px;">Imagem</div>
+                                <div class="pb-campo">
+                                    <input type="text" @bind="s.Imagem" @bind:event="oninput" placeholder="URL da imagem" />
+                                </div>
+                                @if (!string.IsNullOrEmpty(s.Imagem))
+                                {
+                                    <div class="pb-campo-linha">
+                                        <label>Posição</label>
+                                        <select @bind="s.ImagemPosicao">
+                                            <option value="direita">Direita</option>
+                                            <option value="esquerda">Esquerda</option>
+                                            <option value="fundo">Fundo</option>
+                                        </select>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                }
+
+                @if (_abaDrawer == "geral")
+                {
+                    <div class="pb-sidebar-section">
+                        <div class="pb-sidebar-label">Cores gerais</div>
+                        <div class="pb-campo-linha">
+                            <label>Cor primária</label>
+                            <input type="color" @bind="_layout.CorPrimaria" />
+                        </div>
+                        <div class="pb-campo-linha">
+                            <label>Fundo geral</label>
+                            <input type="color" @bind="_layout.CorFundoGeral" />
+                        </div>
+                        <div class="pb-campo-linha">
+                            <label>Largura máx.</label>
+                            <input type="number" @bind="_layout.LarguraMaxima" min="600" max="1400" style="width:70px;" /> px
+                        </div>
+                    </div>
+                }
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview em tempo real à direita do drawer -->
+        <div class="pb-preview-overlay">
+            <div style="max-width:@(_layout.LarguraMaxima)px; margin:0 auto; font-family:'IBM Plex Sans',sans-serif;">
+
+                @* Hero — sempre no topo se existir *@
+                @{
+                    var hero = _layout.Secoes.OrderBy(x => x.Ordem).FirstOrDefault(x => x.Tipo == "hero");
+                }
+                @if (hero != null)
+                {
+                    var isAtiva = _secaoEditando?.Id == hero.Id;
+                    <div style="background:@hero.CorFundo; color:@hero.CorTexto; padding:@(hero.PaddingV)px 40px;
+                        border:2px solid @(isAtiva ? "#6366f1" : "transparent"); cursor:pointer; position:relative;"
+                         @onclick="() => SelecionarSecao(hero)">
+                        @if (isAtiva)
+                        {
+                            <div style="position:absolute;top:6px;right:10px;font-size:11px;background:#6366f1;color:#fff;padding:2px 8px;border-radius:4px;">editando</div>
+                        }
+                        <h1 style="margin:0 0 12px; font-size:32px; font-weight:800;">@hero.Titulo</h1>
+                        @if (!string.IsNullOrEmpty(hero.Corpo))
+                        {
+                            <p style="margin:0; font-size:17px; opacity:0.85; line-height:1.6;">@hero.Corpo</p>
+                        }
+                    </div>
+                }
+
+                @* Conteúdo principal do post — aparece UMA VEZ, com o estilo do layout geral *@
+                <div style="background:@_layout.CorFundoGeral; padding:40px 40px; font-size:16px; line-height:1.8; color:#1e293b;">
+                    @if (!string.IsNullOrEmpty(_htmlCorpo))
+                    {
+                        @((MarkupString)_htmlCorpo)
+                    }
+                    else
+                    {
+                        <p style="color:#94a3b8; font-style:italic;">O conteúdo que você escrever no editor aparecerá aqui...</p>
+                    }
+                </div>
+
+                @* Demais seções (caixa, cta, divider, banner) — abaixo do conteúdo *@
+                @foreach (var s in _layout.Secoes.OrderBy(x => x.Ordem).Where(x => x.Tipo != "hero" && x.Tipo != "texto"))
+                {
+                    var isAtiva = _secaoEditando?.Id == s.Id;
+                    <div style="background:@s.CorFundo; color:@s.CorTexto; padding:@(s.PaddingV)px 40px;
+                        border:2px solid @(isAtiva ? "#6366f1" : "transparent");
+                        border-left: @(s.Tipo == "caixa" ? $"4px solid {s.CorBorda}" : $"2px solid {(isAtiva ? "#6366f1" : "transparent")}");
+                        cursor:pointer; position:relative; text-align:@(s.TextoCentralizado ? "center" : "left");"
+                         @onclick="() => SelecionarSecao(s)">
+                        @if (isAtiva)
+                        {
+                            <div style="position:absolute;top:6px;right:10px;font-size:11px;background:#6366f1;color:#fff;padding:2px 8px;border-radius:4px;">editando</div>
+                        }
+                        @if (s.Tipo == "divider")
+                        {
+                            <hr style="border:none; border-top:2px solid #e2e8f0; margin:0;" />
+                        }
+                        else if (s.Tipo == "colunas")
+                        {
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px;">
+                                <div>@if (!string.IsNullOrEmpty(s.Corpo)) {
+                                    <p style="margin:0; line-height:1.7;">@s.Corpo</p>
+                                }
+                            </div>
+                            <div>@if (!string.IsNullOrEmpty(s.Coluna2)) {
+                                <p style="margin:0; line-height:1.7;">@s.Coluna2</p>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(s.Titulo))
+                    {
+                        <h3 style="margin:0 0 10px; font-size:20px; font-weight:700;">@s.Titulo</h3>
+                    }
+                    @if (!string.IsNullOrEmpty(s.Corpo))
+                    {
+                        <p style="margin:0; font-size:15px; line-height:1.7;">@s.Corpo</p>
+                    }
+                }
+            </div>
+        }
+
+    </div>
+</div>
+}
+</div>
+
+<!-- Modal vídeo -->
+@if (modalVideoAberto)
+{
+    <div class="be-modal-bg" @onclick="FecharModalVideo">
+        <div class="be-modal" @onclick:stopPropagation="true">
+            <h3>Inserir vídeo</h3>
+            <div class="be-field" style="margin-bottom:10px;">
+                <div class="be-field-label">URL do vídeo</div>
+                <input class="be-input" @bind="videoUrl"
+                       placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..." />
+            </div>
+            <div style="font-size:11px; color:#64748b;">Suporta YouTube, Vimeo ou link direto de vídeo (mp4, webm).</div>
+            <div class="be-modal-actions">
+                <button class="be-btn" @onclick="FecharModalVideo">Cancelar</button>
+                <button class="be-btn primary" @onclick="ConfirmarVideo">Inserir</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (modalLinkAberto)
+{
+    <div class="be-modal-bg" @onclick="FecharModalLink">
+        <div class="be-modal" @onclick:stopPropagation="true">
+            <h3>Inserir link</h3>
+            <div class="be-field" style="margin-bottom:10px;">
+                <div class="be-field-label">URL</div>
+                <input class="be-input" @bind="linkUrl"
+                       placeholder="https://..." />
+            </div>
+            <div class="be-field" style="margin-bottom:10px;">
+                <div class="be-field-label">Texto (opcional — usa seleção se vazio)</div>
+                <input class="be-input" @bind="linkTexto"
+                       placeholder="Texto do link..." />
+            </div>
+            <div class="be-modal-actions">
+                <button class="be-btn" @onclick="FecharModalLink">Cancelar</button>
+                <button class="be-btn primary" @onclick="ConfirmarLink">Inserir</button>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    window._beRef = null;
+
+    window.beInit = function(dotnetRef) {
+        window._beRef = dotnetRef;
+        const editor = document.getElementById('be-editor');
+        if (!editor) return;
+
+        // Placeholder
+        editor.addEventListener('input', () => {
+            editor.classList.toggle('be-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
+            dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+        });
+        editor.classList.toggle('be-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
+
+        // Ctrl+V: paste de imagem
+        editor.addEventListener('paste', async (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (const item of items) {
+                if (item.type.startsWith('image/')) {
+                    e.preventDefault();
+                    const file = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                        const base64 = reader.result.split(',')[1];
+                        const url = await dotnetRef.invokeMethodAsync('SalvarImagemBase64JS', base64, item.type);
+                        if (url) window.beInsertImage(url);
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                }
+            }
+        });
+
+        // Slash menu
+        let slashMenu = null;
+        editor.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && slashMenu) {
+                e.preventDefault();
+                const active = slashMenu.querySelector('.be-slash-item.active');
+                if (active) active.click();
+                return;
+            }
+            if (e.key === 'ArrowDown' && slashMenu) {
+                e.preventDefault();
+                const items = slashMenu.querySelectorAll('.be-slash-item');
+                let idx = Array.from(items).findIndex(x => x.classList.contains('active'));
+                items[idx]?.classList.remove('active');
+                items[Math.min(idx + 1, items.length - 1)]?.classList.add('active');
+                return;
+            }
+            if (e.key === 'ArrowUp' && slashMenu) {
+                e.preventDefault();
+                const items = slashMenu.querySelectorAll('.be-slash-item');
+                let idx = Array.from(items).findIndex(x => x.classList.contains('active'));
+                items[idx]?.classList.remove('active');
+                items[Math.max(idx - 1, 0)]?.classList.add('active');
+                return;
+            }
+            if (e.key === 'Escape' && slashMenu) { removeSlash(); return; }
+        });
+
+        editor.addEventListener('input', () => {
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+            const range = sel.getRangeAt(0);
+            const node = range.startContainer;
+            const text = node.textContent || '';
+            const offset = range.startOffset;
+            const lastSlash = text.lastIndexOf('/', offset);
+            if (lastSlash !== -1 && lastSlash === offset - 1) {
+                showSlash(range, node, lastSlash);
+            } else if (lastSlash !== -1) {
+                const q = text.substring(lastSlash + 1, offset).toLowerCase();
+                if (slashMenu) filterSlash(q);
+            } else {
+                removeSlash();
+            }
+        });
+
+        const slashCommands = [
+            { icon: 'H1', label: 'Título 1', desc: 'Grande', action: () => insertBlock('h1') },
+            { icon: 'H2', label: 'Título 2', desc: 'Médio', action: () => insertBlock('h2') },
+            { icon: 'H3', label: 'Título 3', desc: 'Pequeno', action: () => insertBlock('h3') },
+            { icon: '¶', label: 'Parágrafo', desc: 'Texto normal', action: () => insertBlock('p') },
+            { icon: '—', label: 'Divisor', desc: 'Linha horizontal', action: () => { document.execCommand('insertHorizontalRule'); } },
+            { icon: '❝', label: 'Citação', desc: 'Bloco azul', action: () => window.beInsertBlockquote() },
+            { icon: '≡', label: 'Lista', desc: 'Com marcadores', action: () => document.execCommand('insertUnorderedList') },
+            { icon: '1.', label: 'Lista numerada', desc: 'Numerada', action: () => document.execCommand('insertOrderedList') },
+            { icon: '💡', label: 'Destaque', desc: 'Caixa azul', action: () => window.beInsertCallout('info') },
+            { icon: '⚠', label: 'Aviso', desc: 'Caixa amarela', action: () => window.beInsertCallout('warning') },
+            { icon: '🖼', label: 'Imagem', desc: 'Upload ou colar', action: () => document.getElementById('be-img-input').click() },
+            { icon: '▶', label: 'Vídeo', desc: 'YouTube / Vimeo', action: () => dotnetRef.invokeMethodAsync('AbrirModalVideoJS') },
+            { icon: '⊞', label: 'Tabela', desc: '3 colunas', action: () => window.beInsertTable() },
+            { icon: '</>', label: 'Código', desc: 'Bloco de código', action: () => insertBlock('pre') },
+        ];
+
+        function showSlash(range, node, slashIdx) {
+            removeSlash();
+            const rect = range.getBoundingClientRect();
+            slashMenu = document.createElement('div');
+            slashMenu.className = 'be-slash-menu';
+            slashMenu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+            slashMenu.style.left = rect.left + 'px';
+            renderSlashItems(slashCommands, node, slashIdx);
+            document.body.appendChild(slashMenu);
+        }
+
+        function renderSlashItems(cmds, node, slashIdx) {
+            if (!slashMenu) return;
+            slashMenu.innerHTML = '';
+            cmds.forEach((cmd, i) => {
+                const item = document.createElement('div');
+                item.className = 'be-slash-item' + (i === 0 ? ' active' : '');
+                item.innerHTML = `<div class="be-slash-icon">${cmd.icon}</div><div><div class="be-slash-label">${cmd.label}</div><div class="be-slash-desc">${cmd.desc}</div></div>`;
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    removeTextBeforeSlash(node, slashIdx);
+                    cmd.action();
+                    removeSlash();
+                });
+                slashMenu.appendChild(item);
+            });
+        }
+
+        function filterSlash(q) {
+            if (!slashMenu) return;
+            const filtered = slashCommands.filter(c =>
+                c.label.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q));
+            if (filtered.length === 0) { removeSlash(); return; }
+            const node = window.getSelection()?.getRangeAt(0)?.startContainer;
+            renderSlashItems(filtered, node, -1);
+        }
+
+        function removeSlash() {
+            slashMenu?.remove();
+            slashMenu = null;
+        }
+
+        function removeTextBeforeSlash(node, slashIdx) {
+            if (!node || slashIdx < 0) return;
+            const sel = window.getSelection();
+            if (!sel.rangeCount) return;
+            const range = sel.getRangeAt(0);
+            const deleteRange = document.createRange();
+            deleteRange.setStart(node, slashIdx);
+            deleteRange.setEnd(node, range.startOffset);
+            deleteRange.deleteContents();
+        }
+
+        function insertBlock(tag) {
+            document.execCommand('formatBlock', false, tag);
+        }
+
+        document.addEventListener('click', (e) => {
+            if (slashMenu && !slashMenu.contains(e.target)) removeSlash();
+        });
+
+        // Image select/resize
+        editor.addEventListener('click', (e) => {
+            editor.querySelectorAll('.be-img-wrap').forEach(w => w.classList.remove('selected'));
+            const wrap = e.target.closest('.be-img-wrap');
+            if (wrap) { wrap.classList.add('selected'); e.stopPropagation(); }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.be-img-wrap'))
+                editor.querySelectorAll('.be-img-wrap').forEach(w => w.classList.remove('selected'));
+        });
+
+        // Resize drag
+        editor.addEventListener('mousedown', (e) => {
+            if (!e.target.classList.contains('be-resize-handle')) return;
+            e.preventDefault();
+            const wrap = e.target.closest('.be-img-wrap');
+            const img = wrap?.querySelector('img');
+            if (!img) return;
+            const startX = e.clientX;
+            const startW = img.offsetWidth;
+            const onMove = (ev) => {
+                img.style.width = Math.max(80, startW + (ev.clientX - startX)) + 'px';
+                img.style.height = 'auto';
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+    };
+
+    window.beSetContent = function(html) {
+        const el = document.getElementById('be-editor');
+        if (!el) return;
+        el.innerHTML = html || '';
+        el.classList.toggle('be-placeholder', !html || html === '<br>');
+    };
+
+    window.beGetContent = function() {
+        return document.getElementById('be-editor')?.innerHTML || '';
+    };
+
+    window.beExecCmd = function(cmd, value) {
+        document.getElementById('be-editor')?.focus();
+        document.execCommand(cmd, false, value ?? null);
+    };
+
+    window.beInsertImage = function(url, altText) {
+        const editor = document.getElementById('be-editor');
+        editor.focus();
+        const wrap = document.createElement('div');
+        wrap.className = 'be-img-wrap';
+        wrap.contentEditable = 'false';
+
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = altText || '';
+        img.style.width = '100%';
+
+        const handle = document.createElement('div');
+        handle.className = 'be-resize-handle';
+
+        const ctrls = document.createElement('div');
+        ctrls.className = 'be-img-controls';
+
+        const btnFloat = document.createElement('button');
+        btnFloat.className = 'be-img-ctrl-btn';
+        btnFloat.textContent = '↔ Flutuante';
+        btnFloat.onclick = () => {
+            wrap.style.float = wrap.style.float === 'right' ? '' : 'right';
+            wrap.style.margin = wrap.style.float === 'right' ? '0 0 8px 16px' : '8px 0';
+        };
+
+        const btnDel = document.createElement('button');
+        btnDel.className = 'be-img-ctrl-btn';
+        btnDel.textContent = '✕ Remover';
+        btnDel.onclick = () => { wrap.remove(); window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML); };
+
+        ctrls.appendChild(btnFloat);
+        ctrls.appendChild(btnDel);
+        wrap.appendChild(ctrls);
+        wrap.appendChild(img);
+        wrap.appendChild(handle);
+
+        document.execCommand('insertHTML', false, wrap.outerHTML);
+        window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+    };
+
+    window.beInsertVideo = function(url) {
+        const editor = document.getElementById('be-editor');
+        editor.focus();
+        let html = '';
+        const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
+        const vi = url.match(/vimeo\.com\/(\d+)/);
+        if (yt) {
+            html = `<div class="be-video-wrap" contenteditable="false"><div class="be-video-controls"><button class="be-video-ctrl-btn" onclick="this.closest('.be-video-wrap').remove()">✕ Remover</button></div><iframe src="https://www.youtube.com/embed/${yt[1]}" allowfullscreen loading="lazy"></iframe></div><p><br></p>`;
+        } else if (vi) {
+            html = `<div class="be-video-wrap" contenteditable="false"><div class="be-video-controls"><button class="be-video-ctrl-btn" onclick="this.closest('.be-video-wrap').remove()">✕ Remover</button></div><iframe src="https://player.vimeo.com/video/${vi[1]}" allowfullscreen loading="lazy"></iframe></div><p><br></p>`;
+        } else {
+            html = `<div class="be-video-wrap" contenteditable="false"><div class="be-video-controls"><button class="be-video-ctrl-btn" onclick="this.closest('.be-video-wrap').remove()">✕ Remover</button></div><video controls src="${url}"></video></div><p><br></p>`;
+        }
+        document.execCommand('insertHTML', false, html);
+        window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+    };
+
+    window.beInsertBlockquote = function() {
+        document.getElementById('be-editor')?.focus();
+        document.execCommand('formatBlock', false, 'blockquote');
+    };
+
+    window.beInsertCallout = function(type) {
+        const icons = { info: '💡', warning: '⚠️', danger: '🚨', success: '✅' };
+        const html = `<div class="be-callout" data-type="${type}" contenteditable="false"><span class="be-callout-icon">${icons[type] || '💡'}</span><div contenteditable="true" style="flex:1;outline:none;">Escreva aqui o destaque...</div></div><p><br></p>`;
+        document.getElementById('be-editor')?.focus();
+        document.execCommand('insertHTML', false, html);
+    };
+
+    window.beInsertTable = function() {
+        const html = `<div class="be-table-wrap"><table><thead><tr><th>Coluna 1</th><th>Coluna 2</th><th>Coluna 3</th></tr></thead><tbody><tr><td>Dado</td><td>Dado</td><td>Dado</td></tr><tr><td>Dado</td><td>Dado</td><td>Dado</td></tr></tbody></table></div><p><br></p>`;
+        document.getElementById('be-editor')?.focus();
+        document.execCommand('insertHTML', false, html);
+    };
+
+    window.beTriggerFile = function(id) {
+        document.getElementById(id)?.click();
+    };
+</script>
+
+@code {
+
+
+    private string _abaDrawer = "secoes";
+    // Layout / Page Builder
+    private PostLayout _layout = new();
+    private bool _modalLayoutAberto = false;
+    private PageSection? _secaoEditando = null;
+
+
+    private HttpClient Http => HttpFactory.CreateClient("local");
+
+    [Parameter] public int? Id { get; set; }
+
+    private string titulo = "", slug = "", resumo = "";
+    private string status = "rascunho";
+    private string? imagemPath;
+    private bool salvando = false;
+    private string mensagem = "";
+    private string tipoMensagem = "success";
+    private bool modalVideoAberto;
+    private string videoUrl = "";
+    private string _htmlInicial = "";
+    private string _htmlCorpo = "";
+    private int? _idAnterior;
+    private DotNetObjectReference<BlogEditor>? _dotnetRef;
+
+    private const long MaxImagemBytes = 8 * 1024 * 1024;
+
+    private bool modalLinkAberto;
+    private string linkUrl = "";
+    private string linkTexto = "";
+
+    private void AbrirModalLink() { linkUrl = ""; linkTexto = ""; modalLinkAberto = true; }
+    private void FecharModalLink() => modalLinkAberto = false;
+    private string _htmlInjetado = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id == _idAnterior) return;
+        _idAnterior = Id;
+
+        if (Id.HasValue)
+        {
+            var post = await BlogRepo.GetByIdAsync(Id.Value);
+            if (post is not null)
+            {
+                titulo = post.Titulo;
+                slug = post.Slug;
+                _htmlInicial = post.Conteudo ?? "";
+                _htmlCorpo = _htmlInicial;
+                status = post.Status;
+                imagemPath = post.Imagem;
+
+                if (post?.Layout is not null)
+                {
+                    try { _layout = System.Text.Json.JsonSerializer.Deserialize<PostLayout>(post.Layout) ?? new(); }
+                    catch { _layout = new(); }
+                }
+            }
+        }
+        else
+        {
+            titulo = ""; slug = ""; resumo = ""; _htmlInicial = ""; _htmlCorpo = "";
+            status = "rascunho"; imagemPath = null;
+        }
+
+        // Carregar layout salvo
+        
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("beInit", _dotnetRef);
+        }
+
+        // Sempre que o conteúdo inicial mudar, injeta no editor
+        if (_htmlInicial != _htmlInjetado)
+        {
+            _htmlInjetado = _htmlInicial;
+            await JS.InvokeVoidAsync("beSetContent", _htmlInicial);
+        }
+    }
+
+    private async Task ConfirmarLink()
+    {
+        if (string.IsNullOrWhiteSpace(linkUrl)) { modalLinkAberto = false; return; }
+        var url = linkUrl.Trim();
+        if (!url.StartsWith("http")) url = "https://" + url;
+        if (!string.IsNullOrWhiteSpace(linkTexto))
+            await JS.InvokeVoidAsync("beExecCmd", "insertHTML",
+                $"<a href=\"{url}\" target=\"_blank\" rel=\"noopener\">{linkTexto}</a>");
+        else
+            await JS.InvokeVoidAsync("beExecCmd", "createLink", url);
+        modalLinkAberto = false;
+        linkUrl = ""; linkTexto = "";
+    }
+
+    public void Dispose() => _dotnetRef?.Dispose();
+
+    [JSInvokable]
+    public void OnEditorInput(string html) => _htmlCorpo = html;
+
+    [JSInvokable]
+    public Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
+        => Task.FromResult<string?>($"data:{mimeType};base64,{base64}");
+
+    [JSInvokable]
+    public void AbrirModalVideoJS()
+    {
+        modalVideoAberto = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExecCmd(string cmd, string? value = null)
+        => await JS.InvokeVoidAsync("beExecCmd", cmd, value);
+
+    private async Task AplicarDestaque()
+        => await JS.InvokeVoidAsync("beExecCmd", "hiliteColor", "#fef08a");
+
+    private async Task InserirBlockquote()
+        => await JS.InvokeVoidAsync("beInsertBlockquote");
+
+    private async Task InserirTabela()
+        => await JS.InvokeVoidAsync("beInsertTable");
+
+    private async Task InserirCallout()
+        => await JS.InvokeVoidAsync("beInsertCallout", "info");
+
+    private async Task OnBlockTypeChange(ChangeEventArgs e)
+        => await JS.InvokeVoidAsync("beExecCmd", "formatBlock", e.Value?.ToString() ?? "p");
+
+    private async Task TriggerImageInput()
+        => await JS.InvokeVoidAsync("beTriggerFile", "be-img-input");
+
+    private async Task TriggerCoverInput()
+        => await JS.InvokeVoidAsync("beTriggerFile", "be-cover-input");
+
+    private async Task OnImagemSelecionada(InputFileChangeEventArgs e)
+    {
+        var arquivo = e.File;
+        if (arquivo == null || arquivo.Size > MaxImagemBytes) { MostrarMensagem("Imagem muito grande (máx 8 MB).", "error"); return; }
+        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+        using var ms = new MemoryStream();
+        await stream.CopyToAsync(ms);
+        var url = $"data:{arquivo.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
+        await JS.InvokeVoidAsync("beInsertImage", url, arquivo.Name);
+    }
+
+    private async Task UploadCover(InputFileChangeEventArgs e)
+    {
+        using var content = new MultipartFormDataContent();
+        var stream = e.File.OpenReadStream(5 * 1024 * 1024);
+        content.Add(new StreamContent(stream), "file", e.File.Name);
+        var resp = await Http.PostAsync("/api/admin/posts/upload-imagem", content);
+        var result = await resp.Content.ReadFromJsonAsync<UploadResult>();
+        imagemPath = result?.Caminho;
+    }
+
+    private void AbrirModalVideo() { videoUrl = ""; modalVideoAberto = true; }
+    private void FecharModalVideo() => modalVideoAberto = false;
+
+    private async Task ConfirmarVideo()
+    {
+        if (string.IsNullOrWhiteSpace(videoUrl)) { modalVideoAberto = false; return; }
+        await JS.InvokeVoidAsync("beInsertVideo", videoUrl.Trim());
+        modalVideoAberto = false;
+        videoUrl = "";
+    }
+
+    private async Task Salvar()
+    {
+        if (salvando) return;
+        salvando = true;
+        mensagem = "";
+
+        _htmlCorpo = await JS.InvokeAsync<string>("beGetContent");
+
+        if (string.IsNullOrWhiteSpace(titulo))
+        {
+            MostrarMensagem("Informe o título do post.", "error");
+            salvando = false;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(slug))
+            slug = GerarSlugDe(titulo);
+
+        try
+        {
+            var dto = new { titulo, slug, conteudo = _htmlCorpo, imagem = imagemPath, status };
+
+            if (Id.HasValue)
+                await Http.PutAsJsonAsync($"/api/admin/posts/{Id}", dto);
+            else
+                await Http.PostAsJsonAsync("/api/admin/posts", dto);
+
+            MostrarMensagem("Post salvo com sucesso.", "success");
+
+            if (!Id.HasValue)
+                Nav.NavigateTo("/blog");
+        }
+        catch (Exception ex)
+        {
+            MostrarMensagem($"Erro ao salvar: {ex.Message}", "error");
+        }
+        finally
+        {
+            salvando = false;
+        }
+    }
+
+    private static string GerarSlugDe(string texto)
+    {
+        var s = texto.ToLowerInvariant()
+            .Replace(" ", "-")
+            .Replace("ã", "a").Replace("â", "a").Replace("á", "a").Replace("à", "a")
+            .Replace("ç", "c")
+            .Replace("é", "e").Replace("ê", "e").Replace("è", "e")
+            .Replace("í", "i").Replace("î", "i")
+            .Replace("ó", "o").Replace("ô", "o").Replace("õ", "o")
+            .Replace("ú", "u").Replace("û", "u")
+            .Replace("ñ", "n");
+        return System.Text.RegularExpressions.Regex.Replace(s, "[^a-z0-9-]+", "").Trim('-');
+    }
+
+    private void MostrarMensagem(string texto, string tipo)
+    {
+        mensagem = texto;
+        tipoMensagem = tipo;
+        StateHasChanged();
+    }
+
+    private void Voltar()
+    {
+        Abas.Fechar(Abas.RotaAtiva ?? "");
+    }
+
+    private record UploadResult(string Caminho);
+
+    private async Task SalvarLayout()
+    {
+        if (Id.HasValue && Id.Value > 0)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(_layout);
+            await BlogRepo.SalvarLayoutAsync(Id.Value, json);
+        }
+        _modalLayoutAberto = false;
+        _abaDrawer = "secoes";
+        StateHasChanged();
+    }
+
+    private void AdicionarSecao(string tipo)
+    {
+        _layout.Secoes.Add(new PageSection { Tipo = tipo, Ordem = _layout.Secoes.Count });
+        StateHasChanged();
+    }
+
+    private void RemoverSecao(string id)
+    {
+        _layout.Secoes.RemoveAll(s => s.Id == id);
+        for (int i = 0; i < _layout.Secoes.Count; i++) _layout.Secoes[i].Ordem = i;
+        StateHasChanged();
+    }
+
+    private void MoverSecaoAcima(string id)
+    {
+        var idx = _layout.Secoes.FindIndex(s => s.Id == id);
+        if (idx > 0) (_layout.Secoes[idx], _layout.Secoes[idx - 1]) = (_layout.Secoes[idx - 1], _layout.Secoes[idx]);
+        for (int i = 0; i < _layout.Secoes.Count; i++) _layout.Secoes[i].Ordem = i;
+        StateHasChanged();
+    }
+
+    private void MoverSecaoAbaixo(string id)
+    {
+        var idx = _layout.Secoes.FindIndex(s => s.Id == id);
+        if (idx < _layout.Secoes.Count - 1) (_layout.Secoes[idx], _layout.Secoes[idx + 1]) = (_layout.Secoes[idx + 1], _layout.Secoes[idx]);
+        for (int i = 0; i < _layout.Secoes.Count; i++) _layout.Secoes[i].Ordem = i;
+        StateHasChanged();
+    }
+
+    private void SelecionarTemplate(string template)
+    {
+        _layout.TemplateBase = template;
+        _layout.Secoes = template switch
+        {
+            "artigo" => new List<PageSection>
+        {
+            new() { Tipo = "hero", Titulo = "Título do Hero", Corpo = "Uma frase de impacto que resume o conteúdo do post e convida o leitor a continuar lendo.", CorFundo = "#1e293b", CorTexto = "#f8fafc", Ordem = 0 },
+            new() { Tipo = "texto", Titulo = "Introdução", Corpo = "Apresente o tema do artigo aqui. Explique o que o leitor vai aprender e por que isso é relevante para ele.", Ordem = 1 },
+            new() { Tipo = "texto", Titulo = "Desenvolvimento", Corpo = "Desenvolva os pontos principais do seu conteúdo. Você pode adicionar quantas seções de texto precisar para cobrir o assunto com profundidade.", Ordem = 2 },
+            new() { Tipo = "caixa", Titulo = "💡 Dica importante", Corpo = "Destaque aqui uma dica prática, um aviso ou uma informação que merece atenção especial do leitor.", CorFundo = "#eff6ff", CorBorda = "#6366f1", Ordem = 3 },
+            new() { Tipo = "cta", Titulo = "Conclusão / CTA", Corpo = "Finalize com um resumo e chame o leitor para uma ação: assinar newsletter, entrar em contato, ver outro artigo.", CorFundo = "#6366f1", CorTexto = "#ffffff", Ordem = 4 },
+        },
+            "magazine" => new List<PageSection>
+        {
+            new() { Tipo = "hero", Titulo = "Manchete Principal", Corpo = "A grande chamada que vai prender a atenção do leitor logo de início.", CorFundo = "#0f172a", CorTexto = "#f8fafc", Ordem = 0 },
+            new() { Tipo = "colunas", Titulo = "Seção em colunas", Corpo = "Conteúdo da coluna esquerda — ideal para destaques, listas ou resumos.", Coluna2 = "Conteúdo da coluna direita — complementa o texto da esquerda com dados, imagem ou contexto.", Ordem = 1 },
+            new() { Tipo = "banner", Titulo = "Banner destaque", Corpo = "Use esta área para um anúncio, promoção ou chamada especial em destaque.", CorFundo = "#fef3c7", Ordem = 2 },
+            new() { Tipo = "texto", Titulo = "Texto principal", Corpo = "O corpo principal do artigo vai aqui. Desenvolva o assunto com clareza e profundidade.", Ordem = 3 },
+            new() { Tipo = "cta", Titulo = "CTA Final", Corpo = "Convide o leitor para a próxima ação: seguir nas redes, baixar material, falar com a equipe.", CorFundo = "#6366f1", CorTexto = "#ffffff", Ordem = 4 },
+        },
+            "minimal" => new List<PageSection>
+        {
+            new() { Tipo = "texto", Titulo = "Abertura", Corpo = "Um parágrafo introdutório limpo e direto. O tema do texto sem rodeios.", Ordem = 0 },
+            new() { Tipo = "divider", Ordem = 1 },
+            new() { Tipo = "texto", Titulo = "Corpo do artigo", Corpo = "O desenvolvimento completo do conteúdo. Layout minimal, sem distrações — foco total no texto.", Ordem = 2 },
+        },
+            _ => new()
+        };
+        StateHasChanged();
+    }
+
+    private void SelecionarSecao(PageSection s)
+    {
+        _secaoEditando = s;
+        _abaDrawer = "editar";
+    }
+}

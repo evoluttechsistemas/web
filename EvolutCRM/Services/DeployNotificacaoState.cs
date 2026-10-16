@@ -8,12 +8,14 @@ namespace EvolutCRM.Services
 
         public bool Ativo { get; private set; } = false;
         public string Mensagem { get; private set; } = "";
-        public string Tipo { get; private set; } = ""; // "aviso5min" ou "aviso30seg"
+        public string Tipo { get; private set; } = "";
+        public DateTime? FimUtc { get; private set; }  
 
-        public void Notificar(string tipo, string mensagem)
+        public void Notificar(string tipo, string mensagem, DateTime? fimUtc = null) 
         {
             Tipo = tipo;
             Mensagem = mensagem;
+            FimUtc = fimUtc;                 
             Ativo = true;
             OnChange?.Invoke();
         }
@@ -23,6 +25,7 @@ namespace EvolutCRM.Services
             Ativo = false;
             Mensagem = "";
             Tipo = "";
+            FimUtc = null;        
             OnChange?.Invoke();
         }
     }

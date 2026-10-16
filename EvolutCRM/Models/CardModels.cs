@@ -69,6 +69,8 @@
         public int ScoreTemperatura { get; set; }
         public byte[]? AudioBytes { get; set; }
         public string? AudioNome { get; set; }
+        public string? TranscricaoAudio { get; set; }
+        public string? AudioTranscrito { get; set; }
 
     }
 

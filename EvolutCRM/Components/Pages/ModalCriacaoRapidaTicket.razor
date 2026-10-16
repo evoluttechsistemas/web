@@ -3,6 +3,7 @@
 @inject UserState UserState
 @inject IJSRuntime JS
 @using EvolutCRM.Models
+@using EvolutCRM.Helpers
 @using Microsoft.AspNetCore.Components.Forms
 @using SixLabors.ImageSharp
 @using SixLabors.ImageSharp.Processing
@@ -385,7 +386,7 @@
                                     @c.Nome
                                 </div>
                             }
-                            @if (!string.IsNullOrWhiteSpace(_termoCliente) && !_clienteSelecionado)
+                            @if (!string.IsNullOrWhiteSpace(_termoCliente) && !_clienteSelecionado && !TermoEhTelefone)
                             {
                                 <div class="sugestao-item sugestao-novo" @onclick="UsarComoNovo">
                                     ➕ Criar cliente "<strong>@_termoCliente</strong>"
@@ -438,7 +439,17 @@
                         </div>
                     }
 
-                    @if (!string.IsNullOrWhiteSpace(_termoCliente) && !_sugestoes.Any() && !_clienteSelecionado)
+                    @if (TermoEhTelefone && !_contatoSelecionado)
+                    {
+                        <div class="hint-novo" style="color:#166534; background:#f0fdf4; border-color:#bbf7d0;">
+                            📱 Será aberto como <strong>WhatsApp</strong> para <strong>@TelefoneFormatado(TelefoneBR.Normalizar(_telefoneDigitado))</strong>
+                            @if (!_clienteSelecionado)
+                            {
+                                <span> — sem cliente vinculado (escolha um cliente abaixo ou vincule depois no ticket).</span>
+                            }
+                        </div>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(_termoCliente) && !_sugestoes.Any() && !_clienteSelecionado && !TermoEhTelefone)
                     {
                         <div class="hint-novo">
                             Cliente não encontrado — será criado como novo ao salvar.
@@ -619,6 +630,66 @@
 
     // ── Cliente ──────────────────────────────────────────────────────────
     private string _termoCliente = "";
+
+    // Telefone digitado no campo Cliente, só dígitos (espaços, traços, parênteses e + são ignorados).
+    // Fica guardado mesmo depois de escolher o cliente na lista.
+    private string _telefoneDigitado = "";
+    private bool TermoEhTelefone => _telefoneDigitado.Length >= 10;
+
+    /// <summary>Se o texto é um telefone (só dígitos e sinais de telefone, 10+ dígitos), devolve os dígitos.</summary>
+    private static string ExtrairTelefone(string? texto)
+    {
+        var t = (texto ?? "").Trim();
+        if (t.Length == 0) return "";
+        if (t.Any(ch => !(char.IsDigit(ch) || " ()+-./".Contains(ch)))) return "";
+        var digitos = new string(t.Where(char.IsDigit).ToArray());
+        return digitos.Length >= 10 ? digitos : "";
+    }
+
+    private static string SoDigitos(string? s) => new string((s ?? "").Where(char.IsDigit).ToArray());
+
+    /// <summary>
+    /// Mesmo telefone escrito de jeitos diferentes? (com/sem 55, com/sem o 9, com formatação)
+    /// </summary>
+    private static bool MesmoTelefone(string? a, string? b)
+    {
+        var da = SoDigitos(a);
+        var db = SoDigitos(b);
+        if (da.Length < 8 || db.Length < 8) return false;
+
+        var va = TelefoneBR.GerarVariantes(da);
+        var vb = TelefoneBR.GerarVariantes(db);
+        if (va.Count > 0 && vb.Count > 0)
+            return va.Intersect(vb).Any();
+
+        // algum lado sem DDD: compara o final do número
+        return da[^8..] == db[^8..];
+    }
+
+    /// <summary>Contato do histórico bate com o que foi digitado?</summary>
+    private static bool ContatoBate(string? telefoneContato, string termoDigitos)
+    {
+        var tel = SoDigitos(telefoneContato);
+        if (termoDigitos.Length >= 10)
+            return MesmoTelefone(tel, termoDigitos);
+
+        // número incompleto (ainda digitando): busca por trecho
+        return tel.Contains(termoDigitos) || termoDigitos.Contains(tel);
+    }
+
+    /// <summary>Exibição: 557399902958 → +55 (73) 9990-2958</summary>
+    private static string TelefoneFormatado(string digitos)
+    {
+        var d = SoDigitos(digitos);
+        if (d.StartsWith("55") && d.Length >= 12)
+        {
+            var ddd = d.Substring(2, 2);
+            var local = d.Substring(4);
+            var meio = local.Length - 4;
+            return $"+55 ({ddd}) {local[..meio]}-{local[meio..]}";
+        }
+        return d;
+    }
     private bool _clienteSelecionado = false;
     private int _codClienteSelecionado = 0;
     private List<ClienteModel> _sugestoes = new();
@@ -676,6 +747,7 @@
     private async Task OnTermoClienteChange(ChangeEventArgs e)
     {
         _termoCliente = e.Value?.ToString() ?? "";
+        _telefoneDigitado = ExtrairTelefone(_termoCliente);
         _clienteSelecionado = false;
         _codClienteSelecionado = 0;
         _contatosCliente = new();
@@ -713,8 +785,7 @@
 
                 if (termoSoDigitos.Length >= 8)
                 {
-                    var matches = contatos.Where(x =>
-                        x.Telefone.Contains(termoSoDigitos) || termoSoDigitos.Contains(x.Telefone)).ToList();
+                    var matches = contatos.Where(x => ContatoBate(x.Telefone, termoSoDigitos)).ToList();
                     contatoMatch = matches.FirstOrDefault();
                     qtdMatch = matches.Count;
                 }
@@ -767,8 +838,7 @@
         if (termoSoDigitos.Length >= 8)
         {
             // Buscou por número — filtra por telefone
-            var matches = todosContatos.Where(x =>
-                x.Telefone.Contains(termoSoDigitos) || termoSoDigitos.Contains(x.Telefone)).ToList();
+            var matches = todosContatos.Where(x => ContatoBate(x.Telefone, termoSoDigitos)).ToList();
 
             if (matches.Count == 1)
             {
@@ -1015,7 +1085,16 @@
         try
         {
             int codCliente = _codClienteSelecionado;
-            if (codCliente == 0)
+
+            // WhatsApp: contato escolhido na lista OU o número digitado no campo (já sem espaços/traços)
+            string? telefoneWhats = _contatoSelecionado && !string.IsNullOrWhiteSpace(_telefoneWhatsApp)
+                ? _telefoneWhatsApp
+                : (TermoEhTelefone ? TelefoneBR.Normalizar(_telefoneDigitado) : null);
+            string? nomeWhats = _contatoSelecionado ? _nomeWhatsApp : null;
+            var ehWhatsApp = !string.IsNullOrWhiteSpace(telefoneWhats);
+
+            // Só cria cliente novo quando foi digitado um NOME (nunca um número de telefone)
+            if (codCliente == 0 && !TermoEhTelefone)
                 codCliente = await TicketSvc.CriarClienteRapidoAsync(_termoCliente.Trim());
 
             // 1. Cria o ticket com a mensagem e o arquivo (se houver)
@@ -1027,13 +1106,13 @@ descricao: _mensagem.Trim(),
 codCliente: codCliente,
 codSetor: 1,
 codSituacao: 1,
-codTipo: _contatoSelecionado ? 5 : 1,
+codTipo: ehWhatsApp ? 5 : 1,
 prioridade: 2,
 usuarioResponsavel: UserState.CurrentUser ?? "NOVO",
 arquivo: _arquivo,
 usuarioAbertura: UserState.CurrentUser ?? "NOVO",
-telefoneWhatsApp: _contatoSelecionado ? _telefoneWhatsApp : null,
-nomeWhatsApp: _contatoSelecionado ? _nomeWhatsApp : null
+telefoneWhatsApp: telefoneWhats,
+nomeWhatsApp: nomeWhats
 );
 
             // 2. Se tem áudio ou vídeo, salva como mensagem adicional no ticket
@@ -1093,6 +1172,7 @@ nomeWhatsApp: _contatoSelecionado ? _nomeWhatsApp : null
     private void Limpar()
     {
         _termoCliente = "";
+        _telefoneDigitado = "";
         _mensagem = "";
         _erro = "";
         _clienteSelecionado = false;
@@ -1175,10 +1255,12 @@ nomeWhatsApp: _contatoSelecionado ? _nomeWhatsApp : null
             return;
         }
 
-        var termoSoDigitos = new string(_termoCliente.Where(char.IsDigit).ToArray());
-        if (termoSoDigitos.Length < 8)
+        var termoSoDigitos = !string.IsNullOrEmpty(_telefoneDigitado)
+            ? _telefoneDigitado
+            : new string(_termoCliente.Where(char.IsDigit).ToArray());
+        if (termoSoDigitos.Length < 10)
         {
-            _erro = "Número inválido.";
+            _erro = "Informe o número com DDD.";
             return;
         }
 
@@ -1198,7 +1280,7 @@ nomeWhatsApp: _contatoSelecionado ? _nomeWhatsApp : null
             _termoCliente = $"{clienteSelecionado.Nome} — {_nomeNovoContato}";
             _codClienteSelecionado = _codClienteContato;
             _clienteSelecionado = true;
-            _telefoneWhatsApp = termoSoDigitos;
+            _telefoneWhatsApp = TelefoneBR.Normalizar(termoSoDigitos);
             _nomeWhatsApp = _nomeNovoContato;
             _contatoSelecionado = true;
             _mostrarSalvarContato = false;

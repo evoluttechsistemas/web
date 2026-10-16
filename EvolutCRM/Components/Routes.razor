@@ -1,5 +1,6 @@
 ﻿@using EvolutCRM.Components.Layout
 @using EvolutCRM.Abas
+@inject IJSRuntime JS
 
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
@@ -14,3 +15,15 @@
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
 </Router>
+
+@code {
+    // Avisa o App.razor que a conexão do Blazor ligou (vale para todas as telas: login, sistema, tutoriais)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try { await JS.InvokeVoidAsync("helpMarcarConectado"); }
+            catch { }
+        }
+    }
+}

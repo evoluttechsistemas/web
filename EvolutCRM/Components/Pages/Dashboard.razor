@@ -197,7 +197,7 @@
     .dx-kpis {
         display: grid;
         gap: 14px;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(5, minmax(0, 1fr));
     }
 
     .dx-kpi {
@@ -326,10 +326,6 @@
 
     .span-4 {
         grid-column: span 4;
-    }
-
-    .span-5 {
-        grid-column: span 5;
     }
 
     .span-6 {
@@ -1186,20 +1182,7 @@
 
         .mh .msub {
             font-size: 12.5px;
-            color: #a0b0cc;
-            font-weight: 600;
-            margin-top: 3px;
-        }
-
-        .mh h3 {
-            font-size: 17px;
-            font-weight: 800;
-            letter-spacing: -0.01em;
-        }
-
-        .mh .msub {
-            font-size: 12.5px;
-            color: var(--txt-mut);
+            color: #8a98b3;
             font-weight: 600;
             margin-top: 3px;
         }
@@ -1210,21 +1193,21 @@
             width: 36px;
             height: 36px;
             border-radius: 11px;
-            background: rgba(251,111,112,.14);
-            color: var(--c-red);
+            background: rgba(251,111,112,.18);
+            color: #fb6f70;
             font-weight: 800;
             font-size: 15px;
             transition: .18s ease;
         }
 
             .mh button:hover {
-                background: rgba(251,111,112,.24);
+                background: rgba(251,111,112,.30);
             }
 
     .mbody {
         padding: 16px 24px 22px;
         overflow-y: auto;
-        background: #1a2744;
+        background: #111d35;
     }
 
         .mbody::-webkit-scrollbar {
@@ -1232,7 +1215,7 @@
         }
 
         .mbody::-webkit-scrollbar-thumb {
-            background: var(--stroke);
+            background: rgba(255,255,255,.12);
             border-radius: 8px;
         }
 
@@ -1242,17 +1225,17 @@
         justify-content: space-between;
         gap: 16px;
         padding: 14px 16px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
         border-radius: 13px;
-        background: rgba(255,255,255,.07);
-        border: 1px solid rgba(255,255,255,.13);
+        background: rgba(255,255,255,.055);
+        border: 1px solid rgba(255,255,255,.10);
         cursor: pointer;
         transition: .18s ease;
     }
 
         .mt:hover {
             border-color: var(--accent);
-            background: rgba(56,225,255,.12);
+            background: rgba(56,225,255,.10);
             transform: translateX(4px);
         }
 
@@ -1262,16 +1245,16 @@
 
         .mt-l strong {
             display: block;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 800;
-            margin-bottom: 4px;
+            margin-bottom: 5px;
             color: #e8edf6;
         }
 
         .mt-l span {
             display: block;
             font-size: 12.5px;
-            color: #a0b0cc;
+            color: #8a98b3;
             font-weight: 600;
         }
 
@@ -1284,23 +1267,21 @@
             display: inline-block;
             font-size: 11px;
             font-weight: 800;
-            padding: 3px 10px;
+            padding: 4px 10px;
             border-radius: 999px;
-            background: rgba(108,140,255,.28);
-            color: #a8c0ff;
-            margin-bottom: 5px;
+            margin-bottom: 6px;
         }
 
         .mt-r small {
             display: block;
             font-size: 12px;
-            color: var(--accent);
+            color: #38e1ff;
             font-weight: 800;
         }
 
     .m-empty {
         text-align: center;
-        color: var(--txt-mut);
+        color: #8a98b3;
         padding: 40px;
         font-weight: 600;
     }
@@ -1311,7 +1292,7 @@
             grid-template-columns: repeat(3, minmax(0,1fr));
         }
 
-        .span-4, .span-5, .span-6, .span-7, .span-8 {
+        .span-4, .span-12, .span-6, .span-7, .span-8 {
             grid-column: span 12;
         }
     }
@@ -1418,7 +1399,7 @@
 
         .cresc-svg .vlabel {
             fill: #fff;
-            font-size: 14px;
+            font-size: 11px;
             font-weight: 800;
         }
 
@@ -1547,6 +1528,12 @@
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
     }
+
+    .cresc-svg .axl {
+        fill: var(--txt-mut);
+        font-size: 11px;
+        font-weight: 700;
+    }
 </style>
 
 <div class="dx">
@@ -1601,8 +1588,8 @@
             <div class="dx-grid">
                 <div class="dx-panel span-12 cresc-panel">
                     <div class="dx-ph">
-                        <h3><span class="dot"></span> Crescimento mensal (%)</h3>
-                        <span class="hint">variação mês a mês · escada acumulada</span>
+                        <h3><span class="dot"></span> Crescimento líquido mensal (R$)</h3>
+                        <span class="hint">variação absoluta mês a mês · metas de crescimento</span>
                     </div>
 
                     @if (CrescimentoMoM == null)
@@ -1617,38 +1604,28 @@
                     <div class="cresc-meta">
                         <div class="cresc-meta-item">
                             <span class="cml">Crescimento (mês)</span>
-                            <span class="cmv">@CrescimentoMesAtual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                            <span class="cmv">@Brl(CrescimentoMesAtual)</span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Meta mensal</span>
-                            <span class="cmv">@MetaMensal.ToString("0")%</span>
+                            <span class="cmv">@Brl(MetaMensal)</span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Resultado mensal</span>
                             <span class="cmv" style="color:@(ResultadoMensal < 0 ? "var(--c-red)" : "var(--c-green)");">
-                                @ResultadoMensal.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%
+                                @BrlSigned(ResultadoMensal)
                             </span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Crescimento anual</span>
-                            <span class="cmv">@CrescimentoAnual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                            <span class="cmv">@Brl(CrescimentoAnual)</span>
                         </div>
                         <div class="cresc-meta-item">
                             <span class="cml">Meta anual</span>
-                            <span class="cmv">@MetaAnual.ToString("0")%</span>
-                        </div>
-                        <div class="cresc-meta-item">
-                            <span class="cml">Resultado anual</span>
-                            <span class="cmv" style="color:@(ResultadoAnual < 0 ? "var(--c-red)" : "var(--c-green)");">
-                                @ResultadoAnual.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)%
-                            </span>
+                            <span class="cmv">@Brl(MetaAnual)</span>
                         </div>
                     </div>
 
-                    <div class="cresc-legend">
-                        <span><i class="lo lo-down"></i> queda no mês</span>
-                        <span><i class="lo lo-up"></i> alta no mês</span>
-                    </div>
                 </div>
             </div>
 
@@ -1729,7 +1706,7 @@
 
                 @if (Data.LeadsPorStatus?.Any() == true)
                 {
-                    <div class="dx-panel span-5">
+                    <div class="dx-panel span-12">
                         <div class="dx-ph">
                             <h3><span class="dot"></span> Distribuição por status</h3>
                             <span class="hint">@Data.LeadsPorStatus.Sum(s => s.Quantidade) leads</span>
@@ -1961,7 +1938,7 @@
             <div class="dx-grid">
                 @if (SuporteData.TicketsPorSituacao?.Any() == true)
                 {
-                    <div class="dx-panel span-5">
+                    <div class="dx-panel span-12">
                         <div class="dx-ph">
                             <h3><span class="dot"></span> Tickets por situação</h3>
                             <span class="hint">@SuporteData.TicketsPorSituacao.Sum(t => t.Quantidade) no período</span>
@@ -2136,105 +2113,40 @@
                 </div>
 
                 <div class="dx-grid">
-                    <div class="dx-panel span-5">
+                    <div class="dx-panel span-12">
                         <div class="dx-ph">
                             <h3><span class="dot" style="background:var(--c-amber);box-shadow:0 0 10px var(--c-amber);"></span> Distribuição de notas</h3>
                             <span class="hint">@PesquisaData.TotalComNota avaliações</span>
                         </div>
                         <div class="tbars">
                             @foreach (var (nota, qtd, cor) in new[] {
-                            (5, PesquisaData.Nota5, "#34d399"),
-                            (4, PesquisaData.Nota4, "#4aa8ff"),
-                            (3, PesquisaData.Nota3, "#fbbf24"),
-                            (2, PesquisaData.Nota2, "#fb923c"),
-                            (1, PesquisaData.Nota1, "#fb6f70")
-                        })
+    (5, PesquisaData.Nota5, "#34d399"),
+    (4, PesquisaData.Nota4, "#4aa8ff"),
+    (3, PesquisaData.Nota3, "#fbbf24"),
+    (2, PesquisaData.Nota2, "#fb923c"),
+    (1, PesquisaData.Nota1, "#fb6f70")
+})
                             {
                                 var pct = PesquisaData.TotalComNota > 0
                                     ? (double)qtd / PesquisaData.TotalComNota * 100 : 0;
-                                <div class="tbar">
-                                    <div class="tbar-l" style="color:@cor; font-weight:700;">
-                                        @nota
+                                var notaCapturada = nota;
+                                var qtdCapturada = qtd;
+                                <div class="tbar" style="cursor:@(qtd > 0 ? "pointer" : "default"); padding:8px 6px; border-radius:10px; transition:.18s ease;"
+                                     @onclick="() => { if (qtdCapturada > 0) AbrirModalNota(notaCapturada); }"
+                                     @onmouseenter="e => { }">
+                                    <div class="tbar-l" style="color:@cor; font-weight:800; font-size:15px;">
+                                        ★ @nota
                                     </div>
                                     <div class="tbar-track">
                                         <div class="tbar-fill" style="width:@pct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)%;background:@cor;color:@cor;"></div>
                                     </div>
-                                    <div class="tbar-v">@qtd</div>
+                                    <div class="tbar-v" style="color:@cor;">@qtd</div>
                                 </div>
                             }
                         </div>
                     </div>
 
-                    <div class="dx-panel span-7">
-                        <div class="dx-ph">
-                            <h3><span class="dot"></span> Listagem detalhada</h3>
-                            <span class="hint">@PesquisaData.Detalhes.Count registros</span>
-                        </div>
-                        <div style="overflow-x:auto;">
-                            <table class="mtx">
-                                <thead>
-                                    <tr>
-                                        <th style="text-align:left;">Ticket</th>
-                                        <th style="text-align:left;">Telefone</th>
-                                        <th>Enviado</th>
-                                        <th>Respondido</th>
-                                        <th>Nota</th>
-                                        <th style="text-align:left;">Observação</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var p in PesquisaData.Detalhes.Take(50))
-                                    {
-                                        <tr>
-                                            <td style="text-align:left;">
-                                                <span style="cursor:pointer;color:var(--accent);"
-                                                      @onclick="() => AbrirTicket(p.CodTicket)">
-                                                    #@p.CodTicket
-                                                </span>
-                                            </td>
-                                            <td style="text-align:left;font-size:12px;color:var(--txt-mut);">@p.Telefone</td>
-                                            <td style="font-size:12px;">@p.DataEnvio.ToString("dd/MM HH:mm")</td>
-                                            <td>
-                                                @if (!string.IsNullOrEmpty(p.ErroEnvio))
-                                                {
-                                                    <span class="dx-chip down" title="@p.ErroEnvio">❌ Erro</span>
-                                                }
-                                                else if (p.Respondido)
-                                                {
-                                                    <span class="dx-chip up">✅ Sim</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="dx-chip flat">⏳ Não</span>
-                                                }
-                                            </td>
-                                            <td>
-                                                @if (p.Nota.HasValue)
-                                                {
-                                                    var corNota = p.Nota switch
-                                                    {
-                                                        5 => "#34d399",
-                                                        4 => "#4aa8ff",
-                                                        3 => "#fbbf24",
-                                                        2 => "#fb923c",
-                                                        _ => "#fb6f70"
-                                                    };
-                                                    <span style="font-weight:800;color:@corNota;font-size:15px;">@p.Nota ★</span>
-                                                }
-                                                else
-                                                {
-                                                    <span style="color:var(--txt-dim);">—</span>
-                                                }
-                                            </td>
-                                            <td style="text-align:left;font-size:12px;color:var(--txt-mut);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                                @(string.IsNullOrWhiteSpace(p.Observacao) ? "—" : p.Observacao)
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    
                 </div>
             }
         }
@@ -2282,8 +2194,74 @@
     </div>
 }
 
+@if (ModalNotaAberto)
+{
+    <div class="mb" @onclick="FecharModalNota">
+        <div class="mw" @onclick:stopPropagation="true">
+            <div class="mh">
+                <div>
+                    <h3>
+                        @{
+                            var corModal = ModalNotaSelecionada switch
+                            {
+                                5 => "#34d399",
+                                4 => "#4aa8ff",
+                                3 => "#fbbf24",
+                                2 => "#fb923c",
+                                _ => "#fb6f70"
+                            };
+                        }
+                        <span style="color:@corModal;">★ Nota @ModalNotaSelecionada</span>
+                        — @ModalNotaLista.Count avaliação(ões)
+                    </h3>
+                    <div class="msub">Clique num ticket para abri-lo</div>
+                </div>
+                <button @onclick="FecharModalNota">✕</button>
+            </div>
+            <div class="mbody">
+                @if (!ModalNotaLista.Any())
+                {
+                    <p class="m-empty">Nenhuma avaliação com nota @ModalNotaSelecionada no período.</p>
+                }
+                else
+                {
+                    @foreach (var p in ModalNotaLista.OrderByDescending(x => x.DataEnvio))
+                    {
+                        <div class="mt" @onclick="() => { FecharModalNota(); AbrirTicket(p.CodTicket); }">
+                            <div class="mt-l">
+                                <strong>#@p.CodTicket</strong>
+                                <span>@p.Telefone · @p.DataEnvio.ToString("dd/MM/yyyy HH:mm")</span>
+                                @if (!string.IsNullOrWhiteSpace(p.Observacao))
+                                {
+                                    <span style="margin-top:4px; display:block; font-size:12px; color:#a0b0cc; font-style:italic;">
+                                        "@p.Observacao"
+                                    </span>
+                                }
+                            </div>
+                            <div class="mt-r">
+                                <span class="st" style="background:rgba(@(ModalNotaSelecionada <= 2 ? "251,111,112" : ModalNotaSelecionada == 3 ? "251,191,36" : "52,211,153"),.2);color:@corModal;">
+                                    ★ @p.Nota
+                                </span>
+                                <small>Ver ticket →</small>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+}
+
 @code {
 
+
+    private static readonly System.Globalization.CultureInfo PtBR =
+    new System.Globalization.CultureInfo("pt-BR");
+
+    private string Brl(double v) => v.ToString("C0", PtBR);
+    private string Brl(decimal v) => ((double)v).ToString("C0", PtBR);
+    private string BrlSigned(double v) => (v > 0 ? "+" : "") + v.ToString("C0", PtBR);
+    private string BrlSigned(decimal v) => BrlSigned((double)v);
     private decimal MetaMensal = 10m;   // default igual ao WPF
     private decimal MetaAnual = 100m;
     private double[]? CrescimentoMoM;
@@ -2546,7 +2524,6 @@
 
     // Resultado = crescimento − meta (idêntico ao WPF)
     private double ResultadoMensal => CrescimentoMesAtual - (double)MetaMensal;
-    private double ResultadoAnual => CrescimentoAnual - (double)MetaAnual;
 
     // Série numérica a partir da evolução mensal (ordenada por mês)
     private List<double> EvoSerie(Func<EvolucaoMensal, int> sel)
@@ -2721,20 +2698,12 @@
         return sb.ToString();
     }
 
-    // Cor por índice para os cards de situação (suporte)
-    private string CorSituacao(int idx)
-    {
-        var cores = new[] { "#4aa8ff", "#fbbf24", "#b794f6", "#34d399", "#22d3ee", "#fb6f70", "#94a3b8", "#f472b6" };
-        return cores[idx % cores.Length];
-    }
-
     // Replica CarregarGraficoColunas() do painel WPF: base = soma de vendas por mês,
     // crescimento MoM, e barras em "escada" acumulada (Math.Max(0, mom)).
     private async Task CalcularCrescimentoMensalAsync()
     {
         int ano = DateTime.Now.Year;
 
-        // 1 query no lugar de 25
         var totais = await DashboardService.GetTotaisVendaAnosAsync(ano);
 
         double Get(int a, int m) =>
@@ -2749,119 +2718,187 @@
         {
             double atual = valores[i];
             double anterior = i == 0 ? Get(ano - 1, 12) : valores[i - 1];
-            mom[i] = anterior > 0 ? ((atual - anterior) / anterior) * 100.0 : 0;
-        }
-
-        var acum = new double[12];
-        double acumulado = 0;
-        for (int i = 0; i < 12; i++)
-        {
-            acumulado += Math.Max(0, mom[i]);
-            acum[i] = acumulado;
+            mom[i] = atual - anterior;
         }
 
         CrescimentoMoM = mom;
-        CrescimentoAcumulado = acum;
         CrescimentoMesesLabel = Enumerable.Range(1, 12)
             .Select(m => new DateTime(ano, m, 1)
                 .ToString("MMM", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")))
             .ToArray();
 
-        // crescimento anual
-        double totalAnoAtual = valores.Sum();
-        double totalAnoAnterior = Enumerable.Range(1, 12).Sum(m => Get(ano - 1, m));
-
-        CrescimentoAnual = totalAnoAnterior > 0
-            ? ((totalAnoAtual / totalAnoAnterior) * 100.0) - 100.0
-            : 0;
+        CrescimentoAnual = mom.Sum();
     }
 
-    // Gráfico de crescimento mensal em "escada acumulada" (portado do painel WPF).
-    // Altura da barra = acumulado; rótulo acima = MoM real do mês (pode ser negativo).
     private string CrescimentoChart()
     {
-        if (CrescimentoMoM == null || CrescimentoAcumulado == null
-            || CrescimentoMesesLabel == null || CrescimentoMoM.Length == 0)
+        if (CrescimentoMoM == null || CrescimentoMesesLabel == null || CrescimentoMoM.Length == 0)
             return "";
 
-        int n = CrescimentoMoM.Length;
-        double w = Math.Max(720, n * 78);
-        double h = 460, padL = 24, padR = 24, padT = 40, padB = 46;
-        double iw = w - padL - padR, ih = h - padT - padB;
+        const double MetaMin = 1500, MetaPrinc = 2000, MetaExcel = 2500;
+        var ptBR = new System.Globalization.CultureInfo("pt-BR");
 
-        double maxV = CrescimentoAcumulado.Max();
-        double minV = Math.Min(CrescimentoAcumulado.Min(), CrescimentoMoM.Min());
-        double yMin = Math.Min(minV - 5, -2);
-        double yMax = Math.Max(maxV + 5, 10);
-        double span = (yMax - yMin) <= 0 ? 1 : (yMax - yMin);
+        string BRL(double v)
+        {
+            long r = (long)Math.Round(v);
+            string a = Math.Abs(r).ToString("N0", ptBR);
+            return (r < 0 ? "-R$\u00a0" : "R$\u00a0") + a;
+        }
+
+        int n = CrescimentoMoM.Length;
+        double w = Math.Max(820, n * 72);
+        double h = 380, padL = 58, padR = 174, padT = 36, padB = 48;
+        double iw = w - padL - padR, ih = h - padT - padB;
+        double legendH = 60, totalH = h + legendH;
+
+        double dataMin = CrescimentoMoM.Min();
+        double dataMax = CrescimentoMoM.Max();
+        double yMin = Math.Min(0, Math.Floor(dataMin / 500.0) * 500);
+        double yMax = Math.Max(MetaExcel + 300, Math.Ceiling(dataMax / 500.0) * 500);
+        if (yMax <= yMin) yMax = yMin + 3000;
+        double span = yMax - yMin;
 
         Func<double, double> Y = v => padT + ih - ((v - yMin) / span) * ih;
         double slot = iw / n;
-        double bw = Math.Min(54, slot * 0.62);
+        double bw = Math.Min(62, slot * 0.65);
+        double yZero = Y(0);
 
-        string[] grad = { "#0D47A1", "#1565C0", "#1E88E5", "#42A5F5", "#4FC3F7", "#80DEEA" };
+        string GradId(double val, int i)
+        {
+            if (val < MetaMin) return "cbdown";
+            if (val < MetaPrinc) return "cbyellow";
+            if (val < MetaExcel) return "cbblue" + i;
+            return "cbgreen" + i;
+        }
 
         var sb = new System.Text.StringBuilder();
-        sb.Append(LT + "svg class='cresc-svg' viewBox='0 0 " + F(w) + " " + F(h) + "' xmlns='http://www.w3.org/2000/svg'>");
+        sb.Append(LT + "svg class='cresc-svg' viewBox='0 0 " + F(w) + " " + F(totalH) + "' xmlns='http://www.w3.org/2000/svg'>");
 
-        // gradiente de alta por barra + um gradiente de queda
+        // ── gradientes ───────────────────────────────────────────────────────────
         sb.Append(LT + "defs>");
+
+        sb.Append(LT + "linearGradient id='cbdown' x1='0' y1='0' x2='0' y2='1'>");
+        sb.Append(LT + "stop offset='0%' stop-color='#ef5350'/>");
+        sb.Append(LT + "stop offset='100%' stop-color='#b71c1c' stop-opacity='0.7'/>");
+        sb.Append(LT + "/linearGradient>");
+
+        sb.Append(LT + "linearGradient id='cbyellow' x1='0' y1='0' x2='0' y2='1'>");
+        sb.Append(LT + "stop offset='0%' stop-color='#FFA726'/>");
+        sb.Append(LT + "stop offset='100%' stop-color='#E65100' stop-opacity='0.7'/>");
+        sb.Append(LT + "/linearGradient>");
+
+        string[] blues = { "#0D47A1", "#1565C0", "#1E88E5", "#42A5F5", "#4FC3F7", "#80DEEA" };
         for (int i = 0; i < n; i++)
         {
-            int idx = n == 1 ? 0 : (int)Math.Round(i / (double)(n - 1) * (grad.Length - 1));
-            string c = grad[idx];
-            sb.Append(LT + "linearGradient id='cb" + i + "' x1='0' y1='0' x2='0' y2='1'>");
-            sb.Append(LT + "stop offset='0%' stop-color='" + c + "'/>");
-            sb.Append(LT + "stop offset='100%' stop-color='" + c + "' stop-opacity='0.62'/>");
+            int bi = n == 1 ? 2 : (int)Math.Round((double)i / (n - 1) * (blues.Length - 1));
+            sb.Append(LT + "linearGradient id='cbblue" + i + "' x1='0' y1='0' x2='0' y2='1'>");
+            sb.Append(LT + "stop offset='0%' stop-color='" + blues[bi] + "'/>");
+            sb.Append(LT + "stop offset='100%' stop-color='" + blues[bi] + "' stop-opacity='0.62'/>");
+            sb.Append(LT + "/linearGradient>");
+
+            sb.Append(LT + "linearGradient id='cbgreen" + i + "' x1='0' y1='0' x2='0' y2='1'>");
+            sb.Append(LT + "stop offset='0%' stop-color='#26A69A'/>");
+            sb.Append(LT + "stop offset='100%' stop-color='#00695C' stop-opacity='0.62'/>");
             sb.Append(LT + "/linearGradient>");
         }
-        sb.Append(LT + "linearGradient id='cbdown' x1='0' y1='0' x2='0' y2='1'>");
-        sb.Append(LT + "stop offset='0%' stop-color='#fb6f70'/>");
-        sb.Append(LT + "stop offset='100%' stop-color='#c62828' stop-opacity='0.62'/>");
-        sb.Append(LT + "/linearGradient>");
         sb.Append(LT + "/defs>");
 
-        // grid horizontal
-        for (int g = 0; g <= 4; g++)
+        // ── grid horizontal a cada R$ 500 ────────────────────────────────────────
+        for (double gv = yMin; gv <= yMax + 0.1; gv += 500)
         {
-            double val = yMin + span / 4 * g;
-            double y = Y(val);
-            sb.Append(LT + "line class='cg' x1='" + F(padL) + "' y1='" + F(y) + "' x2='" + F(w - padR) + "' y2='" + F(y) + "'/>");
+            double gy = Y(gv);
+            sb.Append(LT + "line class='cg' x1='" + F(padL) + "' y1='" + F(gy)
+                + "' x2='" + F(w - padR) + "' y2='" + F(gy) + "'/>");
+            sb.Append(LT + "text class='axl' x='" + F(padL - 8) + "' y='" + F(gy + 4)
+                + "' text-anchor='end'>" + ((long)gv).ToString("N0", ptBR) + LT + "/text>");
         }
 
-        // linha do zero
-        double yZero = Y(0);
-        sb.Append(LT + "line class='zero' x1='" + F(padL) + "' y1='" + F(yZero) + "' x2='" + F(w - padR) + "' y2='" + F(yZero) + "'/>");
+        // linha do zero (só se houver valores negativos)
+        if (yMin < 0)
+            sb.Append(LT + "line class='zero' x1='" + F(padL) + "' y1='" + F(yZero)
+                + "' x2='" + F(w - padR) + "' y2='" + F(yZero) + "'/>");
 
+        // ── linhas de meta pontilhadas + label à direita ──────────────────────────
+        void DrawMeta(double mv, string cor, string titulo)
+        {
+            double my = Y(mv);
+            double rx = w - padR + 16, ry = my - 20, rw = 150, rh = 36;
+            sb.Append(LT + "line x1='" + F(padL) + "' y1='" + F(my)
+                + "' x2='" + F(w - padR + 8) + "' y2='" + F(my)
+                + "' stroke='" + cor + "' stroke-width='1.5' stroke-dasharray='6,3' opacity='0.9'/>");
+            sb.Append(LT + "rect x='" + F(rx) + "' y='" + F(ry) + "' width='" + F(rw)
+                + "' height='" + F(rh) + "' rx='6' fill='" + cor + "' fill-opacity='0.15'/>");
+            sb.Append(LT + "text x='" + F(rx + rw / 2) + "' y='" + F(ry + 13)
+                + "' text-anchor='middle' fill='" + cor + "' font-size='9.5' font-weight='600' opacity='0.9'>"
+                + titulo + LT + "/text>");
+            sb.Append(LT + "text x='" + F(rx + rw / 2) + "' y='" + F(ry + 28)
+                + "' text-anchor='middle' fill='" + cor + "' font-size='12' font-weight='700'>"
+                + BRL(mv) + LT + "/text>");
+            sb.Append(LT + "circle cx='" + F(w - padR + 8) + "' cy='" + F(my)
+                + "' r='4.5' fill='" + cor + "'/>");
+        }
+        DrawMeta(MetaMin, "#FFA726", "Meta mínima");
+        DrawMeta(MetaPrinc, "#4FC3F7", "Meta principal");
+        DrawMeta(MetaExcel, "#26A69A", "Meta excelente");
+
+        // ── barras ───────────────────────────────────────────────────────────────
         for (int i = 0; i < n; i++)
         {
+            double val = CrescimentoMoM[i];
             double cx = padL + slot * i + slot / 2;
             double bx = cx - bw / 2;
-            double top = CrescimentoAcumulado[i];
-            double yTop = Y(top);
-            double barH = Math.Max(2, yZero - yTop);
+            bool pos = val >= 0;
+            double barTop = pos ? Y(val) : yZero;
+            double barH = Math.Max(2, Math.Abs(Y(val) - yZero));
 
-            bool subiu = CrescimentoMoM[i] >= 0;
-            string fill = subiu ? "url(#cb" + i + ")" : "url(#cbdown)";
-
-            sb.Append(LT + "rect class='cresc-bar' x='" + F(bx) + "' y='" + F(yTop) + "' width='" + F(bw)
-                + "' height='" + F(barH) + "' rx='7' fill='" + fill + "'>");
-            sb.Append(LT + "title>" + CrescimentoMesesLabel[i] + ": " + CrescimentoMoM[i].ToString("0.0", Inv) + "% no mês"
-                + " (acum. " + top.ToString("0.0", Inv) + "%)" + LT + "/title>");
+            sb.Append(LT + "rect class='cresc-bar' x='" + F(bx) + "' y='" + F(barTop)
+                + "' width='" + F(bw) + "' height='" + F(barH)
+                + "' rx='7' fill='url(#" + GradId(val, i) + ")'>");
+            sb.Append(LT + "title>" + CrescimentoMesesLabel[i] + ": " + BRL(val) + LT + "/title>");
             sb.Append(LT + "/rect>");
 
-            // rótulo = MoM real do mês (igual ao WPF)
-            double yLbl = yTop - 10;
+            // rótulo de valor (acima da barra positiva; abaixo da negativa)
+            double yLbl = pos
+    ? (Y(val) - 9 - (i % 2 == 0 ? 0 : 16))
+    : (Y(val) + 14);
             sb.Append(LT + "text class='vlabel' x='" + F(cx) + "' y='" + F(yLbl)
-                + "' text-anchor='middle'>" + CrescimentoMoM[i].ToString("0.0", Inv) + "%" + LT + "/text>");
+                + "' text-anchor='middle'>" + BRL(val) + LT + "/text>");
 
-            // mês no eixo X
-            sb.Append(LT + "text class='mlabel' x='" + F(cx) + "' y='" + F(h - 16)
+            // rótulo do mês
+            sb.Append(LT + "text class='mlabel' x='" + F(cx) + "' y='" + F(h - 8)
                 + "' text-anchor='middle'>" + CrescimentoMesesLabel[i] + LT + "/text>");
+        }
+
+        // ── legenda inferior ──────────────────────────────────────────────────────
+        var legs = new (string cor, string titulo, string sub)[]
+        {
+        ("#ef5350", "Abaixo de R$ 1.500", "= abaixo da meta"),
+        ("#FFA726", "R$ 1.500 a R$ 1.999", "= meta mínima"),
+        ("#42A5F5", "R$ 2.000 a R$ 2.499", "= meta principal"),
+        ("#26A69A", "R$ 2.500+",            "= meta excelente"),
+        };
+        double legSlot = (w - padL - padR) / legs.Length;
+        double legY = h + 16;
+        for (int j = 0; j < legs.Length; j++)
+        {
+            var (cor, titulo, sub) = legs[j];
+            double lx = padL + j * legSlot;
+            sb.Append(LT + "circle cx='" + F(lx + 8) + "' cy='" + F(legY + 5) + "' r='5' fill='" + cor + "'/>");
+            sb.Append(LT + "text x='" + F(lx + 20) + "' y='" + F(legY + 9)
+                + "' font-size='10.5' font-weight='600' fill='" + cor + "'>" + titulo + LT + "/text>");
+            sb.Append(LT + "text x='" + F(lx + 20) + "' y='" + F(legY + 23)
+                + "' font-size='9.5' fill='#aaa'>" + sub + LT + "/text>");
         }
 
         sb.Append(LT + "/svg>");
         return sb.ToString();
+    }
+
+    // Cor por índice para os cards de situação (suporte)
+    private string CorSituacao(int idx)
+    {
+        var cores = new[] { "#4aa8ff", "#fbbf24", "#b794f6", "#34d399", "#22d3ee", "#fb6f70", "#94a3b8", "#f472b6" };
+        return cores[idx % cores.Length];
     }
 
     private async Task CarregarPesquisa()
@@ -2892,5 +2929,25 @@
         ModalTicketsUsuarioData = DateTime.Today; // usado só pro label, adapte se quiser
         ModalTicketsUsuarioLista = await DashboardService.GetTicketsAbertosUsuarioAsync(usuario);
         ModalTicketsUsuarioAberto = true;
+    }
+
+    private int? ModalNotaSelecionada = null;
+    private List<PesquisaDetalhe> ModalNotaLista = new();
+    private bool ModalNotaAberto = false;
+
+    private void AbrirModalNota(int nota)
+    {
+        if (PesquisaData == null) return;
+        ModalNotaSelecionada = nota;
+        ModalNotaLista = PesquisaData.Detalhes
+            .Where(p => p.Nota == nota)
+            .OrderByDescending(p => p.DataEnvio)
+            .ToList();
+        ModalNotaAberto = true;
+    }
+
+    private void FecharModalNota()
+    {
+        ModalNotaAberto = false;
     }
 }

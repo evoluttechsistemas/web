@@ -1810,7 +1810,7 @@
                             <div class="ct-bubble">
                                 @if (!msg.MinhaMensagem)
                                 {
-                                    <div class="ct-msg-sender">@msg.Usuario</div>
+                                    <div class="ct-msg-sender" style="color:@CorUsuario(msg.Usuario)">@msg.Usuario</div>
                                 }
 
                                 @if (msg.Tipo == "IMAGE" && !string.IsNullOrWhiteSpace(msg.ArquivoUrl))
@@ -2805,5 +2805,23 @@
 
             StateHasChanged();
         }
+    }
+
+    private static readonly string[] _coresChat =
+{
+    "#e53935", "#1976d2", "#43a047", "#8e24aa", "#fb8c00",
+    "#00897b", "#3949ab", "#d81b60", "#5e35b1", "#6d4c41"
+};
+
+    private static string CorUsuario(string? nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "#546e7a";
+
+        // hash estável: mesma pessoa = mesma cor sempre (inclusive após reiniciar o IIS)
+        int hash = 0;
+        foreach (var c in nome.Trim().ToUpperInvariant())
+            hash = (hash * 31 + c) & 0x7FFFFFFF;
+
+        return _coresChat[hash % _coresChat.Length];
     }
 }

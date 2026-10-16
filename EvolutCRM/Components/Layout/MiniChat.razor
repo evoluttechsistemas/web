@@ -1,0 +1,701 @@
+﻿@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@implements IAsyncDisposable
+@inject ChatInternoService ChatService
+@inject ChatInternoNotificationState ChatNotify
+@inject MiniChatState MiniChatEstado
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+@* Janelinha de conversa aberta a partir da faixa da equipe.
+   Usa as mesmas funções do Chat Interno (ChatInternoService). *@
+
+<div class="mc-win">
+    <div class="mc-head">
+        <span class="mc-av" style="background:@CorAvatar(Titulo)">@Iniciais(Titulo)</span>
+        <div class="mc-head-txt">
+            <div class="mc-titulo">@Titulo</div>
+            @if (!string.IsNullOrWhiteSpace(SubTitulo))
+            {
+                <div class="mc-sub">
+                    <span class="mc-sub-dot" style="background:@(CorStatus ?? "#94a3b8")"></span>
+                    @SubTitulo
+                </div>
+            }
+        </div>
+        <button type="button" class="mc-hbtn" title="Abrir no Chat Interno" @onclick="AbrirChatCompleto">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+        </button>
+        <button type="button" class="mc-hbtn" title="Fechar" @onclick="Fechar">&times;</button>
+    </div>
+
+    <div class="mc-body" id="@_idCorpo">
+        @if (_carregandoPrimeira)
+        {
+            <div class="mc-vazio">Carregando conversa...</div>
+        }
+        else if (!_mensagens.Any())
+        {
+            <div class="mc-vazio">Nenhuma mensagem ainda. Diga um oi 👋</div>
+        }
+        else
+        {
+            DateTime? diaAnterior = null;
+            foreach (var msg in _mensagens)
+            {
+                if (diaAnterior != msg.DataHora.Date)
+                {
+                    diaAnterior = msg.DataHora.Date;
+                    <div class="mc-dia">@TextoDia(msg.DataHora)</div>
+                }
+
+                <div class="mc-linha @(msg.MinhaMensagem ? "minha" : "")">
+                    <div class="mc-bolha">
+                        @if (EhGrupo && !msg.MinhaMensagem)
+                        {
+                            <div class="mc-autor" style="color:@CorAvatar(msg.Usuario)">@msg.Usuario</div>
+                        }
+
+                        @if (msg.RespostaCodigo.HasValue && !string.IsNullOrWhiteSpace(msg.RespostaTexto))
+                        {
+                            <div class="mc-quote">
+                                <strong>@msg.RespostaUsuario</strong>
+                                <span>@msg.RespostaTexto</span>
+                            </div>
+                        }
+
+                        @if (msg.Tipo == "IMAGE" && !string.IsNullOrWhiteSpace(msg.ArquivoUrl))
+                        {
+                            <a href="@msg.ArquivoUrl" target="_blank" rel="noopener">
+                                <img class="mc-img" src="@msg.ArquivoUrl" alt="@msg.ArquivoNome" />
+                            </a>
+                        }
+                        else if (msg.Tipo == "FILE" && !string.IsNullOrWhiteSpace(msg.ArquivoUrl))
+                        {
+                            <a class="mc-arq" href="@msg.ArquivoUrl" target="_blank" rel="noopener" download="@msg.ArquivoNome">
+                                📎 @msg.ArquivoNome
+                            </a>
+                        }
+
+                        @if (!string.IsNullOrWhiteSpace(msg.Texto))
+                        {
+                            <div class="mc-texto">@msg.Texto</div>
+                        }
+
+                        <div class="mc-hora">
+                            @msg.DataHora.ToString("HH:mm")
+                            @if (msg.MinhaMensagem)
+                            {
+                                <span class="mc-check @(msg.Lida ? "lida" : "")">@(msg.Lida ? "✓✓" : "✓")</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_erro))
+    {
+        <div class="mc-erro">@_erro</div>
+    }
+
+    <div class="mc-foot">
+        <label class="mc-anexo" title="Enviar imagem ou arquivo">
+            <InputFile OnChange="EnviarArquivoAsync" style="display:none" />
+            @if (_enviandoArquivo)
+            {
+                <span class="mc-spin"></span>
+            }
+            else
+            {
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" /></svg>
+            }
+        </label>
+        <input class="mc-input" id="@_idInput"
+               placeholder="Digite uma mensagem e tecle Enter..."
+               autocomplete="off"
+               @bind="_texto" @bind:event="oninput"
+               @onkeydown="OnTeclaAsync" />
+        <button type="button" class="mc-enviar" title="Enviar" disabled="@(_enviando || string.IsNullOrWhiteSpace(_texto))" @onclick="EnviarTextoAsync">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></svg>
+        </button>
+    </div>
+</div>
+
+<style>
+    .mc-win {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        width: 340px;
+        height: 460px;
+        max-height: calc(100vh - 90px);
+        z-index: 9000;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        border-radius: 14px;
+        box-shadow: 0 18px 46px rgba(15,23,42,.3);
+        overflow: hidden;
+        font-family: 'IBM Plex Sans',sans-serif;
+        animation: mcIn .14s ease;
+    }
+
+    @@keyframes mcIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    .mc-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 10px;
+        background: linear-gradient(135deg,#1d4ed8,#172554);
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .mc-av {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+        box-shadow: 0 0 0 2px rgba(255,255,255,.35);
+    }
+
+    .mc-head-txt {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .mc-titulo {
+        font-size: 13px;
+        font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .mc-sub {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10.5px;
+        color: #bfdbfe;
+        margin-top: 1px;
+    }
+
+    .mc-sub-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+    }
+
+    .mc-hbtn {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,.3);
+        background: rgba(255,255,255,.1);
+        color: #fff;
+        font-size: 16px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+    }
+
+        .mc-hbtn:hover {
+            background: rgba(255,255,255,.25);
+        }
+
+    .mc-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+        background: #f1f5f9;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .mc-vazio {
+        margin: auto;
+        font-size: 12px;
+        color: #64748b;
+        text-align: center;
+    }
+
+    .mc-dia {
+        align-self: center;
+        margin: 6px 0 4px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #64748b;
+        background: #e2e8f0;
+        border-radius: 999px;
+        padding: 2px 10px;
+    }
+
+    .mc-linha {
+        display: flex;
+    }
+
+        .mc-linha.minha {
+            justify-content: flex-end;
+        }
+
+    .mc-bolha {
+        max-width: 80%;
+        padding: 6px 9px 4px;
+        border-radius: 12px 12px 12px 4px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        color: #0f172a;
+        font-size: 12.5px;
+        line-height: 1.4;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    .mc-linha.minha .mc-bolha {
+        border-radius: 12px 12px 4px 12px;
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+    }
+
+    .mc-autor {
+        font-size: 10.5px;
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    .mc-quote {
+        display: flex;
+        flex-direction: column;
+        font-size: 11px;
+        padding: 4px 7px;
+        margin-bottom: 4px;
+        border-left: 3px solid #93c5fd;
+        background: rgba(148,163,184,.15);
+        border-radius: 4px;
+    }
+
+        .mc-quote span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .mc-texto {
+        white-space: pre-wrap;
+    }
+
+    .mc-img {
+        display: block;
+        max-width: 100%;
+        max-height: 180px;
+        border-radius: 8px;
+        margin-bottom: 3px;
+    }
+
+    .mc-arq {
+        display: block;
+        color: inherit;
+        font-weight: 700;
+        text-decoration: underline;
+        margin-bottom: 2px;
+    }
+
+    .mc-hora {
+        font-size: 9.5px;
+        opacity: .7;
+        text-align: right;
+        margin-top: 1px;
+    }
+
+    .mc-check.lida {
+        color: #a5f3fc;
+        font-weight: 800;
+    }
+
+    .mc-erro {
+        padding: 6px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #991b1b;
+        background: #fee2e2;
+        flex-shrink: 0;
+    }
+
+    .mc-foot {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+        flex-shrink: 0;
+    }
+
+    .mc-anexo {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #475569;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+        .mc-anexo:hover {
+            background: #f1f5f9;
+            color: #1d4ed8;
+        }
+
+    .mc-input {
+        flex: 1;
+        min-width: 0;
+        height: 34px;
+        padding: 0 12px;
+        border: 1.5px solid #cbd5e1;
+        border-radius: 999px;
+        font-family: inherit;
+        font-size: 12.5px;
+        outline: none;
+    }
+
+        .mc-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+
+    .mc-enviar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: none;
+        background: #2563eb;
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+        .mc-enviar:disabled {
+            background: #cbd5e1;
+            cursor: default;
+        }
+
+    .mc-spin {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid #cbd5e1;
+        border-top-color: #2563eb;
+        animation: mcGira .8s linear infinite;
+    }
+
+    @@keyframes mcGira {
+        to { transform: rotate(360deg); }
+    }
+
+    @@media (max-width: 600px) {
+        .mc-win {
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            width: auto;
+            height: 70vh;
+        }
+    }
+</style>
+
+@code {
+    [Parameter] public int CodConversa { get; set; }
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public string? SubTitulo { get; set; }
+    [Parameter] public string? CorStatus { get; set; }
+    [Parameter] public bool EhGrupo { get; set; }
+    [Parameter] public EventCallback OnFechar { get; set; }
+    /// <summary>Avisado quando mensagens desta conversa foram marcadas como lidas.</summary>
+    [Parameter] public EventCallback OnLido { get; set; }
+
+    private readonly string _idCorpo = "mc-body-" + Guid.NewGuid().ToString("N")[..8];
+    private readonly string _idInput = "mc-input-" + Guid.NewGuid().ToString("N")[..8];
+
+    private List<ChatInternoMensagemModel> _mensagens = new();
+    private int _codCarregado;
+    private (int Total, int UltimoCodigo) _resumo;
+    private bool _carregandoPrimeira = true;
+    private bool _carregando;
+    private bool _enviando;
+    private bool _enviandoArquivo;
+    private bool _rolarParaFim;
+    private bool _focar;
+    private string _texto = "";
+    private string? _erro;
+
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _cts;
+
+    private string Eu => (UserState.CurrentUser ?? "").Trim().ToUpper();
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+
+    protected override void OnInitialized()
+    {
+        _cts = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        _ = LoopAsync(_cts.Token);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (CodConversa > 0 && CodConversa != _codCarregado)
+        {
+            _codCarregado = CodConversa;
+            MiniChatEstado.DefinirAberta(CodConversa);
+            _mensagens = new();
+            _carregandoPrimeira = true;
+            _erro = null;
+            _focar = true;
+            await CarregarAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_rolarParaFim)
+        {
+            _rolarParaFim = false;
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    $"(function(){{var e=document.getElementById('{_idCorpo}');if(e)e.scrollTop=e.scrollHeight;}})()");
+            }
+            catch { }
+        }
+
+        if (_focar)
+        {
+            _focar = false;
+            try { await JS.InvokeVoidAsync("eval", $"document.getElementById('{_idInput}')?.focus()"); }
+            catch { }
+        }
+    }
+
+    // Verifica a cada 3s se chegou mensagem nova (consulta leve: só total + último código)
+    private async Task LoopAsync(CancellationToken token)
+    {
+        try
+        {
+            while (_timer != null && await _timer.WaitForNextTickAsync(token))
+            {
+                if (_codCarregado <= 0 || _carregando) continue;
+
+                try
+                {
+                    var resumo = await ChatService.ResumoMensagensAsync(_codCarregado, CodEmp);
+                    if (resumo != _resumo)
+                        await InvokeAsync(CarregarAsync);
+                }
+                catch { /* falha momentânea: tenta no próximo ciclo */ }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task CarregarAsync()
+    {
+        if (_carregando || _codCarregado <= 0) return;
+        _carregando = true;
+
+        try
+        {
+            var cod = _codCarregado;
+            var qtdAntes = _mensagens.Count;
+
+            var lista = await ChatService.ObterMensagensAsync(cod, Eu, CodEmp);
+            if (cod != _codCarregado) return; // trocou de conversa no meio do caminho
+
+            _mensagens = lista;
+            _resumo = await ChatService.ResumoMensagensAsync(cod, CodEmp);
+
+            // Janela aberta = a pessoa está vendo: marca como lida
+            if (lista.Any(m => !m.MinhaMensagem && !m.Lida))
+            {
+                await ChatService.MarcarConversaComoLidaAsync(cod, Eu, CodEmp);
+                var qtd = await ChatService.ObterQuantidadeMensagensNaoLidasAsync(Eu, CodEmp);
+                ChatNotify.SetNovas(qtd);
+                if (OnLido.HasDelegate) await OnLido.InvokeAsync();
+            }
+
+            if (_carregandoPrimeira || lista.Count != qtdAntes)
+                _rolarParaFim = true;
+
+            _carregandoPrimeira = false;
+        }
+        catch (Exception ex)
+        {
+            _erro = "Não foi possível carregar a conversa: " + ex.Message;
+            _carregandoPrimeira = false;
+        }
+        finally
+        {
+            _carregando = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OnTeclaAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey)
+            await EnviarTextoAsync();
+        else if (e.Key == "Escape")
+            await Fechar();
+    }
+
+    private async Task EnviarTextoAsync()
+    {
+        var texto = (_texto ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(texto) || _enviando || _codCarregado <= 0) return;
+
+        _enviando = true;
+        _erro = null;
+        _texto = "";
+
+        try
+        {
+            var cod = await ChatService.EnviarMensagemAsync(_codCarregado, Eu, texto, CodEmp);
+            if (cod <= 0)
+            {
+                _erro = "Mensagem não enviada (conversa encerrada ou você não participa dela).";
+                _texto = texto;
+            }
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao enviar: " + ex.Message;
+            _texto = texto;
+        }
+        finally
+        {
+            _enviando = false;
+        }
+
+        await CarregarAsync();
+        _focar = true;
+    }
+
+    private async Task EnviarArquivoAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null || _codCarregado <= 0) return;
+
+        _enviandoArquivo = true;
+        _erro = null;
+        StateHasChanged();
+
+        try
+        {
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+            var (url, nomeArq, mime, tamanho) = await ChatService.SalvarArquivoAsync(
+                file.OpenReadStream(maxAllowedSize: 50_000_000), file.Name, contentType);
+
+            var ehImagem = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+            await ChatService.EnviarMensagemAsync(
+                _codCarregado, Eu, texto: "", CodEmp,
+                tipo: ehImagem ? "IMAGE" : "FILE",
+                arquivoNome: nomeArq,
+                arquivoUrl: url,
+                arquivoMime: mime,
+                arquivoTamanho: tamanho);
+        }
+        catch (Exception ex)
+        {
+            _erro = "Erro ao enviar arquivo: " + ex.Message;
+        }
+        finally
+        {
+            _enviandoArquivo = false;
+        }
+
+        await CarregarAsync();
+    }
+
+    private async Task Fechar()
+    {
+        MiniChatEstado.DefinirAberta(null);
+        if (OnFechar.HasDelegate) await OnFechar.InvokeAsync();
+    }
+
+    private async Task AbrirChatCompleto()
+    {
+        await Fechar();
+        Nav.NavigateTo("/chat-interno");
+    }
+
+    private static string TextoDia(DateTime d)
+    {
+        if (d.Date == DateTime.Today) return "Hoje";
+        if (d.Date == DateTime.Today.AddDays(-1)) return "Ontem";
+        return d.ToString("dd/MM/yyyy");
+    }
+
+    private static string Iniciais(string nome)
+    {
+        var partes = (nome ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length >= 2) return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+        var n = partes.Length == 1 ? partes[0] : "?";
+        return (n.Length >= 2 ? n[..2] : n).ToUpperInvariant();
+    }
+
+    private static readonly string[] _cores =
+    {
+        "#e53935", "#1976d2", "#43a047", "#8e24aa", "#fb8c00",
+        "#00897b", "#3949ab", "#d81b60", "#5e35b1", "#6d4c41"
+    };
+
+    // Mesma cor do Chat Interno e da faixa da equipe
+    private static string CorAvatar(string? nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "#546e7a";
+        int hash = 0;
+        foreach (var c in nome.Trim().ToUpperInvariant())
+            hash = (hash * 31 + c) & 0x7FFFFFFF;
+        return _cores[hash % _cores.Length];
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (MiniChatEstado.CodConversaAberta == _codCarregado)
+            MiniChatEstado.DefinirAberta(null);
+
+        _cts?.Cancel();
+        _timer?.Dispose();
+        _cts?.Dispose();
+        await Task.CompletedTask;
+    }
+}

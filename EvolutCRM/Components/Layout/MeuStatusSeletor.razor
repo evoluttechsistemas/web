@@ -1,0 +1,321 @@
+﻿@using EvolutCRM.Models
+@using EvolutCRM.Services
+@implements IDisposable
+@inject EquipeStatusState Equipe
+@inject UserState UserState
+@inject LoginService LoginService
+
+@* Seletor do status do usuário logado (substitui o antigo botão Online/Offline).
+   Compacto = versão pequena usada na barra da equipe em telas estreitas. *@
+
+<div class="ms-wrap @(Compacto ? "ms-compacto" : "")">
+    <button type="button"
+            class="ms-btn @(EstouOffline ? "off" : "")"
+            title="Alterar meu status"
+            @onclick="Alternar">
+        <span class="ms-dot" style="background:@CorAtual"></span>
+        <span class="ms-txt">@TextoAtual</span>
+        @if (!Compacto && !string.IsNullOrEmpty(TempoAtual))
+        {
+            <span class="ms-tempo">@TempoAtual</span>
+        }
+        <span class="ms-seta">▾</span>
+    </button>
+
+    @if (_aberto)
+    {
+        <div class="ms-backdrop" @onclick="Fechar"></div>
+        <div class="ms-menu">
+            <div class="ms-menu-t">Meu status</div>
+
+            <button type="button" class="ms-op @(Atual(null) ? "on" : "")" @onclick="() => Escolher(null)">
+                <span class="ms-dot" style="background:#22c55e"></span>
+                <span class="ms-op-txt">Disponível</span>
+                @if (Atual(null)) { <span class="ms-check">✓</span> }
+            </button>
+
+            @foreach (var st in Equipe.StatusDisponiveis)
+            {
+                var cod = st.Codigo;
+                <button type="button" class="ms-op @(Atual(cod) ? "on" : "")" @onclick="() => Escolher(cod)">
+                    <span class="ms-dot" style="background:@st.Cor"></span>
+                    <span class="ms-op-txt">@st.Descricao</span>
+                    @if (Atual(cod)) { <span class="ms-check">✓</span> }
+                </button>
+            }
+
+            <div class="ms-sep"></div>
+
+            <button type="button" class="ms-op @(EstouOffline ? "on" : "")" @onclick="FicarOffline">
+                <span class="ms-dot" style="background:#94a3b8"></span>
+                <span class="ms-op-txt">Offline</span>
+                @if (EstouOffline) { <span class="ms-check">✓</span> }
+            </button>
+        </div>
+    }
+</div>
+
+<style>
+    .ms-wrap {
+        position: relative;
+        width: 100%;
+    }
+
+    .ms-btn {
+        width: 100%;
+        height: 32px;
+        padding: 0 10px 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.58);
+        background: rgba(255,255,255,.16);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 11px;
+        font-weight: 800;
+        line-height: 1;
+        cursor: pointer;
+        transition: background .14s ease;
+    }
+
+        .ms-btn:hover {
+            background: rgba(255,255,255,.26);
+        }
+
+        .ms-btn.off {
+            color: #cbd5e1;
+            border-color: rgba(148,163,184,.3);
+            background: rgba(148,163,184,.12);
+        }
+
+    .ms-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        box-shadow: 0 0 0 2px rgba(255,255,255,.25);
+    }
+
+    .ms-txt {
+        flex: 1;
+        min-width: 0;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ms-tempo {
+        font-size: 9.5px;
+        font-weight: 600;
+        opacity: .8;
+        white-space: nowrap;
+    }
+
+    .ms-seta {
+        font-size: 9px;
+        opacity: .8;
+    }
+
+    .ms-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+    }
+
+    .ms-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        min-width: 180px;
+        z-index: 61;
+        background: #fff;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        box-shadow: 0 14px 34px rgba(15,23,42,.28);
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        animation: msIn .12s ease;
+    }
+
+    @@keyframes msIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    .ms-menu-t {
+        font-size: 9.5px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        padding: 4px 8px 6px;
+    }
+
+    .ms-op {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 8px 9px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #0f172a;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        text-align: left;
+        cursor: pointer;
+    }
+
+        .ms-op:hover {
+            background: #eff6ff;
+        }
+
+        .ms-op.on {
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        .ms-op .ms-dot {
+            box-shadow: none;
+        }
+
+    .ms-op-txt {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .ms-check {
+        font-size: 11px;
+        font-weight: 800;
+        color: #1d4ed8;
+    }
+
+    .ms-sep {
+        height: 1px;
+        background: #e2e8f0;
+        margin: 4px 2px;
+    }
+
+    /* versão compacta (barra da equipe, fundo claro) */
+    .ms-compacto {
+        width: auto;
+    }
+
+        .ms-compacto .ms-btn {
+            height: 26px;
+            max-width: 150px;
+            color: #0f172a;
+            border-color: #cbd5e1;
+            background: #fff;
+            font-size: 10.5px;
+        }
+
+            .ms-compacto .ms-btn:hover {
+                background: #f1f5f9;
+            }
+
+            .ms-compacto .ms-btn.off {
+                color: #64748b;
+            }
+
+        .ms-compacto .ms-dot {
+            box-shadow: none;
+        }
+
+        .ms-compacto .ms-menu {
+            left: auto;
+            right: 0;
+            width: 200px;
+        }
+</style>
+
+@code {
+    [Parameter] public bool Compacto { get; set; }
+
+    private bool _aberto;
+    private bool _salvando;
+
+    private EquipeMembroModel? Eu => Equipe.Eu;
+    private bool EstouOffline => !UserState.IsOnline;
+
+    private string TextoAtual =>
+        EstouOffline ? "Offline"
+        : Eu?.CodStatus is not null ? (Eu.StatusDescricao ?? "Ocupado")
+        : "Disponível";
+
+    private string CorAtual =>
+        EstouOffline ? "#94a3b8"
+        : Eu?.CodStatus is not null ? Eu.StatusCorFinal
+        : "#22c55e";
+
+    private string TempoAtual => EstouOffline ? "" : (Eu?.TempoTexto ?? "");
+
+    private bool Atual(int? cod) => !EstouOffline && Eu?.CodStatus == cod;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Equipe.OnChange += AoMudar;
+        UserState.OnChange += AoMudar;
+        await Equipe.IniciarAsync();
+    }
+
+    private void AoMudar() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task Alternar()
+    {
+        _aberto = !_aberto;
+        if (_aberto)
+            await Equipe.RecarregarAsync(incluirCadastro: true);
+    }
+
+    private void Fechar() => _aberto = false;
+
+    private async Task Escolher(int? codStatus)
+    {
+        if (_salvando) return;
+        _salvando = true;
+        _aberto = false;
+        try
+        {
+            await Equipe.DefinirMeuStatusAsync(codStatus);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private async Task FicarOffline()
+    {
+        if (_salvando) return;
+        _salvando = true;
+        _aberto = false;
+        try
+        {
+            UserState.SetOnline(false);
+            if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                await LoginService.AtualizarStatusOnlineAsync(UserState.CurrentUser.Trim(), false);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Equipe.OnChange -= AoMudar;
+        UserState.OnChange -= AoMudar;
+    }
+}

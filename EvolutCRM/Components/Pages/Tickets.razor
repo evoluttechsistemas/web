@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using Microsoft.JSInterop
 @using Microsoft.AspNetCore.WebUtilities
+@inject EvolutCRM.Abas.AbaService Abas
 
 @inject EvolutCRM.Services.TicketService TicketService
 @inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
@@ -775,12 +776,12 @@
         font-weight: 600;
     }
 
-    /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ FILTER MODAL Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+    /* ─── FILTER MODAL ─── */
     .f-back {
         position: fixed;
         inset: 0;
         background: rgba(15,23,42,.52);
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(4px);
         z-index: 9999;
         display: flex;
         align-items: center;
@@ -790,12 +791,16 @@
 
     .f-panel {
         width: 100%;
-        max-width: 680px;
+        max-width: 640px;
+        max-height: calc(100vh - 28px);
+        display: flex;
+        flex-direction: column;
         background: #fff;
         border-radius: 14px;
         box-shadow: 0 24px 60px rgba(15,23,42,.24);
         overflow: hidden;
         animation: fIn .18s ease;
+        font-family: 'IBM Plex Sans',sans-serif;
     }
 
     @@keyframes fIn {
@@ -812,10 +817,28 @@
 
     .f-head {
         background: linear-gradient(135deg,var(--b700),var(--b950));
-        padding: 16px 18px;
+        padding: 14px 16px;
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+    }
+
+    .f-head-ico {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: rgba(255,255,255,.14);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .f-head-txt {
+        flex: 1;
+        min-width: 0;
     }
 
     .f-head-t {
@@ -827,24 +850,26 @@
 
     .f-head-s {
         font-size: 10px;
-        color: var(--b300);
-        margin-top: 2px;
+        color: var(--b200);
+        margin: 2px 0 0;
     }
 
     .f-close {
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 28px;
         border-radius: 50%;
         border: 1.5px solid rgba(255,255,255,.3);
         background: rgba(255,255,255,.1);
         color: #fff;
-        font-size: 16px;
+        font-size: 18px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         transition: var(--tr);
         line-height: 1;
+        padding: 0;
+        flex-shrink: 0;
     }
 
         .f-close:hover {
@@ -852,7 +877,27 @@
         }
 
     .f-body {
-        padding: 16px 18px;
+        padding: 6px 16px 14px;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .f-sec {
+        padding: 12px 0;
+        border-bottom: 1px dashed var(--b200);
+    }
+
+        .f-sec:last-of-type {
+            border-bottom: none;
+        }
+
+    .f-sec-t {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--b700);
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        margin-bottom: 8px;
     }
 
     .f-grid {
@@ -864,7 +909,8 @@
     .f-field {
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 4px;
+        min-width: 0;
     }
 
         .f-field.full {
@@ -872,26 +918,23 @@
         }
 
     .f-label {
-        font-size: 9.5px;
-        font-weight: 700;
+        font-size: 10px;
+        font-weight: 600;
         color: var(--ink3);
-        text-transform: uppercase;
-        letter-spacing: .06em;
     }
 
     .f-ctrl {
-        height: 30px;
-        padding: 0 9px;
+        height: 32px;
+        padding: 0 10px;
         border: 1.5px solid var(--b200);
         border-radius: var(--rad2);
         font-family: 'IBM Plex Sans',sans-serif;
-        font-size: 10.5px;
+        font-size: 11px;
         color: var(--ink);
-        background: #fff;
+        background-color: #fff;
         outline: none;
         transition: var(--tr);
         width: 100%;
-        -webkit-appearance: none;
     }
 
         .f-ctrl:focus {
@@ -899,22 +942,89 @@
             box-shadow: 0 0 0 3px rgba(59,130,246,.15);
         }
 
+        .f-ctrl:disabled {
+            background-color: #f1f5f9;
+            color: var(--soft);
+            cursor: not-allowed;
+        }
+
+    select.f-ctrl {
+        -webkit-appearance: none;
+        appearance: none;
+        padding-right: 28px;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+    }
+
+    .f-ctrl.f-ctrl-on {
+        border-color: var(--b400);
+        background-color: var(--b50);
+    }
+
+    select.f-ctrl.f-ctrl-on {
+        background-color: var(--b50);
+    }
+
+    /* autocomplete do cliente */
+    .f-ac {
+        position: relative;
+    }
+
+        .f-ac .f-ctrl {
+            padding-right: 30px;
+        }
+
+    .f-ac-clear {
+        position: absolute;
+        right: 6px;
+        top: 6px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: none;
+        background: var(--b100);
+        color: var(--b700);
+        font-size: 13px;
+        line-height: 1;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+
+        .f-ac-clear:hover {
+            background: var(--b200);
+        }
+
     .f-auto {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        z-index: 5;
         list-style: none;
+        margin: 0;
+        padding: 4px;
         background: #fff;
         border: 1.5px solid var(--b200);
         border-radius: var(--rad2);
-        margin-top: 3px;
-        max-height: 140px;
+        max-height: 200px;
         overflow-y: auto;
-        box-shadow: var(--sh2);
+        box-shadow: 0 12px 28px rgba(15,23,42,.16);
     }
 
         .f-auto li {
-            padding: 6px 9px;
-            font-size: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 8px;
+            border-radius: 6px;
+            font-size: 11px;
             cursor: pointer;
-            color: var(--ink3);
+            color: var(--ink2);
             transition: var(--tr);
         }
 
@@ -923,32 +1033,271 @@
                 color: var(--b700);
             }
 
-    .f-check {
+    .f-auto-cod {
+        font-family: 'IBM Plex Mono',monospace;
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--b700);
+        background: var(--b100);
+        border-radius: 4px;
+        padding: 1px 5px;
+        flex-shrink: 0;
+    }
+
+    .f-auto-msg {
+        padding: 8px;
+        font-size: 10.5px;
+        color: var(--muted);
+    }
+
+    .f-sel {
+        margin-top: 2px;
+        font-size: 10px;
+        color: var(--g700);
+        font-weight: 600;
+    }
+
+    /* atalhos de período */
+    .f-quick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-bottom: 8px;
+    }
+
+        .f-quick button {
+            height: 24px;
+            padding: 0 10px;
+            border-radius: 999px;
+            border: 1.5px solid var(--b200);
+            background: #fff;
+            color: var(--ink3);
+            font-family: 'IBM Plex Sans',sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--tr);
+        }
+
+            .f-quick button:hover {
+                border-color: var(--b400);
+                color: var(--b700);
+            }
+
+            .f-quick button.on {
+                background: var(--b600);
+                border-color: var(--b600);
+                color: #fff;
+            }
+
+    .f-erro {
+        margin-top: 6px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--r600);
+    }
+
+    /* interruptor "somente novos" */
+    .f-switch {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 10.5px;
+        gap: 8px;
+        font-size: 11px;
         font-weight: 600;
         color: var(--ink3);
         cursor: pointer;
-        padding: 3px 0;
+        padding: 12px 0 2px;
+        user-select: none;
     }
 
-        .f-check input {
+        .f-switch input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+    .f-switch-ui {
+        width: 30px;
+        height: 17px;
+        border-radius: 999px;
+        background: var(--line);
+        position: relative;
+        transition: var(--tr);
+        flex-shrink: 0;
+    }
+
+        .f-switch-ui::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
             width: 13px;
             height: 13px;
-            accent-color: var(--b600);
-            cursor: pointer;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,.25);
+            transition: var(--tr);
         }
+
+    .f-switch input:checked + .f-switch-ui {
+        background: var(--b600);
+    }
+
+        .f-switch input:checked + .f-switch-ui::after {
+            left: 15px;
+        }
+
+    .f-switch input:focus-visible + .f-switch-ui {
+        box-shadow: 0 0 0 3px rgba(59,130,246,.25);
+    }
 
     .f-foot {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
+        align-items: center;
         gap: 7px;
-        padding: 12px 18px;
-        border-top: 1.5px solid var(--line);
+        padding: 11px 16px;
+        border-top: 1.5px solid var(--b100);
         background: var(--b50);
+        flex-shrink: 0;
     }
+
+    .f-foot-r {
+        display: flex;
+        gap: 7px;
+    }
+
+    .f-link {
+        border: none;
+        background: none;
+        padding: 0;
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--muted);
+        cursor: pointer;
+    }
+
+        .f-link:hover {
+            color: var(--r600);
+            text-decoration: underline;
+        }
+
+    .f-foot .tk-btn-solid:disabled {
+        opacity: .5;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    /* botão Filtrar com contador */
+    .tk-btn-filtro-on {
+        background: var(--b50);
+        border-color: var(--b500);
+    }
+
+    .tk-filtro-badge {
+        min-width: 15px;
+        height: 15px;
+        padding: 0 4px;
+        border-radius: 999px;
+        background: var(--b600);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* barra de filtros ativos */
+    .tk-fbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px;
+        margin: 6px 0 8px;
+        padding: 6px 8px;
+        background: #fff;
+        border: 1.5px solid var(--b200);
+        border-radius: var(--rad2);
+    }
+
+    .tk-fbar-t {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--ink3);
+        margin-right: 2px;
+    }
+
+    .tk-fchip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        height: 22px;
+        padding: 0 4px 0 9px;
+        background: var(--b50);
+        border: 1.5px solid var(--b200);
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--b800);
+        max-width: 260px;
+    }
+
+        .tk-fchip > span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tk-fchip button {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: var(--b700);
+            font-size: 12px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            flex-shrink: 0;
+        }
+
+            .tk-fchip button:hover {
+                background: var(--b200);
+            }
+
+    .tk-fchip-all {
+        padding-right: 9px;
+    }
+
+    .tk-fbar-n {
+        margin-left: auto;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--muted);
+    }
+
+    .tk-fbar-clear {
+        height: 22px;
+        padding: 0 9px;
+        border-radius: 999px;
+        border: 1.5px solid var(--r100);
+        background: var(--r50);
+        color: var(--r700);
+        font-family: 'IBM Plex Sans',sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+        .tk-fbar-clear:hover {
+            border-color: var(--r600);
+        }
 
     /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ RESPONSIVE Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
     @@media(max-width:960px) {
@@ -1054,14 +1403,18 @@
         }
 
         .f-foot {
+            flex-direction: column-reverse;
+            align-items: stretch;
+        }
+
+        .f-foot-r {
             display: grid;
             grid-template-columns: 1fr 1fr;
         }
 
-            .f-foot .tk-btn-solid {
-                grid-column: 1/-1;
-                order: -1;
-            }
+        .f-link {
+            padding: 4px 0;
+        }
     }
 
     @@media(max-width:768px) {
@@ -1453,9 +1806,13 @@
                        @oninput="OnBuscaCodDChanged" />
             </div> *@
 
-            <button class="tk-btn tk-btn-ghost" @onclick="AbrirFiltro" type="button">
+            <button class="tk-btn tk-btn-ghost @(FiltroAtivo ? "tk-btn-filtro-on" : "")" @onclick="AbrirFiltro" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
                 Filtrar
+                @if (QtdFiltrosAtivos > 0)
+                {
+                    <span class="tk-filtro-badge">@QtdFiltrosAtivos</span>
+                }
             </button>
 
             @* <button class="tk-btn tk-btn-ghost" @onclick="Recarregar" type="button">
@@ -1561,6 +1918,31 @@
 
         </nav>
 
+        @if (FiltroAtivo)
+        {
+            var chipsFiltro = ChipsFiltro();
+            <div class="tk-fbar">
+                <span class="tk-fbar-t">Filtros:</span>
+                @if (chipsFiltro.Any())
+                {
+                    foreach (var chip in chipsFiltro)
+                    {
+                        var chave = chip.Chave;
+                        <span class="tk-fchip" title="@chip.Texto">
+                            <span>@chip.Texto</span>
+                            <button type="button" title="Remover este filtro" @onclick="() => RemoverFiltro(chave)">&times;</button>
+                        </span>
+                    }
+                }
+                else
+                {
+                    <span class="tk-fchip tk-fchip-all">Todos os tickets</span>
+                }
+                <span class="tk-fbar-n">@FiltrarPorStatus(StatusSelecionado).Count() resultado(s)</span>
+                <button type="button" class="tk-fbar-clear" @onclick="LimparFiltros">Limpar filtros</button>
+            </div>
+        }
+
         <!-- CONTEÃƒÅ¡DO -->
         @if (!string.IsNullOrWhiteSpace(_searchTerm) || TemFiltroAvancado() || FiltroAplicado
      || _codCEncontrado.HasValue || _codCDaMensagemD.HasValue)
@@ -1644,110 +2026,175 @@
 @if (MostrarModalFiltro)
 {
     <div class="f-back" @onclick="FecharFiltro">
-        <div class="f-panel" @onclick:stopPropagation="true">
+        <div class="f-panel" @onclick:stopPropagation="true" @onkeydown="OnFiltroKeyDown">
             <div class="f-head">
-                <div>
-                    <h3 class="f-head-t">Filtros de Tickets</h3>
-                    <p class="f-head-s">Refine a listagem com critÃƒÂ©rios especÃƒÂ­ficos.</p>
+                <div class="f-head-ico">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
                 </div>
-                <button type="button" class="f-close" @onclick="FecharFiltro">Fechar</button>
+                <div class="f-head-txt">
+                    <h3 class="f-head-t">Filtrar tickets</h3>
+                    <p class="f-head-s">Combine os critérios. Campos em branco não filtram.</p>
+                </div>
+                <button type="button" class="f-close" title="Fechar (Esc)" @onclick="FecharFiltro">&times;</button>
             </div>
+
             <div class="f-body">
-                <div class="f-grid">
-                    <div class="f-field full">
-                        <label class="f-label">Cliente</label>
-                        <input class="f-ctrl" placeholder="Código ou nome..." @bind="ClienteFiltroBusca" @bind:event="oninput" @bind:after="BuscarClientesFiltro" />
-                        @if (SugestoesFiltroCliente?.Any() == true)
-                        {
-                            <ul class="f-auto">
-                                @foreach (var cli in SugestoesFiltroCliente)
+
+                <section class="f-sec">
+                    <div class="f-sec-t">Cliente</div>
+                    <div class="f-grid">
+                        <div class="f-field">
+                            <label class="f-label">Cliente</label>
+                            <div class="f-ac">
+                                <input class="f-ctrl @(FiltrosEdicao.CodCliente.HasValue ? "f-ctrl-on" : "")"
+                                       placeholder="Código ou nome (mín. 2 letras)"
+                                       autocomplete="off"
+                                       @bind="ClienteFiltroBusca" @bind:event="oninput" @bind:after="OnClienteFiltroDigitado" />
+                                @if (FiltrosEdicao.CodCliente.HasValue || !string.IsNullOrEmpty(ClienteFiltroBusca))
                                 {
-                                    <li @onclick="async () => await SelecionarClienteFiltro(cli)"><strong>@cli.Codigo</strong> Ã¢â‚¬â€ @cli.Nome</li>
+                                    <button type="button" class="f-ac-clear" title="Limpar cliente" @onclick="LimparClienteFiltro">&times;</button>
                                 }
-                            </ul>
+                                @if (_buscandoClientes)
+                                {
+                                    <div class="f-auto"><div class="f-auto-msg">Buscando...</div></div>
+                                }
+                                else if (SugestoesFiltroCliente.Any())
+                                {
+                                    <ul class="f-auto">
+                                        @foreach (var cli in SugestoesFiltroCliente)
+                                        {
+                                            <li @onclick="() => SelecionarClienteFiltro(cli)">
+                                                <span class="f-auto-cod">@cli.Codigo</span>
+                                                <span>@cli.Nome</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                else if (_semResultadoCliente)
+                                {
+                                    <div class="f-auto"><div class="f-auto-msg">Nenhum cliente encontrado</div></div>
+                                }
+                            </div>
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Usuário do cliente</label>
+                            <select class="f-ctrl @(!string.IsNullOrWhiteSpace(FiltrosEdicao.UsuarioCliente) ? "f-ctrl-on" : "")"
+                                    @bind="FiltrosEdicao.UsuarioCliente"
+                                    disabled="@(!FiltrosEdicao.CodCliente.HasValue)">
+                                <option value="">@(FiltrosEdicao.CodCliente.HasValue ? "Todos" : "Escolha um cliente antes")</option>
+                                @foreach (var u in UsuariosClienteFiltro)
+                                {
+                                    <option value="@u.Usuario">@u.Usuario</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="f-sec">
+                    <div class="f-sec-t">Ticket</div>
+                    <div class="f-grid">
+                        <div class="f-field full">
+                            <label class="f-label">Assunto contém</label>
+                            <input class="f-ctrl @(!string.IsNullOrWhiteSpace(FiltrosEdicao.DescricaoTitulo) ? "f-ctrl-on" : "")"
+                                   placeholder="Parte do assunto do ticket..."
+                                   @bind="FiltrosEdicao.DescricaoTitulo" @bind:event="oninput" />
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Responsável</label>
+                            <select class="f-ctrl @(!string.IsNullOrWhiteSpace(FiltrosEdicao.UsuarioResponsavel) ? "f-ctrl-on" : "")"
+                                    @bind="FiltrosEdicao.UsuarioResponsavel">
+                                <option value="">Todos</option>
+                                @foreach (var u in UsuariosDisponiveis)
+                                {
+                                    <option value="@u">@u</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Status</label>
+                            <select class="f-ctrl @(FiltrosEdicao.CodSituacao.HasValue ? "f-ctrl-on" : "")"
+                                    @bind="FiltrosEdicao.CodSituacao">
+                                <option value="">Todos</option>
+                                @foreach (var situacao in SituacoesTicket)
+                                {
+                                    <option value="@situacao.Codigo">@situacao.Descricao</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Tipo</label>
+                            <select class="f-ctrl @(FiltrosEdicao.CodTipo.HasValue ? "f-ctrl-on" : "")"
+                                    @bind="FiltrosEdicao.CodTipo">
+                                <option value="">Todos</option>
+                                @foreach (var tipo in TiposTicket)
+                                {
+                                    <option value="@tipo.Codigo">@tipo.Descricao</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Prioridade</label>
+                            <select class="f-ctrl @(FiltrosEdicao.Prioridade.HasValue ? "f-ctrl-on" : "")"
+                                    @bind="FiltrosEdicao.Prioridade">
+                                <option value="">Todas</option>
+                                <option value="1">Baixa</option>
+                                <option value="2">Normal</option>
+                                <option value="3">Alta</option>
+                                <option value="4">Urgente</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="f-sec">
+                    <div class="f-sec-t">Data de abertura</div>
+                    <div class="f-quick">
+                        <button type="button" class="@(PeriodoSelecionado("hoje") ? "on" : "")" @onclick="@(() => DefinirPeriodo("hoje"))">Hoje</button>
+                        <button type="button" class="@(PeriodoSelecionado("7") ? "on" : "")" @onclick="@(() => DefinirPeriodo("7"))">Últimos 7 dias</button>
+                        <button type="button" class="@(PeriodoSelecionado("30") ? "on" : "")" @onclick="@(() => DefinirPeriodo("30"))">Últimos 30 dias</button>
+                        <button type="button" class="@(PeriodoSelecionado("mes") ? "on" : "")" @onclick="@(() => DefinirPeriodo("mes"))">Este mês</button>
+                        @if (FiltrosEdicao.DataInicial.HasValue || FiltrosEdicao.DataFinal.HasValue)
+                        {
+                            <button type="button" @onclick="@(() => DefinirPeriodo(""))">Qualquer data</button>
                         }
                     </div>
-                    <div class="f-field">
-                        <label class="f-label">Usuário do cliente</label>
-                        <select class="f-ctrl" @bind="Filtros.UsuarioCliente">
-                            <option value="">Todos</option>
-                            @foreach (var u in UsuariosClienteFiltro)
-                            {
-                                <option value="@u.Usuario">@u.Usuario</option>
-                            }
-                        </select>
+                    <div class="f-grid">
+                        <div class="f-field">
+                            <label class="f-label">De</label>
+                            <input class="f-ctrl @(FiltrosEdicao.DataInicial.HasValue ? "f-ctrl-on" : "")" type="date" @bind="FiltrosEdicao.DataInicial" />
+                        </div>
+                        <div class="f-field">
+                            <label class="f-label">Até</label>
+                            <input class="f-ctrl @(FiltrosEdicao.DataFinal.HasValue ? "f-ctrl-on" : "")" type="date" @bind="FiltrosEdicao.DataFinal" />
+                        </div>
                     </div>
-                    <div class="f-field">
-                        <label class="f-label">Responsável</label>
-                        <select class="f-ctrl" @bind="Filtros.UsuarioResponsavel">
-                            <option value="">Todos</option>
-                            @foreach (var u in UsuariosDisponiveis)
-                            {
-                                <option value="@u">@u</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Título / Descrição</label>
-                        <input class="f-ctrl" placeholder="Parte do Título..." @bind="Filtros.DescricaoTitulo" />
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Status</label>
-                        <select class="f-ctrl" @bind="Filtros.CodSituacao">
-                            <option value="">Todos</option>
-                            @foreach (var situacao in SituacoesTicket)
-                            {
-                                <option value="@situacao.Codigo">@situacao.Descricao</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Tipo</label>
-                        <select class="f-ctrl" @bind="Filtros.CodTipo">
-                            <option value="">Todos</option>
-                            @foreach (var tipo in TiposTicket)
-                            {
-                                <option value="@tipo.Codigo">@tipo.Descricao</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Prioridade</label>
-                        <select class="f-ctrl" @bind="Filtros.Prioridade">
-                            <option value="">Todas</option>
-                            <option value="1">Baixa</option>
-                            <option value="2">Normal</option>
-                            <option value="3">Alta</option>
-                            <option value="4">Urgente</option>
-                        </select>
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Data inicial</label>
-                        <input class="f-ctrl" type="date" @bind="Filtros.DataInicial" />
-                    </div>
-                    <div class="f-field">
-                        <label class="f-label">Data final</label>
-                        <input class="f-ctrl" type="date" @bind="Filtros.DataFinal" />
-                    </div>
-                    <div class="f-field full">
-                        <label class="f-check">
-                            <input type="checkbox" @bind="Filtros.SomenteNovos" />
-                            Somente tickets novos
-                        </label>
-                    </div>
-                </div>
+                    @if (PeriodoInvalido)
+                    {
+                        <div class="f-erro">A data "De" não pode ser maior que a data "Até".</div>
+                    }
+                </section>
+
+                <label class="f-switch">
+                    <input type="checkbox" @bind="FiltrosEdicao.SomenteNovos" />
+                    <span class="f-switch-ui"></span>
+                    <span>Somente tickets novos (ainda não abertos)</span>
+                </label>
             </div>
+
             <div class="f-foot">
-                <button type="button" class="tk-btn tk-btn-ghost" @onclick="LimparFiltros">Limpar</button>
-                <button type="button" class="tk-btn tk-btn-ghost" @onclick="FecharFiltro">Cancelar</button>
-                <button type="button" class="tk-btn tk-btn-solid" @onclick="AplicarFiltros">Aplicar filtros</button>
+                <button type="button" class="f-link" @onclick="LimparFiltrosEdicao">Limpar campos</button>
+                <div class="f-foot-r">
+                    <button type="button" class="tk-btn tk-btn-ghost" @onclick="FecharFiltro">Cancelar</button>
+                    <button type="button" class="tk-btn tk-btn-solid" disabled="@PeriodoInvalido" @onclick="AplicarFiltros">Aplicar filtros</button>
+                </div>
             </div>
         </div>
     </div>
 }
 
 @code {
-
+    private List<TicketChamadoCModel>? _finalizadosCache;
     /* ===== VISAO EM CARDS ===== */
     private bool VisaoCards = false;
     private bool _preferenciaVisualizacaoCarregada = false;
@@ -1874,21 +2321,7 @@
     {
         try
         {
-            // Só carrega visualizadores dos tickets atualmente visíveis na tela
-            var ticketsVisiveis = VisaoCards
-                ? _tickets
-                : FiltrarPorStatus(StatusSelecionado).Take(50).ToList();
-
-            var novosMapas = new Dictionary<int, List<string>>();
-
-            foreach (var t in ticketsVisiveis)
-            {
-                var viewers = await TicketService.ObterVisualizadoresTicketAsync(t.Codigo);
-                if (viewers.Any())
-                    novosMapas[t.Codigo] = viewers.Select(v => v.Usuario).ToList();
-            }
-
-            _visualizadoresPorTicket = novosMapas;
+            _visualizadoresPorTicket = await TicketService.ObterVisualizadoresTodosAsync();
         }
         catch (Exception ex)
         {
@@ -2190,6 +2623,8 @@
         LerStatusDaUrl();
         UserState.OnChange += OnUserStateChanged;
         TicketNotify.OnChange += OnTicketNotifyChanged;
+        _rotaAnterior = Abas.RotaAtiva;
+        Abas.OnMudanca += OnAbaMudou;
         if (UserState.IsReady && !string.IsNullOrWhiteSpace(UserState.CurrentUser))
             _ = InitializeFromUserState();
         _refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
@@ -2202,6 +2637,31 @@
     _ = InvokeAsync(StateHasChanged);
 }
 
+    // Ao VOLTAR para a aba Tickets (vindo de um ticket ou outra aba) recarrega na hora.
+    // O AutoRefreshLoop só atualiza com a aba ativa, então a lista ficava com os dados
+    // de quando você saiu (ex.: ticket já atendido ainda vermelho como novo) até o próximo ciclo.
+    private string? _rotaAnterior;
+
+    private void OnAbaMudou()
+    {
+        var rota = Abas.RotaAtiva;
+        var voltouParaTickets = rota == "tickets" && _rotaAnterior != "tickets";
+        _rotaAnterior = rota;
+        if (!voltouParaTickets) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                if (VisaoCards || StatusSelecionado != 3)
+                    await CarregarTickets();
+                await CarregarNotificacoes();
+                StateHasChanged();
+            }
+            catch { }
+        });
+    }
+
     private int _ciclosRefresh = 0;
 
     private async Task AutoRefreshLoop()
@@ -2210,6 +2670,9 @@
         {
             while (_refreshTimer != null && await _refreshTimer.WaitForNextTickAsync())
             {
+
+                if (!_paginaVisivel || Abas.RotaAtiva != "tickets") continue;
+
                 await InvokeAsync(async () =>
                 {
                     try
@@ -2326,6 +2789,7 @@
     {
         UserState.OnChange -= OnUserStateChanged;
         TicketNotify.OnChange -= OnTicketNotifyChanged; // ← ADICIONAR
+        Abas.OnMudanca -= OnAbaMudou;
         try { _ = JS.InvokeVoidAsync("unregisterVisibilityChange", _visibilityRef); }
         catch { }
         _visibilityRef?.Dispose();
@@ -2338,15 +2802,9 @@
         var usuarioLogado = UserState.CurrentUser?.Trim();
         var agora = DateTime.Now;
 
-        // Atualiza badge SEMPRE — independente de já ter notificado
-        var qtdNovos = novos.Count(t =>
-            t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true &&
-            !string.IsNullOrWhiteSpace(t.Usuario) &&
-            (t.Usuario.Trim().Equals(usuarioLogado, StringComparison.OrdinalIgnoreCase) ||
-             t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
-
-        
-        TicketNotify.SetNovos(qtdNovos);
+        // O contador do menu (TicketNotify) é atualizado só por GetQuantidadeTicketsNovosAsync
+        // (CarregarNotificacoes / MainLayout). Calcular aqui com outro critério fazia o número
+        // ficar alternando e redesenhava todas as telas abertas a cada ciclo.
 
         // Controle de notificação (beep/toast) — só dispara uma vez por ticket
         var ticketsNovos = novos.Where(t =>
@@ -2372,11 +2830,13 @@
                 _tickets.Add(ticket);
         }
 
-        if (VisaoCards && SituacoesTicket.Any(s => s.Codigo == 3))
+        if ((VisaoCards || FiltroAtivo) && SituacoesTicket.Any(s => s.Codigo == 3))
         {
-            var finalizados = await TicketService.ListarChamadosFinalizadosAsync();
+            if (_finalizadosCache == null || _ciclosRefresh % 6 == 0)
+                _finalizadosCache = await TicketService.ListarChamadosFinalizadosAsync();
+
             _tickets.RemoveAll(t => t.CodSituacao == 3);
-            _tickets.AddRange(finalizados);
+            _tickets.AddRange(_finalizadosCache);
         }
 
         if (UsuariosDisponiveis.Count == 0)
@@ -2460,18 +2920,22 @@
         if (_codCDaMensagemD.HasValue)
             q = q.Where(t => t.Codigo == _codCDaMensagemD.Value);
 
-        string? usuarioFiltro = null;
-        bool modoPadrao = !FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm)
-                          && !_codCEncontrado.HasValue && !_codCDaMensagemD.HasValue;
+        bool modoPadrao = ModoPadraoLista;
         if (!string.IsNullOrWhiteSpace(Filtros.UsuarioResponsavel))
-            usuarioFiltro = Filtros.UsuarioResponsavel.Trim().ToUpper();
+        {
+            // Filtro por responsável: somente os tickets dessa pessoa
+            var responsavel = Filtros.UsuarioResponsavel.Trim();
+            q = q.Where(t => !string.IsNullOrWhiteSpace(t.Usuario) &&
+                t.Usuario.Trim().Equals(responsavel, StringComparison.OrdinalIgnoreCase));
+        }
         else if (modoPadrao && !string.IsNullOrWhiteSpace(_usuarioSelecionado))
-            usuarioFiltro = _usuarioSelecionado.Trim().ToUpper();
-
-        if (!string.IsNullOrWhiteSpace(usuarioFiltro))
+        {
+            // Visão normal: meus tickets + os "NOVO" ainda sem responsável
+            var usuarioFiltro = _usuarioSelecionado.Trim();
             q = q.Where(t => !string.IsNullOrWhiteSpace(t.Usuario) &&
                 (t.Usuario.Trim().Equals(usuarioFiltro, StringComparison.OrdinalIgnoreCase) ||
                  t.Usuario.Trim().Equals("NOVO", StringComparison.OrdinalIgnoreCase)));
+        }
 
         return q
             .OrderByDescending(t => t.Novo?.Trim().Equals("S", StringComparison.OrdinalIgnoreCase) == true)
@@ -2479,7 +2943,14 @@
             .ThenByDescending(t => t.DataHoraUltimaGravacao);
     }
 
-    int CountPorStatus(int situacao) => FiltrarPorStatus(situacao).Count();
+    private bool ModoPadraoLista =>
+        !FiltroAplicado && !TemFiltroAvancado() && string.IsNullOrWhiteSpace(_searchTerm)
+        && !_codCEncontrado.HasValue && !_codCDaMensagemD.HasValue;
+
+    // Com filtro/busca ativos a lista ignora a aba, então o número da aba conta só a situação dela
+    int CountPorStatus(int situacao) => ModoPadraoLista
+        ? FiltrarPorStatus(situacao).Count()
+        : FiltrarPorStatus(situacao).Count(t => t.CodSituacao == situacao);
 
     int CountPorStatusSetor(int codSetor)
     {
@@ -2506,6 +2977,7 @@
     public async Task HandleTicketDropped(int ticketId, int novaSituacao)
     {
         await TicketService.AlterarSituacaoAsync(ticketId, novaSituacao, UserState.CurrentUser);
+        _finalizadosCache = null;
         await CarregarTickets();
         var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser);
         TicketNotify.SetNovos(qtd);
@@ -2755,6 +3227,7 @@
         await TicketService.AlterarSituacaoAsync(id, 1, UserState.CurrentUser);
         await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
         StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
+        _finalizadosCache = null;
         await CarregarTickets(); await CarregarNotificacoes(); StateHasChanged();
     }
 
@@ -2766,6 +3239,7 @@
         await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
         StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
         if (codSetor == 2) StatusDesenvolvimentoSelecionado = codSituacao;
+        _finalizadosCache = null;
         await CarregarTickets(); await CarregarNotificacoes(); StateHasChanged();
     }
 
@@ -2881,13 +3355,17 @@
         _tickets.AddRange(fin);
     }
 
-    /* Ã¢â€â‚¬Ã¢â€â‚¬ FILTRO Ã¢â€â‚¬Ã¢â€â‚¬ */
+    /* ── FILTRO ── */
     private bool FiltroAplicado = false;
     private bool MostrarModalFiltro = false;
-    private FiltroTicketModel Filtros = new();
+    private FiltroTicketModel Filtros = new();        // filtro em uso na lista
+    private FiltroTicketModel FiltrosEdicao = new();  // rascunho editado no modal (só vale ao clicar Aplicar)
     private string ClienteFiltroBusca = "";
     private List<ClienteModel> SugestoesFiltroCliente = new();
     private List<UsuarioClienteDto> UsuariosClienteFiltro = new();
+    private bool _buscandoClientes;
+    private bool _semResultadoCliente;
+    private int _buscaClienteSeq;
 
     public class FiltroTicketModel
     {
@@ -2902,43 +3380,262 @@
         public DateTime? DataFinal { get; set; }
         public bool SomenteNovos { get; set; }
         public int? Prioridade { get; set; }
+
+        public FiltroTicketModel Clone() => (FiltroTicketModel)MemberwiseClone();
     }
 
-    void AbrirFiltro() => MostrarModalFiltro = true;
-    void FecharFiltro() => MostrarModalFiltro = false;
+    private bool FiltroAtivo => FiltroAplicado || TemFiltroAvancado();
 
-    async Task BuscarClientesFiltro()
+    private bool PeriodoInvalido =>
+        FiltrosEdicao.DataInicial.HasValue && FiltrosEdicao.DataFinal.HasValue &&
+        FiltrosEdicao.DataInicial.Value.Date > FiltrosEdicao.DataFinal.Value.Date;
+
+    private int QtdFiltrosAtivos => ChipsFiltro().Count;
+
+    async Task AbrirFiltro()
     {
-        if (string.IsNullOrWhiteSpace(ClienteFiltroBusca) || ClienteFiltroBusca.Trim().Length < 2) { SugestoesFiltroCliente.Clear(); return; }
-        SugestoesFiltroCliente = await TicketService.BuscarClientesAsync(ClienteFiltroBusca.Trim());
+        // O modal sempre começa com uma cópia do filtro em uso: Cancelar não altera a lista
+        FiltrosEdicao = Filtros.Clone();
+        ClienteFiltroBusca = Filtros.CodCliente.HasValue ? $"{Filtros.CodCliente} - {Filtros.NomeCliente}" : "";
+        SugestoesFiltroCliente = new();
+        _buscandoClientes = false;
+        _semResultadoCliente = false;
+        _buscaClienteSeq++;
+
+        // Carrega os usuários do cliente ANTES de abrir, para o <select> já mostrar o valor certo
+        UsuariosClienteFiltro = Filtros.CodCliente.HasValue
+            ? await TicketService.ObterUsuariosClienteAsync(Filtros.CodCliente.Value)
+            : new();
+
+        MostrarModalFiltro = true;
+    }
+
+    void FecharFiltro()
+    {
+        MostrarModalFiltro = false;
+        SugestoesFiltroCliente = new();
+        _buscandoClientes = false;
+        _buscaClienteSeq++;
+    }
+
+    private async Task OnFiltroKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            if (SugestoesFiltroCliente.Any() || _semResultadoCliente)
+            {
+                SugestoesFiltroCliente = new();
+                _semResultadoCliente = false;
+            }
+            else
+            {
+                FecharFiltro();
+            }
+        }
+        else if (e.Key == "Enter" && !SugestoesFiltroCliente.Any() && !_buscandoClientes && !PeriodoInvalido)
+        {
+            await AplicarFiltros();
+        }
+    }
+
+    async Task OnClienteFiltroDigitado()
+    {
+        // Se já havia um cliente escolhido e o texto foi alterado, desfaz a seleção
+        if (FiltrosEdicao.CodCliente.HasValue)
+        {
+            FiltrosEdicao.CodCliente = null;
+            FiltrosEdicao.NomeCliente = null;
+            FiltrosEdicao.UsuarioCliente = null;
+            UsuariosClienteFiltro = new();
+        }
+
+        var termo = (ClienteFiltroBusca ?? "").Trim();
+        var seq = ++_buscaClienteSeq;
+        _semResultadoCliente = false;
+
+        if (termo.Length < 2)
+        {
+            SugestoesFiltroCliente = new();
+            _buscandoClientes = false;
+            return;
+        }
+
+        // Espera a pessoa parar de digitar antes de consultar
+        await Task.Delay(300);
+        if (seq != _buscaClienteSeq) return;
+
+        _buscandoClientes = true;
+        StateHasChanged();
+
+        List<ClienteModel> resultado;
+        try { resultado = await TicketService.BuscarClientesAsync(termo); }
+        catch { resultado = new(); }
+
+        // Ignora respostas de buscas antigas (chegaram fora de ordem)
+        if (seq != _buscaClienteSeq) return;
+
+        _buscandoClientes = false;
+        SugestoesFiltroCliente = resultado;
+        _semResultadoCliente = resultado.Count == 0;
     }
 
     async Task SelecionarClienteFiltro(ClienteModel cli)
     {
-        Filtros.CodCliente = cli.Codigo; Filtros.NomeCliente = cli.Nome;
-        ClienteFiltroBusca = $"{cli.Codigo} - {cli.Nome}"; SugestoesFiltroCliente.Clear();
+        _buscaClienteSeq++;
+        FiltrosEdicao.CodCliente = cli.Codigo;
+        FiltrosEdicao.NomeCliente = cli.Nome;
+        FiltrosEdicao.UsuarioCliente = null;
+        ClienteFiltroBusca = $"{cli.Codigo} - {cli.Nome}";
+        SugestoesFiltroCliente = new();
+        _buscandoClientes = false;
+        _semResultadoCliente = false;
         UsuariosClienteFiltro = await TicketService.ObterUsuariosClienteAsync(cli.Codigo);
-        Filtros.UsuarioCliente = null;
     }
 
+    void LimparClienteFiltro()
+    {
+        _buscaClienteSeq++;
+        FiltrosEdicao.CodCliente = null;
+        FiltrosEdicao.NomeCliente = null;
+        FiltrosEdicao.UsuarioCliente = null;
+        ClienteFiltroBusca = "";
+        SugestoesFiltroCliente = new();
+        UsuariosClienteFiltro = new();
+        _buscandoClientes = false;
+        _semResultadoCliente = false;
+    }
+
+    void DefinirPeriodo(string periodo)
+    {
+        var hoje = DateTime.Today;
+        DateTime? ini = null, fim = null;
+
+        switch (periodo)
+        {
+            case "hoje": ini = hoje; fim = hoje; break;
+            case "7": ini = hoje.AddDays(-6); fim = hoje; break;
+            case "30": ini = hoje.AddDays(-29); fim = hoje; break;
+            case "mes": ini = new DateTime(hoje.Year, hoje.Month, 1); fim = hoje; break;
+        }
+
+        FiltrosEdicao.DataInicial = ini;
+        FiltrosEdicao.DataFinal = fim;
+    }
+
+    bool PeriodoSelecionado(string periodo)
+    {
+        var hoje = DateTime.Today;
+        var ini = FiltrosEdicao.DataInicial?.Date;
+        var fim = FiltrosEdicao.DataFinal?.Date;
+        if (fim != hoje) return false;
+
+        return periodo switch
+        {
+            "hoje" => ini == hoje,
+            "7" => ini == hoje.AddDays(-6),
+            "30" => ini == hoje.AddDays(-29),
+            "mes" => ini == new DateTime(hoje.Year, hoje.Month, 1) && hoje.Day != 1,
+            _ => false
+        };
+    }
+
+    // "Limpar campos" do modal: só zera o rascunho (a lista muda ao clicar Aplicar)
+    void LimparFiltrosEdicao()
+    {
+        FiltrosEdicao = new();
+        LimparClienteFiltro();
+    }
+
+    // Remove todos os filtros já aplicados na lista
     void LimparFiltros()
     {
         Filtros = new();
+        FiltrosEdicao = new();
         ClienteFiltroBusca = "";
-        SugestoesFiltroCliente.Clear();
-        UsuariosClienteFiltro.Clear();
+        SugestoesFiltroCliente = new();
+        UsuariosClienteFiltro = new();
         FiltroAplicado = false;
         _buscaCodC = null;
         _buscaCodD = null;
         _codCEncontrado = null;
         _codCDaMensagemD = null;
     }
+
     async Task AplicarFiltros()
     {
-        MostrarModalFiltro = false;
+        if (PeriodoInvalido) return;
+
+        Filtros = FiltrosEdicao.Clone();
         FiltroAplicado = true;
-        await Recarregar();
+        MostrarModalFiltro = false;
+        SugestoesFiltroCliente = new();
+        _buscaClienteSeq++;
+
+        // Com filtro ativo a lista também traz os finalizados (ver CarregarTickets)
+        _finalizadosCache = null;
+        await CarregarTickets();
         StateHasChanged();
+    }
+
+    private List<(string Chave, string Texto)> ChipsFiltro()
+    {
+        var f = Filtros;
+        var chips = new List<(string Chave, string Texto)>();
+
+        if (f.CodCliente.HasValue)
+            chips.Add(("cliente", $"Cliente: {(string.IsNullOrWhiteSpace(f.NomeCliente) ? f.CodCliente.ToString() : f.NomeCliente)}"));
+        if (!string.IsNullOrWhiteSpace(f.UsuarioCliente))
+            chips.Add(("usuarioCliente", $"Usuário do cliente: {f.UsuarioCliente}"));
+        if (!string.IsNullOrWhiteSpace(f.UsuarioResponsavel))
+            chips.Add(("responsavel", $"Responsável: {f.UsuarioResponsavel}"));
+        if (!string.IsNullOrWhiteSpace(f.DescricaoTitulo))
+            chips.Add(("assunto", $"Assunto: \"{f.DescricaoTitulo.Trim()}\""));
+        if (f.CodSituacao.HasValue)
+            chips.Add(("status", $"Status: {StatusTexto(f.CodSituacao.Value)}"));
+        if (f.CodTipo.HasValue)
+            chips.Add(("tipo", $"Tipo: {TextoTipo(f.CodTipo.Value)}"));
+        if (f.Prioridade.HasValue)
+            chips.Add(("prioridade", $"Prioridade: {TextoPrio(f.Prioridade.Value)}"));
+        if (f.DataInicial.HasValue || f.DataFinal.HasValue)
+        {
+            var texto = (f.DataInicial, f.DataFinal) switch
+            {
+                ({ } i, { } fi) when i.Date == fi.Date => $"Aberto em {i:dd/MM/yyyy}",
+                ({ } i, { } fi) => $"Aberto de {i:dd/MM/yyyy} a {fi:dd/MM/yyyy}",
+                ({ } i, null) => $"Aberto a partir de {i:dd/MM/yyyy}",
+                (null, { } fi) => $"Aberto até {fi:dd/MM/yyyy}",
+                _ => ""
+            };
+            chips.Add(("periodo", texto));
+        }
+        if (f.SomenteNovos)
+            chips.Add(("novos", "Somente novos"));
+
+        return chips;
+    }
+
+    private void RemoverFiltro(string chave)
+    {
+        switch (chave)
+        {
+            case "cliente":
+                Filtros.CodCliente = null;
+                Filtros.NomeCliente = null;
+                Filtros.UsuarioCliente = null;
+                break;
+            case "usuarioCliente": Filtros.UsuarioCliente = null; break;
+            case "responsavel": Filtros.UsuarioResponsavel = null; break;
+            case "assunto": Filtros.DescricaoTitulo = null; break;
+            case "status": Filtros.CodSituacao = null; break;
+            case "tipo": Filtros.CodTipo = null; break;
+            case "prioridade": Filtros.Prioridade = null; break;
+            case "periodo": Filtros.DataInicial = null; Filtros.DataFinal = null; break;
+            case "novos": Filtros.SomenteNovos = false; break;
+        }
+
+        // Tirou o último critério → volta para a visão normal das abas
+        if (!TemFiltroAvancado())
+            FiltroAplicado = false;
     }
 
     bool TemFiltroAvancado() =>

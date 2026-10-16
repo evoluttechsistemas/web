@@ -103,6 +103,7 @@ BuscaCRM(int companyId, string user)
         new("IM","Implantação"),
         new("NO","Negociação"),
         new("RA","Reunião Agendada"),
+        new("PF","Pendente Fechamento"),
     };
 
         decimal totalProducts = 0m, totalServices = 0m;

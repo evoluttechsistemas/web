@@ -20,7 +20,7 @@
     <script src="/js/crm-notify.js?v=3"></script>
     <script src="/js/ticket-audio.js"></script>
     <script src="/js/paste-image.js"></script>
-    <script src="_framework/blazor.web.js"></script>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
     <script src="/js/screen-recorder.js"></script>
     <script src="js/ticketAudio.js"></script>
     <script src="/js/Acesso-Remoto.js"></script>
@@ -116,33 +116,100 @@
     </script>
 
     <script>
-        function setupBlazorReconnection() {
-        try {
-        if (!window.Blazor) { setTimeout(setupBlazorReconnection, 100); return; }
-        if (!window.Blazor.defaultReconnectionHandler) { setTimeout(setupBlazorReconnection, 100); return; }
+            (function() {
+                const esperar = ms => new Promise(r => setTimeout(r, ms));
+                let tratando = false;
 
-        console.log("✅ Configurando reconexão Blazor");
+                // ── Aviso em tela cheia enquanto o sistema está fora / atualizando ──
+                function mostrarAviso(titulo, texto) {
+                    let el = document.getElementById('help-atualizando');
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.id = 'help-atualizando';
+                        el.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.88);backdrop-filter:blur(3px);font-family:"IBM Plex Sans","Segoe UI",sans-serif;';
+                        el.innerHTML =
+                            '<div style="background:#1e293b;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:28px 32px;max-width:420px;width:100%;text-align:center;color:#e2e8f0;box-shadow:0 20px 50px rgba(0,0,0,.45)">' +
+                              '<div style="width:44px;height:44px;margin:0 auto 16px;border-radius:50%;border:4px solid rgba(96,165,250,.25);border-top-color:#60a5fa;animation:helpGira 0.9s linear infinite"></div>' +
+                              '<div id="help-atualizando-t" style="font-size:17px;font-weight:700;color:#f8fafc;margin-bottom:8px"></div>' +
+                              '<div id="help-atualizando-s" style="font-size:13px;line-height:1.5;color:#94a3b8"></div>' +
+                            '</div>';
+                        const st = document.createElement('style');
+                        st.textContent = '@@keyframes helpGira{to{transform:rotate(360deg)}}';
+                        el.appendChild(st);
+                        document.body.appendChild(el);
+                    }
+                    document.getElementById('help-atualizando-t').textContent = titulo;
+                    document.getElementById('help-atualizando-s').textContent = texto;
+                }
 
-        window.Blazor.defaultReconnectionHandler._reconnectCallback = async (reconnect) => {
-        console.log("🔄 Tentando reconectar...");
-        document.body.style.opacity = "0.6";
-        try {
-        await reconnect();
-        console.log("✅ Reconectado com sucesso");
-        document.body.style.opacity = "1";
-        } catch (err) {
-        console.error("❌ Falha ao reconectar:", err);
-        document.body.style.opacity = "1";
-        setTimeout(() => location.reload(), 3000);
-        }
-        };
-        } catch (err) {
-        console.error("❌ Erro ao configurar reconexão:", err);
-        }
-        }
+                function esconderAviso() {
+                    document.getElementById('help-atualizando')?.remove();
+                }
 
-        setTimeout(setupBlazorReconnection, 50);
+                // Situação do servidor:
+                //  'ok'          -> HELP respondendo
+                //  'atualizando' -> IIS respondendo 503 (app_offline do deploy) ou app ainda subindo
+                //  'sem-rede'    -> nem chegou no servidor (internet / VPN)
+                async function situacaoServidor() {
+                    try {
+                        const r = await fetch('/images/favicon.ico?t=' + Date.now(), { cache: 'no-store' });
+                        if (r.ok) return 'ok';
+                        return 'atualizando';
+                    } catch { return 'sem-rede'; }
+                }
 
+                async function aoCair() {
+                    if (tratando) return;
+                    tratando = true;
+
+                    mostrarAviso('Reconectando...', 'A conexão com o HELP caiu. Tentando reconectar automaticamente.');
+
+                    for (let i = 0; i < 720; i++) {          // até ~1h tentando
+                        await esperar(i < 5 ? 2000 : 5000);
+
+                        const sit = await situacaoServidor();
+                        if (sit === 'atualizando') {
+                            mostrarAviso('Sistema atualizando',
+                                'O HELP está sendo atualizado e vai reiniciar automaticamente. Não feche esta janela.');
+                            continue;
+                        }
+                        if (sit === 'sem-rede') {
+                            mostrarAviso('Sem conexão com o servidor',
+                                'Verifique sua internet. O HELP volta sozinho assim que a conexão retornar.');
+                            continue;
+                        }
+
+                        try {
+                            // queda de rede curta: recupera a mesma sessão, sem perder o que está na tela
+                            if (await Blazor.reconnect()) {
+                                esconderAviso();
+                                tratando = false;
+                                return;
+                            }
+                        } catch { }
+
+                        // servidor voltou mas reiniciou (deploy): a sessão antiga não existe mais
+                        mostrarAviso('Atualização concluída', 'Reiniciando o HELP...');
+                        location.reload();
+                        return;
+                    }
+                }
+
+                window.helpConectado = false;
+                window.helpMarcarConectado = () => { window.helpConectado = true; };
+
+                Blazor.start({
+                    circuit: {
+                        reconnectionHandler: {
+                            onConnectionDown: () => { aoCair(); },
+                            onConnectionUp: () => { esconderAviso(); tratando = false; }
+                        }
+                    }
+                }).catch(() => aoCair());
+
+                // Se em 15s a conexão não ligou (página "congelada"), espera o servidor e recarrega
+                setTimeout(() => { if (!window.helpConectado) aoCair(); }, 15000);
+            })();
     </script>
 
     <script>

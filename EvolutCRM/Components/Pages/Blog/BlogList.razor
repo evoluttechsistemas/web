@@ -1,0 +1,613 @@
+﻿@page "/blog"
+@inject NavigationManager Nav
+@inject BlogRepository BlogRepo
+@using EvolutCRM.Blog
+
+<style>
+    .blog-wrap {
+        padding: 24px;
+        font-family: 'IBM Plex Sans', sans-serif;
+        max-width: 1200px;
+    }
+
+    /* ── HEADER ── */
+    .blog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .blog-header-left h2 {
+        font-size: 20px;
+        font-weight: 800;
+        color: #172554;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+        .blog-header-left h2 svg {
+            color: #2563eb;
+        }
+
+    .blog-header-left p {
+        font-size: 12px;
+        color: #64748b;
+        margin: 4px 0 0;
+        font-weight: 500;
+    }
+
+    .btn-novo {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 18px;
+        background: linear-gradient(135deg, #2563eb, #1e40af);
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(37,99,235,.35);
+        transition: all .15s ease;
+    }
+
+        .btn-novo:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(37,99,235,.45);
+        }
+
+    /* ── STATS ── */
+    .blog-stats {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }
+
+    .stat-card {
+        flex: 1;
+        min-width: 130px;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 14px 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        box-shadow: 0 1px 4px rgba(15,23,42,.05);
+    }
+
+    .stat-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+        .stat-icon.blue {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .stat-icon.green {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .stat-icon.gray {
+            background: #f8fafc;
+            color: #64748b;
+        }
+
+    .stat-info strong {
+        display: block;
+        font-size: 20px;
+        font-weight: 800;
+        color: #0f172a;
+        line-height: 1;
+    }
+
+    .stat-info span {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    /* ── TABLE CARD ── */
+    .table-card {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(15,23,42,.05);
+    }
+
+        .table-card table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table-card thead {
+            background: linear-gradient(135deg, #f8fbff, #eff6ff);
+            border-bottom: 1.5px solid #dbeafe;
+        }
+
+            .table-card thead th {
+                padding: 11px 16px;
+                font-size: 10.5px;
+                font-weight: 800;
+                color: #1e40af;
+                text-transform: uppercase;
+                letter-spacing: .06em;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+        .table-card tbody tr {
+            border-bottom: 1px solid #f1f5f9;
+            transition: background .12s;
+        }
+
+            .table-card tbody tr:last-child {
+                border-bottom: none;
+            }
+
+            .table-card tbody tr:hover {
+                background: #f8fbff;
+            }
+
+        .table-card tbody td {
+            padding: 13px 16px;
+            font-size: 12.5px;
+            color: #0f172a;
+            vertical-align: middle;
+        }
+
+    .post-titulo {
+        font-weight: 700;
+        color: #172554;
+        max-width: 280px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .post-slug {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 11px;
+        color: #2563eb;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        padding: 2px 8px;
+        border-radius: 6px;
+        display: inline-block;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .badge-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 10.5px;
+        font-weight: 700;
+    }
+
+        .badge-status.publicado {
+            background: #f0fdf4;
+            color: #16a34a;
+            border: 1px solid #bbf7d0;
+        }
+
+        .badge-status.rascunho {
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px solid #e2e8f0;
+        }
+
+        .badge-status .dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .badge-status.publicado .dot {
+            background: #16a34a;
+        }
+
+        .badge-status.rascunho .dot {
+            background: #94a3b8;
+        }
+
+    .post-data {
+        font-size: 11.5px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    /* ── ACTIONS ── */
+    .actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .btn-editar, .btn-excluir {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 11px;
+        border-radius: 7px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: all .13s;
+    }
+
+    .btn-editar {
+        background: #eff6ff;
+        color: #2563eb;
+        border-color: #bfdbfe;
+    }
+
+        .btn-editar:hover {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
+
+    .btn-excluir {
+        background: #fff5f5;
+        color: #dc2626;
+        border-color: #fecaca;
+    }
+
+        .btn-excluir:hover {
+            background: #dc2626;
+            color: #fff;
+            border-color: #dc2626;
+        }
+
+    /* ── EMPTY ── */
+    .blog-empty {
+        padding: 60px 20px;
+        text-align: center;
+    }
+
+        .blog-empty svg {
+            color: #bfdbfe;
+            margin-bottom: 14px;
+        }
+
+        .blog-empty h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: #1e3a8a;
+            margin: 0 0 6px;
+        }
+
+        .blog-empty p {
+            font-size: 12px;
+            color: #64748b;
+            margin: 0 0 18px;
+        }
+
+    /* ── LOADING ── */
+    .blog-loading {
+        padding: 60px 20px;
+        text-align: center;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: spin .7s linear infinite;
+        margin: 0 auto 12px;
+    }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .btn-pag-ativa {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 11px;
+        border-radius: 7px;
+        font-size: 11px;
+        font-weight: 800;
+        cursor: default;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #fff;
+    }
+</style>
+
+<div class="blog-wrap">
+
+    <!-- HEADER -->
+    <div class="blog-header">
+        <div class="blog-header-left">
+            <h2>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+                Blog EvolutTech
+            </h2>
+            <p>Gerencie os posts publicados no site institucional</p>
+        </div>
+        <button class="btn-novo" @onclick="NovoPosto">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Novo Post
+        </button>
+    </div>
+
+    @if (posts is null)
+    {
+        <div class="blog-loading">
+            <div class="spinner"></div>
+            Carregando posts...
+        </div>
+    }
+    else
+    {
+        <!-- STATS -->
+        <div class="blog-stats">
+            <div class="stat-card">
+                <div class="stat-icon blue">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                </div>
+                <div class="stat-info">
+                    <strong>@posts.Count</strong>
+                    <span>Total de Posts</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
+                    </svg>
+                </div>
+                <div class="stat-info">
+                    <strong>@posts.Count(p => p.Status == "publicado")</strong>
+                    <span>Publicados</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon gray">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                </div>
+                <div class="stat-info">
+                    <strong>@posts.Count(p => p.Status == "rascunho")</strong>
+                    <span>Rascunhos</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-card">
+            @if (!posts.Any())
+            {
+                <div class="blog-empty">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    <h3>Nenhum post ainda</h3>
+                    <p>Crie o primeiro post do blog EvolutTech</p>
+                    <button class="btn-novo" @onclick="NovoPosto">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Criar primeiro post
+                    </button>
+                </div>
+            }
+            else
+            {
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Título</th>
+                            <th>Slug</th>
+                            <th>Status</th>
+                            <th>Criado em</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in posts.OrderByDescending(x => x.DataCriacao))
+                        {
+                            <tr>
+                                <td>@p.IdPost</td>
+                                <td><div class="post-titulo">@p.Titulo</div></td>
+                                <td><span class="post-slug">@p.Slug</span></td>
+                                <td>
+                                    <span class="badge-status @p.Status">
+                                        <span class="dot"></span>
+                                        @(p.Status == "publicado" ? "Publicado" : "Rascunho")
+                                    </span>
+                                </td>
+                                <td><span class="post-data">@p.DataCriacao.ToString("dd/MM/yyyy")</span></td>
+                                <td>
+                                    <div class="actions">
+                                        <button class="btn-editar" @onclick="() => Editar(p.IdPost)">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                            </svg>
+                                            Editar
+                                        </button>
+                                        <button class="btn-excluir" @onclick="() => Excluir(p.IdPost)">
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="3 6 5 6 21 6" />
+                                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                                <path d="M10 11v6" />
+                                                <path d="M14 11v6" />
+                                                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                                            </svg>
+                                            Excluir
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
+</div>
+
+@if (posts is not null && totalPaginas > 1)
+{
+    <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center; margin-top:14px; flex-wrap:wrap;">
+
+        <button class="btn-editar" disabled="@(pagina == 1)" @onclick="() => IrPara(1)" title="Primeira página">«</button>
+
+        <button class="btn-editar" disabled="@(pagina == 1)" @onclick="PaginaAnterior">← Anterior</button>
+
+        @foreach (var n in PaginasVisiveis())
+        {
+            if (n == -1)
+            {
+                <span style="align-self:center; color:#94a3b8; font-size:12px; padding:0 4px;">…</span>
+            }
+            else
+            {
+                <button class="@(n == pagina ? "btn-pag-ativa" : "btn-editar")" @onclick="() => IrPara(n)">@n</button>
+            }
+        }
+
+        <button class="btn-editar" disabled="@(!temMais)" @onclick="ProximaPagina">Próxima →</button>
+
+        <button class="btn-editar" disabled="@(pagina == totalPaginas)" @onclick="() => IrPara(totalPaginas)" title="Última página">»</button>
+
+    </div>
+}
+
+@code {
+    private List<Post>? posts;
+    private int pagina = 1;
+    private const int Por = 10;
+    private bool temMais = false;
+
+    // stats reais do banco (não da página atual)
+    private int totalPosts;
+    private int totalPublicados;
+    private int totalRascunhos;
+
+    private int totalPaginas => (int)Math.Ceiling(totalPosts / (double)Por);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var contagens = await BlogRepo.GetContagensAsync();
+        totalPosts = contagens.Total;
+        totalPublicados = contagens.Publicados;
+        totalRascunhos = contagens.Rascunhos;
+        await Carregar();
+    }
+
+    private async Task Carregar()
+    {
+        var resultado = (await BlogRepo.GetListagemAsync(pagina, Por + 1)).ToList();
+        temMais = resultado.Count > Por;
+        posts = resultado.Take(Por).ToList();
+    }
+
+    private async Task ProximaPagina()
+    {
+        pagina++;
+        await Carregar();
+    }
+
+    private async Task PaginaAnterior()
+    {
+        if (pagina > 1) { pagina--; await Carregar(); }
+    }
+
+    private void NovoPosto() => Nav.NavigateTo("/blog/novo");
+    private void Editar(int id) => Nav.NavigateTo($"/blog/editar/{id}");
+
+    private async Task Excluir(int id)
+    {
+        await BlogRepo.DeleteAsync(id);
+        posts?.RemoveAll(p => p.IdPost == id);
+        totalPosts--;
+        totalPublicados = posts?.Count(p => p.Status == "publicado") ?? totalPublicados;
+        totalRascunhos = posts?.Count(p => p.Status == "rascunho") ?? totalRascunhos;
+    }
+
+    private async Task IrPara(int n)
+    {
+        if (n < 1 || n > totalPaginas || n == pagina) return;
+        pagina = n;
+        await Carregar();
+    }
+
+    private List<int> PaginasVisiveis()
+    {
+        var paginas = new List<int>();
+        var total = totalPaginas;
+
+        if (total <= 7)
+        {
+            // mostra todas se couberem
+            for (int i = 1; i <= total; i++) paginas.Add(i);
+            return paginas;
+        }
+
+        // sempre mostra primeira
+        paginas.Add(1);
+
+        int inicio = Math.Max(2, pagina - 2);
+        int fim = Math.Min(total - 1, pagina + 2);
+
+        if (inicio > 2) paginas.Add(-1); // "..."
+
+        for (int i = inicio; i <= fim; i++) paginas.Add(i);
+
+        if (fim < total - 1) paginas.Add(-1); // "..."
+
+        // sempre mostra última
+        paginas.Add(total);
+
+        return paginas;
+    }
+}

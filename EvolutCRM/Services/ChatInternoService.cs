@@ -65,23 +65,27 @@ ORDER BY Usuario";
 
         /// <summary>Heartbeat de presença — chamado a cada polling no Razor.</summary>
         /// <summary>Heartbeat de presença — chamado a cada polling no Razor.</summary>
-        public async Task AtualizarPresencaAsync(string usuario, string CodEmp)
+        /// <param name="manterOnline">false = a pessoa escolheu "Offline": atualiza a atividade sem marcar Online.</param>
+        public async Task AtualizarPresencaAsync(string usuario, string CodEmp, bool manterOnline = true)
         {
             // ← CORREÇÃO: era new SqlConnection("Connection") — string literal em vez da connection string
             using var conn = new SqlConnection(_conn);
             await conn.OpenAsync();
 
+            // Um UPDATE só: presença do chat + atividade do HELP (antes eram dois, de 5s e de 15s)
             using var cmd = new SqlCommand(@"
         UPDATE Usuario
-        SET Online = 'S',
+        SET Online = CASE WHEN @ManterOnline = 1 THEN 'S' ELSE Online END,
             DataHoraUltimoPing = GETDATE(),
-            ChatUltimaAtividade = GETDATE()
+            ChatUltimaAtividade = GETDATE(),
+            UltimaAtividadeOnline = GETDATE()
         WHERE UPPER(LTRIM(RTRIM(Usuario)))
             = UPPER(LTRIM(RTRIM(@Usuario)))
           AND ISNULL(Inativo, 'N') = 'N' and CodEmp = @CodEmp", conn);
 
             cmd.Parameters.AddWithValue("@Usuario", usuario.Trim());
             cmd.Parameters.AddWithValue("@CodEmp", CodEmp.Trim());
+            cmd.Parameters.AddWithValue("@ManterOnline", manterOnline ? 1 : 0);
             await cmd.ExecuteNonQueryAsync();
         }
 

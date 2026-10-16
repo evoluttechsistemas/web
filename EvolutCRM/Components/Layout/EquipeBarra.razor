@@ -1,0 +1,714 @@
+﻿@using EvolutCRM.Models
+@using EvolutCRM.Services
+@implements IDisposable
+@inject EquipeStatusState Equipe
+@inject UserState UserState
+@inject ChatInternoService ChatService
+@inject ChatInternoNotificationState ChatNotify
+
+@* Faixa da equipe, ao lado das abas: quem está logado, em que status, quantos estão disponíveis
+   e atalho para o Chat Interno (clicar numa pessoa abre a conversa numa janelinha). *@
+
+<div class="eq-bar">
+    <div class="eq-meu">
+        <MeuStatusSeletor Compacto="true" />
+    </div>
+
+    <div class="eq-equipe">
+        <span class="eq-avatares">
+            @foreach (var m in AvataresVisiveis)
+            {
+                var membro = m;
+                var naoLidas = NaoLidasDe(membro.Usuario);
+                <button type="button"
+                        class="eq-av eq-av-btn @(membro.Online ? "" : "eq-av-off") @(naoLidas > 0 ? "eq-av-pulsa" : "") @(EhEu(membro) ? "eq-av-eu" : "")"
+                        style="background:@CorAvatar(membro.Usuario); box-shadow:0 0 0 2px #e9edf2, 0 0 0 4px @membro.StatusCorFinal;"
+                        title="@DicaAvatar(membro, naoLidas)"
+                        @onclick="() => ClicarAvatarAsync(membro)">
+                    @Iniciais(membro.Usuario)
+                    @if (naoLidas > 0)
+                    {
+                        <span class="eq-badge">@(naoLidas > 9 ? "9+" : naoLidas.ToString())</span>
+                    }
+                </button>
+            }
+            @if (AvataresExcedentes > 0)
+            {
+                <button type="button" class="eq-av eq-mais" title="Ver toda a equipe" @onclick="AlternarPainel">+@AvataresExcedentes</button>
+            }
+            @if (!Online.Any())
+            {
+                <span class="eq-vazio">Ninguém online</span>
+            }
+        </span>
+
+        <button type="button" class="eq-chat @(ChatNotify.Novas > 0 ? "tem" : "")" title="Conversas do Chat Interno" @onclick="AlternarPainel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            @if (ChatNotify.Novas > 0)
+            {
+                <span class="eq-chat-n">@(ChatNotify.Novas > 99 ? "99+" : ChatNotify.Novas.ToString())</span>
+            }
+        </button>
+
+        <button type="button" class="eq-disp @ClasseDisponiveis" title="Ver status da equipe" @onclick="AlternarPainel">
+            @TextoDisponiveis
+        </button>
+    </div>
+
+    @if (_painelAberto)
+    {
+        <div class="eq-backdrop" @onclick="FecharPainel"></div>
+        <div class="eq-painel">
+            <div class="eq-painel-head">
+                <span>Equipe</span>
+                <span class="eq-painel-n">@Online.Count online · @TextoDisponiveis</span>
+            </div>
+
+            @foreach (var m in Online)
+            {
+                var membro = m;
+                var naoLidas = NaoLidasDe(membro.Usuario);
+                <div class="eq-linha @(EhEu(membro) ? "" : "eq-linha-click")"
+                     title="@(EhEu(membro) ? "" : "Conversar com " + membro.Usuario)"
+                     @onclick="() => ClicarAvatarAsync(membro)">
+                    <span class="eq-av eq-av-p" style="background:@CorAvatar(membro.Usuario); box-shadow:0 0 0 2px #fff, 0 0 0 4px @membro.StatusCorFinal;">
+                        @Iniciais(membro.Usuario)
+                    </span>
+                    <span class="eq-nome">@NomeExibicao(membro)</span>
+                    @if (naoLidas > 0)
+                    {
+                        <span class="eq-badge-linha">@naoLidas</span>
+                    }
+                    <span class="eq-st" style="@EstiloEtiqueta(membro)">
+                        @membro.StatusTexto
+                    </span>
+                    <span class="eq-tempo">@membro.TempoTexto</span>
+                </div>
+            }
+
+            @if (GruposComConversa.Any())
+            {
+                <div class="eq-off-t">Grupos</div>
+                @foreach (var g in GruposComConversa)
+                {
+                    var grupo = g;
+                    <div class="eq-linha eq-linha-click" @onclick="() => AbrirGrupo(grupo)">
+                        <span class="eq-av eq-av-p eq-av-grupo">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                        </span>
+                        <span class="eq-nome">@grupo.Titulo</span>
+                        @if (grupo.MensagensNaoLidas > 0)
+                        {
+                            <span class="eq-badge-linha">@grupo.MensagensNaoLidas</span>
+                        }
+                    </div>
+                }
+            }
+
+            @if (Offline.Any())
+            {
+                <div class="eq-off-t">Offline</div>
+                <div class="eq-off">
+                    @foreach (var m in Offline)
+                    {
+                        var membro = m;
+                        var naoLidas = NaoLidasDe(membro.Usuario);
+                        <button type="button" class="eq-off-nome" title="Conversar com @membro.Usuario" @onclick="() => ClicarAvatarAsync(membro)">
+                            @membro.Usuario
+                            @if (naoLidas > 0)
+                            {
+                                <span class="eq-badge-linha">@naoLidas</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    @if (_chat is not null)
+    {
+        <MiniChat CodConversa="_chat.Codigo"
+                  Titulo="@_chat.Titulo"
+                  SubTitulo="@SubTituloChat"
+                  CorStatus="@CorStatusChat"
+                  EhGrupo="_chat.EhGrupo"
+                  OnFechar="FecharChat"
+                  OnLido="CarregarConversasAsync" />
+    }
+</div>
+
+<style>
+    .eq-bar {
+        position: relative;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        background: #e9edf2;
+        border-bottom: 1px solid #cfd6de;
+        flex-shrink: 0;
+        font-family: 'IBM Plex Sans',sans-serif;
+    }
+
+    /* o seletor compacto só aparece quando a barra lateral está estreita */
+    .eq-meu {
+        display: none;
+    }
+
+    @@media (max-width: 900px) {
+        .eq-meu {
+            display: block;
+        }
+    }
+
+    .eq-equipe {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 34px;
+        padding: 0 6px 0 8px;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        cursor: pointer;
+    }
+
+        .eq-equipe:hover {
+            background: rgba(255,255,255,.7);
+        }
+
+    .eq-avatares {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+
+    .eq-av {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: .02em;
+        flex-shrink: 0;
+        user-select: none;
+    }
+
+    .eq-mais {
+        background: #64748b;
+        box-shadow: 0 0 0 2px #e9edf2;
+    }
+
+    .eq-vazio {
+        font-size: 11px;
+        color: #64748b;
+        font-weight: 600;
+    }
+
+    .eq-disp {
+        font-size: 10.5px;
+        font-weight: 800;
+        padding: 3px 9px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+        .eq-disp.ok {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .eq-disp.alerta {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .eq-disp.critico {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+    .eq-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 59;
+    }
+
+    .eq-painel {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 8px;
+        width: 320px;
+        max-height: 70vh;
+        overflow-y: auto;
+        z-index: 60;
+        background: #fff;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        box-shadow: 0 14px 34px rgba(15,23,42,.25);
+        padding: 8px;
+        animation: eqIn .12s ease;
+    }
+
+    @@keyframes eqIn {
+        from { opacity: 0; transform: translateY(-4px); }
+        to { opacity: 1; transform: none; }
+    }
+
+    .eq-painel-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 4px 6px 8px;
+        border-bottom: 1px solid #e2e8f0;
+        margin-bottom: 6px;
+        font-size: 12px;
+        font-weight: 800;
+        color: #1e3a8a;
+    }
+
+    .eq-painel-n {
+        font-size: 10.5px;
+        font-weight: 600;
+        color: #64748b;
+    }
+
+    .eq-linha {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 6px;
+        border-radius: 8px;
+    }
+
+        .eq-linha:hover {
+            background: #f8fafc;
+        }
+
+    .eq-av-p {
+        width: 26px;
+        height: 26px;
+        font-size: 10px;
+    }
+
+    .eq-nome {
+        flex: 1;
+        min-width: 0;
+        font-size: 12px;
+        font-weight: 700;
+        color: #0f172a;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .eq-st {
+        font-size: 10.5px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .eq-tempo {
+        width: 58px;
+        text-align: right;
+        font-size: 10px;
+        color: #64748b;
+        white-space: nowrap;
+    }
+
+    .eq-off-t {
+        margin: 8px 6px 4px;
+        font-size: 9.5px;
+        font-weight: 800;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+
+    .eq-off {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        padding: 0 6px 4px;
+    }
+
+    .eq-off-nome {
+        font-size: 10.5px;
+        color: #64748b;
+        background: #f1f5f9;
+        border-radius: 999px;
+        padding: 2px 8px;
+    }
+
+    @@media (max-width: 600px) {
+        .eq-avatares .eq-av:nth-child(n+5):not(.eq-mais) {
+            display: none;
+        }
+
+        .eq-painel {
+            position: fixed;
+            top: auto;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            width: auto;
+        }
+    }
+
+    /* ── atalho para o chat ── */
+    .eq-av-btn {
+        position: relative;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        font-family: inherit;
+        transition: transform .12s ease;
+    }
+
+        .eq-av-btn:hover {
+            transform: translateY(-1px) scale(1.06);
+        }
+
+    .eq-av-eu {
+        cursor: default;
+    }
+
+        .eq-av-eu:hover {
+            transform: none;
+        }
+
+    .eq-av-off {
+        opacity: .55;
+    }
+
+    .eq-badge {
+        position: absolute;
+        top: -7px;
+        right: -8px;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 3px;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 8.5px;
+        font-weight: 800;
+        line-height: 15px;
+        text-align: center;
+        box-shadow: 0 0 0 2px #e9edf2;
+    }
+
+    .eq-av-pulsa {
+        animation: eqPulsa 1.4s ease-in-out infinite;
+    }
+
+    @@keyframes eqPulsa {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.12); }
+    }
+
+    button.eq-mais {
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+    }
+
+    .eq-chat {
+        position: relative;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: #475569;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+        .eq-chat:hover {
+            background: rgba(255,255,255,.75);
+            color: #1d4ed8;
+        }
+
+        .eq-chat.tem {
+            color: #1d4ed8;
+        }
+
+    .eq-chat-n {
+        position: absolute;
+        top: -2px;
+        right: -4px;
+        min-width: 15px;
+        height: 15px;
+        padding: 0 3px;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 8.5px;
+        font-weight: 800;
+        line-height: 15px;
+        text-align: center;
+    }
+
+    button.eq-disp {
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+    }
+
+    .eq-linha-click {
+        cursor: pointer;
+    }
+
+        .eq-linha-click:hover {
+            background: #eff6ff;
+        }
+
+    .eq-badge-linha {
+        min-width: 17px;
+        height: 17px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 9.5px;
+        font-weight: 800;
+        line-height: 17px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .eq-av-grupo {
+        background: #64748b;
+    }
+
+    button.eq-off-nome {
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+        button.eq-off-nome:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+</style>
+
+@code {
+    private const int MaxAvatares = 8;
+    private bool _painelAberto;
+
+    // Conversas do Chat Interno (para os contadores de não lidas e para abrir o chat)
+    private Dictionary<string, ChatInternoConversaModel> _conversaPorUsuario = new(StringComparer.OrdinalIgnoreCase);
+    private List<ChatInternoConversaModel> _grupos = new();
+    private bool _carregandoConversas;
+
+    private sealed record ChatAberto(int Codigo, string Titulo, bool EhGrupo);
+    private ChatAberto? _chat;
+
+    private string Eu => (UserState.CurrentUser ?? "").Trim().ToUpper();
+    private string CodEmp => UserState.CurrentCompanyId.ToString();
+
+    // Online primeiro os disponíveis, depois os ocupados; dentro de cada grupo, por nome
+    private List<EquipeMembroModel> Online => Equipe.Membros
+        .Where(m => m.Online)
+        .OrderByDescending(m => m.Disponivel)
+        .ThenBy(m => m.Usuario)
+        .ToList();
+
+    private List<EquipeMembroModel> Offline => Equipe.Membros.Where(m => !m.Online).ToList();
+
+    // Na faixa: quem está online + quem está offline mas mandou mensagem não lida
+    private List<EquipeMembroModel> Avatares => Online
+        .Concat(Offline.Where(m => NaoLidasDe(m.Usuario) > 0))
+        .ToList();
+
+    private IEnumerable<EquipeMembroModel> AvataresVisiveis =>
+        Avatares.OrderByDescending(m => NaoLidasDe(m.Usuario) > 0).Take(MaxAvatares);
+
+    private int AvataresExcedentes => Math.Max(0, Avatares.Count - MaxAvatares);
+
+    private IEnumerable<ChatInternoConversaModel> GruposComConversa =>
+        _grupos.OrderByDescending(g => g.MensagensNaoLidas > 0).ThenByDescending(g => g.UltimaMensagem);
+
+    private int QtdDisponiveis => Equipe.Membros.Count(m => m.Disponivel);
+
+    private string TextoDisponiveis => QtdDisponiveis == 1 ? "1 disponível" : $"{QtdDisponiveis} disponíveis";
+
+    private string ClasseDisponiveis => QtdDisponiveis switch
+    {
+        0 => "critico",
+        1 => "alerta",
+        _ => "ok"
+    };
+
+    private int NaoLidasDe(string usuario) =>
+        _conversaPorUsuario.TryGetValue(usuario.Trim(), out var c) ? c.MensagensNaoLidas : 0;
+
+    private EquipeMembroModel? MembroDoChat =>
+        _chat is null || _chat.EhGrupo
+            ? null
+            : Equipe.Membros.FirstOrDefault(m => m.Usuario.Equals(_chat.Titulo, StringComparison.OrdinalIgnoreCase));
+
+    private string? SubTituloChat
+    {
+        get
+        {
+            if (_chat is null) return null;
+            if (_chat.EhGrupo) return "Grupo";
+            var m = MembroDoChat;
+            if (m is null) return null;
+            return string.IsNullOrEmpty(m.TempoTexto) ? m.StatusTexto : $"{m.StatusTexto} · {m.TempoTexto}";
+        }
+    }
+
+    private string? CorStatusChat => MembroDoChat?.StatusCorFinal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Equipe.OnChange += AoMudar;
+        ChatNotify.OnChange += AoMudarChat;
+        await Equipe.IniciarAsync();
+        await CarregarConversasAsync();
+    }
+
+    private void AoMudar() => _ = InvokeAsync(StateHasChanged);
+
+    // O MainLayout atualiza o total de não lidas a cada 5s; quando muda, recarrega os contadores por pessoa
+    private void AoMudarChat() => _ = InvokeAsync(CarregarConversasAsync);
+
+    private async Task CarregarConversasAsync()
+    {
+        if (_carregandoConversas || string.IsNullOrWhiteSpace(Eu) || UserState.CurrentCompanyId <= 0) return;
+        _carregandoConversas = true;
+
+        try
+        {
+            var conversas = await ChatService.ObterConversasAsync(Eu, CodEmp);
+
+            _conversaPorUsuario = conversas
+                .Where(c => c.ChatTipo != "GRUPO" && !string.IsNullOrWhiteSpace(c.Titulo))
+                .GroupBy(c => c.Titulo.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+            _grupos = conversas.Where(c => c.ChatTipo == "GRUPO").ToList();
+        }
+        catch
+        {
+            // falha momentânea: mantém os contadores anteriores
+        }
+        finally
+        {
+            _carregandoConversas = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ClicarAvatarAsync(EquipeMembroModel membro)
+    {
+        if (EhEu(membro)) return;
+
+        _painelAberto = false;
+
+        try
+        {
+            var cod = _conversaPorUsuario.TryGetValue(membro.Usuario.Trim(), out var conv)
+                ? conv.Codigo
+                : await ChatService.CriarConversaIndividualAsync(Eu, membro.Usuario, CodEmp);
+
+            _chat = new ChatAberto(cod, membro.Usuario.Trim().ToUpper(), false);
+        }
+        catch
+        {
+            _chat = null;
+        }
+    }
+
+    private void AbrirGrupo(ChatInternoConversaModel grupo)
+    {
+        _painelAberto = false;
+        _chat = new ChatAberto(grupo.Codigo, grupo.Titulo, true);
+    }
+
+    private async Task FecharChat()
+    {
+        _chat = null;
+        await CarregarConversasAsync();
+    }
+
+    private async Task AlternarPainel()
+    {
+        _painelAberto = !_painelAberto;
+        if (_painelAberto)
+        {
+            await Equipe.RecarregarAsync(incluirCadastro: false);
+            await CarregarConversasAsync();
+        }
+    }
+
+    private void FecharPainel() => _painelAberto = false;
+
+    private bool EhEu(EquipeMembroModel m) =>
+        m.Usuario.Equals(UserState.CurrentUser?.Trim() ?? "", StringComparison.OrdinalIgnoreCase);
+
+    private static string Dica(EquipeMembroModel m) =>
+        string.IsNullOrEmpty(m.TempoTexto) ? $"{m.Usuario} — {m.StatusTexto}" : $"{m.Usuario} — {m.StatusTexto} {m.TempoTexto}";
+
+    private string DicaAvatar(EquipeMembroModel m, int naoLidas)
+    {
+        var dica = Dica(m);
+        if (EhEu(m)) return dica + " (você)";
+        if (naoLidas > 0) return $"{dica}\n{naoLidas} mensagem(ns) nova(s) — clique para abrir";
+        return dica + "\nClique para conversar";
+    }
+
+    private string NomeExibicao(EquipeMembroModel m) => EhEu(m) ? $"{m.Usuario} (você)" : m.Usuario;
+
+    // Texto na cor do status, com fundo da mesma cor bem clarinho (alfa 10%)
+    private static string EstiloEtiqueta(EquipeMembroModel m) => $"color:{m.StatusCorFinal}; background:{m.StatusCorFinal}1a;";
+
+    private static string Iniciais(string nome)
+    {
+        var partes = (nome ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length >= 2) return $"{partes[0][0]}{partes[1][0]}".ToUpperInvariant();
+        var n = partes.Length == 1 ? partes[0] : "?";
+        return (n.Length >= 2 ? n[..2] : n).ToUpperInvariant();
+    }
+
+    private static readonly string[] _cores =
+    {
+        "#e53935", "#1976d2", "#43a047", "#8e24aa", "#fb8c00",
+        "#00897b", "#3949ab", "#d81b60", "#5e35b1", "#6d4c41"
+    };
+
+    // Mesmo cálculo de cor do chat interno: a pessoa tem sempre a mesma cor
+    private static string CorAvatar(string? nome)
+    {
+        if (string.IsNullOrWhiteSpace(nome)) return "#546e7a";
+        int hash = 0;
+        foreach (var c in nome.Trim().ToUpperInvariant())
+            hash = (hash * 31 + c) & 0x7FFFFFFF;
+        return _cores[hash % _cores.Length];
+    }
+
+    public void Dispose()
+    {
+        Equipe.OnChange -= AoMudar;
+        ChatNotify.OnChange -= AoMudarChat;
+    }
+}

@@ -9,11 +9,13 @@ namespace EvolutCRM.Services
     {
         private readonly string _connection;
         private readonly UserState _userState;
+        private readonly UsuarioStatusNotifier _statusNotifier;
 
-        public LoginService(IConfiguration config, UserState userState)
+        public LoginService(IConfiguration config, UserState userState, UsuarioStatusNotifier statusNotifier)
         {
             _connection = config.GetConnectionString("Connection")!;
             _userState = userState;
+            _statusNotifier = statusNotifier;
         }
 
         private int CodEmpAtual
@@ -114,7 +116,10 @@ namespace EvolutCRM.Services
             UltimaAtividadeOnline = CASE 
                 WHEN @Online = 'S' THEN GETDATE()
                 ELSE UltimaAtividadeOnline
-            END
+            END,
+            -- Ficou Offline (manual ou logout): limpa o status (Banheiro, Treinamento...)
+            CodUsuarioStatus = CASE WHEN @Online = 'S' THEN CodUsuarioStatus ELSE NULL END,
+            DataHoraStatus   = CASE WHEN @Online = 'S' THEN DataHoraStatus   ELSE NULL END
         WHERE CodEmp = @CodEmp
           AND UPPER(LTRIM(RTRIM(Usuario))) = UPPER(LTRIM(RTRIM(@Usuario)))", conn);
 
@@ -123,9 +128,15 @@ namespace EvolutCRM.Services
             cmd.Parameters.AddWithValue("@Online", online ? "S" : "N");
 
             await cmd.ExecuteNonQueryAsync();
+
+            _statusNotifier.Notificar(CodEmpAtual);
         }
 
-        public async Task RegistrarAtividadeOnlineAsync(string usuario)
+        /// <param name="manterOnline">
+        /// true = a pessoa não escolheu ficar Offline, então volta a marcar Online = 'S'
+        /// (ex.: minimizou a janela, o navegador marcou offline, mas o HELP continua aberto).
+        /// </param>
+        public async Task RegistrarAtividadeOnlineAsync(string usuario, bool manterOnline = false)
         {
             using var conn = GetConnection();
             await conn.OpenAsync();
@@ -133,7 +144,8 @@ namespace EvolutCRM.Services
             var cmd = new SqlCommand(@"
         UPDATE Usuario
         SET 
-            UltimaAtividadeOnline = GETDATE()
+            UltimaAtividadeOnline = GETDATE(),
+            Online = CASE WHEN @ManterOnline = 1 THEN 'S' ELSE Online END
         WHERE CodEmp = @CodEmp
           AND UPPER(LTRIM(RTRIM(Usuario))) = UPPER(LTRIM(RTRIM(@Usuario)))
           AND ISNULL(Inativo, 'N') = 'N'
@@ -141,6 +153,7 @@ namespace EvolutCRM.Services
 
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Usuario", usuario.Trim());
+            cmd.Parameters.AddWithValue("@ManterOnline", manterOnline ? 1 : 0);
 
             await cmd.ExecuteNonQueryAsync();
         }

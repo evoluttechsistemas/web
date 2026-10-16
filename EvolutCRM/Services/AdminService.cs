@@ -482,8 +482,8 @@ WHERE U.CodEmp = @CodEmp
 
             var sql = @"
 SELECT TOP 1
-    ISNULL(MetaCrescimentoMensal, 10),
-    ISNULL(MetaCrescimentoAnual, 100)
+    ISNULL(MetaCrescimentoMensal, 0),
+    ISNULL(MetaCrescimentoAnual, 0)
 FROM UsuarioPermissaoCRM
 WHERE CodEmp = @CodEmp
   AND Modulo = 'PAINEL'
@@ -496,12 +496,12 @@ ORDER BY Codigo ASC;";
 
             if (await reader.ReadAsync())
             {
-                decimal mensal = reader.IsDBNull(0) ? 10m : Convert.ToDecimal(reader.GetValue(0));
-                decimal anual = reader.IsDBNull(1) ? 100m : Convert.ToDecimal(reader.GetValue(1));
+                decimal mensal = reader.IsDBNull(0) ? 0m : Convert.ToDecimal(reader.GetValue(0));
+                decimal anual = reader.IsDBNull(1) ? 0m : Convert.ToDecimal(reader.GetValue(1));
                 return (mensal, anual);
             }
 
-            return (10m, 100m);
+            return (0m, 0m);
         }
 
         public async Task SalvarMetasPainelAsync(decimal metaMensal, decimal metaAnual, string usuarioLogado)
@@ -510,12 +510,12 @@ ORDER BY Codigo ASC;";
             await conn.OpenAsync();
 
             var sql = @"
-IF EXISTS (
-    SELECT 1
-    FROM UsuarioPermissaoCRM
-    WHERE CodEmp = @CodEmp
-      AND Modulo = 'PAINEL'
-      AND Permissao = 'META'
+        IF EXISTS (
+        SELECT 1
+        FROM UsuarioPermissaoCRM
+        WHERE CodEmp = @CodEmp
+        AND Modulo = 'PAINEL'
+        AND Permissao = 'META'
 )
 BEGIN
     UPDATE UsuarioPermissaoCRM

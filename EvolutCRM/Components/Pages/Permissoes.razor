@@ -733,8 +733,8 @@
 @code {
     private bool SalvandoMetas = false;
     private string MensagemMeta = "";
-    private decimal MetaMensalInput = 10m;
-    private decimal MetaAnualInput = 100m;
+    private decimal MetaMensalInput = 0m;
+    private decimal MetaAnualInput = 0m;
     private bool Carregando = true;
     private string MensagemPermissao = "";
 
@@ -831,6 +831,10 @@
 
             Usuarios = await AdminService.ListarUsuariosCrmAsync();
             MontarPermissoesPadrao();
+
+            var metas = await AdminService.ObterMetasPainelAsync();
+            MetaMensalInput = metas.mensal;
+            MetaAnualInput = metas.anual;
         }
         catch (Exception ex)
         {
@@ -1050,6 +1054,8 @@
             new("Cadastros", "CADASTROS_TICKET_SITUACOES_EDITAR", "Editar situações do ticket", "Permite incluir, alterar, ativar e inativar situações do ticket."),
             new("Cadastros", "CADASTROS_TICKET_TIPOS_VISUALIZAR", "Visualizar tipos do ticket", "Permite acessar o cadastro de tipos do ticket."),
             new("Cadastros", "CADASTROS_TICKET_TIPOS_EDITAR", "Editar tipos do ticket", "Permite incluir, alterar, ativar e inativar tipos do ticket."),
+            new("Cadastros", "CADASTROS_USUARIO_STATUS_VISUALIZAR", "Visualizar status do usuário", "Permite acessar o cadastro de status do usuário (Banheiro, Treinamento...)."),
+            new("Cadastros", "CADASTROS_USUARIO_STATUS_EDITAR", "Editar status do usuário", "Permite incluir, alterar, ativar e inativar status do usuário."),
 
             new("Tickets", "TICKETS_VISUALIZAR", "Visualizar tickets", "Permite acessar a central de tickets."),
             new("Tickets", "TICKETS_RESPONDER", "Responder tickets", "Permite responder chamados de clientes."),

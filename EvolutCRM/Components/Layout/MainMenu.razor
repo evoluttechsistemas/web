@@ -15,6 +15,7 @@
 @inject EvolutCRM.Services.LogAcessoService LogAcessoService
 @inject EvolutCRM.Services.CadastroUsuarioService CadastroUsuarioService
 @inject IJSRuntime JS
+@inject EvolutCRM.Services.EquipeStatusState Equipe
 
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
@@ -261,6 +262,11 @@
     .sb-top-status.on .sb-status-dot {
         background: #22c55e;
         box-shadow: 0 0 7px rgba(34,197,94,.85);
+    }
+
+    .sb-meu-status {
+        position: relative;
+        z-index: 20;
     }
 
     /* â”€â”€ SCROLL AREA â”€â”€ */
@@ -996,7 +1002,7 @@
             --sb-w: 54px;
         }
 
-        .sb-company-mark, .sb-brand, .sb-section-lbl, .ni-lbl, .ni-arrow, .u-name, .u-status, .sb-top-status {
+        .sb-company-mark, .sb-brand, .sb-section-lbl, .ni-lbl, .ni-arrow, .u-name, .u-status, .sb-top-status, .sb-meu-status {
             display: none;
         }
 
@@ -1085,6 +1091,11 @@
 
                 .sidebar.mob-open .sb-top-status {
                     display: inline-flex;
+                    width: 100%;
+                }
+
+                .sidebar.mob-open .sb-meu-status {
+                    display: block;
                     width: 100%;
                 }
 
@@ -1250,13 +1261,11 @@
                         <strong>@(string.IsNullOrWhiteSpace(EmpresaNome) ? "HELP" : EmpresaNome)</strong>
                         <span>@(string.IsNullOrWhiteSpace(UserState.CurrentUser) ? "Sistema" : UserState.CurrentUser)</span>
                     </div>
+                </div>
 
-                    <button class="sb-top-status @(UserState.IsOnline ? "on" : "off")"
-                            title="Alterar status"
-                            @onclick="AlternarStatusOnlineAsync">
-                        <span class="sb-status-dot"></span>
-                        <span>@(UserState.IsOnline ? "Online" : "Offline")</span>
-                    </button>
+                @* Status do usuário (Disponível, Banheiro, Treinamento... / Offline) *@
+                <div class="sb-meu-status">
+                    <MeuStatusSeletor />
                 </div>
             </div>
             <!-- scroll area -->
@@ -1312,6 +1321,14 @@
                                 </span>
                                 <span class="ni-lbl">Documentação</span>
                             </button>
+
+                            <button class="@(GetNavItemClass("/blog")) flyout-item"
+                                    @onclick='@(() => NavigateAndCloseMobile("/blog"))'>
+                                <span class="ni-icon">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>
+                                </span>
+                                <span class="ni-lbl">Blog</span>
+                            </button>
                         </div>
                     }
                 </div>
@@ -1351,7 +1368,7 @@
                 }
 
                 <!-- CADASTROS -->
-                @if (PodeAcessarCadastros && (PodeAcessarCadastroClientes || PodeAcessarParametrosDinamicos || PodeAcessarTicketSetores || PodeAcessarTicketSituacoes || PodeAcessarTicketTipos))
+                @if (PodeAcessarCadastros && (PodeAcessarCadastroClientes || PodeAcessarParametrosDinamicos || PodeAcessarTicketSetores || PodeAcessarTicketSituacoes || PodeAcessarTicketTipos || PodeAcessarUsuarioStatus))
                 {
                     <div class="sb-sep"></div>
                     <div class="sb-section flyout-host">
@@ -1423,6 +1440,17 @@
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
                                         </span>
                                         <span class="ni-lbl">Tipos do Ticket</span>
+                                    </button>
+                                }
+
+                                @if (PodeAcessarUsuarioStatus)
+                                {
+                                    <button class="@(GetNavItemClass("/cadastro-usuario-status")) flyout-item"
+                                            @onclick="@(() => NavigateAndCloseMobile("/cadastro-usuario-status"))">
+                                        <span class="ni-icon">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4" /><path d="M3 21v-2a4 4 0 0 1 4-4h4" /><circle cx="17.5" cy="17.5" r="4" /><path d="M17.5 15.8v1.9l1.2 1" /></svg>
+                                        </span>
+                                        <span class="ni-lbl">Status do Usuário</span>
                                     </button>
                                 }
                             </div>
@@ -1624,18 +1652,18 @@
                         <div class="flyout-menu flyout-usuarios">
                             <div class="flyout-title">Usuários</div>
 
-                            @if (UsuariosOnline == null || !UsuariosOnline.Any())
+                            @if (!Equipe.Membros.Any())
                             {
                                 <div class="flyout-empty">Nenhum usuário encontrado.</div>
                             }
                             else
                             {
-                                @foreach (var u in UsuariosOnline)
+                                @foreach (var u in Equipe.Membros.OrderByDescending(m => m.Online).ThenByDescending(m => m.Disponivel).ThenBy(m => m.Usuario))
                                 {
                                     <div class="user-row flyout-user-row">
-                                        <span class="u-dot @(u.Online ? "on" : "")"></span>
+                                        <span class="u-dot" style="background:@u.StatusCorFinal"></span>
                                         <span class="u-name">@u.Usuario</span>
-                                        <span class="u-status">@(u.Online ? "On" : "Off")</span>
+                                        <span class="u-status">@u.StatusTexto @u.TempoTexto</span>
                                     </div>
                                 }
                             }
@@ -1778,6 +1806,7 @@
     private bool PodeAcessarTicketSetores;
     private bool PodeAcessarTicketSituacoes;
     private bool PodeAcessarTicketTipos;
+    private bool PodeAcessarUsuarioStatus;
 
     private bool PodeAdministrarClientes;
     private bool PodeGerenciarPermissoes;
@@ -1874,6 +1903,7 @@
         TicketNotify.OnChange += AtualizarMenu;
         ChatNotify.OnChange += AtualizarMenu;
         UserState.OnChange += OnUserStateChangedMenu;
+        Equipe.OnChange += AoMudarEquipe;
 
         await CarregarPermissoesMenuAsync();
 
@@ -1893,64 +1923,14 @@
             {
                 while (await _timerUsuarios.WaitForNextTickAsync(_timerUsuariosCts.Token))
                     if (mostrarUsuariosOnline)
-                        await CarregarUsuariosOnlineAsync();
+                        await Equipe.RecarregarAsync(incluirCadastro: false);
             }
             catch (OperationCanceledException) { }
         });
 
-        // Timer: heartbeat de atividade
-        _timerAtividadeCts = new CancellationTokenSource();
-        _timerAtividade = new PeriodicTimer(TimeSpan.FromSeconds(15));
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (await _timerAtividade.WaitForNextTickAsync(_timerAtividadeCts.Token))
-                    if (!string.IsNullOrWhiteSpace(UserState.CurrentUser))
-                        await LoginService.RegistrarAtividadeOnlineAsync(UserState.CurrentUser.Trim());
-            }
-            catch (OperationCanceledException) { }
-        });
-
-        // Timer: badge chat — por usuário, isolado, só dispara render se mudou
-        _timerBadgeChatCts = new CancellationTokenSource();
-        _timerBadgeChat = new PeriodicTimer(TimeSpan.FromSeconds(10));
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (await _timerBadgeChat.WaitForNextTickAsync(_timerBadgeChatCts.Token))
-                {
-                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
-                        continue;
-
-                    var qtd = await ChatInternoService.ObterQuantidadeMensagensNaoLidasAsync(
-                                  UserState.CurrentUser.Trim().ToUpper(), CodEmp);
-                    ChatNotify.SetNovas(qtd); // guard interno: só dispara OnChange se mudou
-                }
-            }
-            catch (OperationCanceledException) { }
-        });
-
-        // Timer: badge tickets — por usuário, isolado, só dispara render se mudou
-        _timerBadgeTicketCts = new CancellationTokenSource();
-        _timerBadgeTicket = new PeriodicTimer(TimeSpan.FromSeconds(10));
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                while (await _timerBadgeTicket.WaitForNextTickAsync(_timerBadgeTicketCts.Token))
-                {
-                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
-                        continue;
-
-                    var qtd = await TicketService.GetQuantidadeTicketsNovosAsync(
-                                  UserState.CurrentUser.Trim().ToUpper());
-                    TicketNotify.SetNovos(qtd); // guard interno: só dispara OnChange se mudou
-                }
-            }
-            catch (OperationCanceledException) { }
-        });
+        // Heartbeat de atividade e badges de chat/tickets: feitos pelo MainLayout a cada 5s
+        // (AtualizarChatInterno / AtualizarTickets). Os timers de 15s e 10s que ficavam aqui
+        // repetiam as mesmas consultas e foram removidos — os avisos continuam no mesmo tempo.
 
         _timerBadgeComercialCts = new CancellationTokenSource();
         _timerBadgeComercial = new PeriodicTimer(TimeSpan.FromSeconds(10));
@@ -2089,6 +2069,7 @@
         _timerBadgeComercial?.Dispose();
         _timerBadgeComercialCts?.Dispose();
         UserState.OnChange -= OnUserStateChangedMenu;
+        Equipe.OnChange -= AoMudarEquipe;
     }
 
     private async Task CarregarPermissoesMenuAsync()
@@ -2107,6 +2088,7 @@
         PodeAcessarTicketSetores = false;
         PodeAcessarTicketSituacoes = false;
         PodeAcessarTicketTipos = false;
+        PodeAcessarUsuarioStatus = false;
 
         PodeAdministrarClientes = false;
         PodeGerenciarPermissoes = false;
@@ -2137,6 +2119,7 @@
         PodeAcessarTicketSetores = perms.Contains("CADASTROS_TICKET_SETORES_VISUALIZAR");
         PodeAcessarTicketSituacoes = perms.Contains("CADASTROS_TICKET_SITUACOES_VISUALIZAR");
         PodeAcessarTicketTipos = perms.Contains("CADASTROS_TICKET_TIPOS_VISUALIZAR");
+        PodeAcessarUsuarioStatus = perms.Contains("CADASTROS_USUARIO_STATUS_VISUALIZAR");
         PodeAdministrarClientes = perms.Contains("ADMIN_ADMINISTRAR_CLIENTES");
         PodeGerenciarPermissoes = perms.Contains("ADMIN_PERMISSOES");
         PodeVisualizarTarefas = perms.Contains("ADMIN_TAREFAS_VISUALIZAR");
@@ -2168,7 +2151,13 @@
         mostrarUsuariosOnline = abrir;
 
         if (mostrarUsuariosOnline)
-            await CarregarUsuariosOnlineAsync();
+            await Equipe.RecarregarAsync(incluirCadastro: false);
+    }
+
+    // Só redesenha o menu por causa da equipe quando a lista "Usuários" está aberta
+    private void AoMudarEquipe()
+    {
+        if (mostrarUsuariosOnline) AtualizarMenu();
     }
 
     private async Task SairTodosDispositivosAsync()

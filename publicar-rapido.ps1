@@ -55,6 +55,28 @@ function Send-FtpFileWithRetry($url, $credential, $bytes, $maxTentativas = 3) {
     return $false
 }
 
+function Read-Manifesto($caminho) {
+    # Hash (SHA256) de cada arquivo ja enviado com sucesso ao servidor.
+    # Necessario porque DLL nova pode ter o MESMO tamanho da antiga
+    # (ex.: troca de versao de pacote NuGet) e a comparacao so por tamanho nao enviava.
+    $mapa = @{}
+    if (Test-Path $caminho) {
+        try {
+            $json = Get-Content $caminho -Raw | ConvertFrom-Json
+            foreach ($p in $json.PSObject.Properties) { $mapa[$p.Name] = [string]$p.Value }
+        } catch {
+            Write-Host '    AVISO: publish-hashes.json invalido, todos os arquivos serao reenviados.' -ForegroundColor Yellow
+        }
+    }
+    return $mapa
+}
+
+function Save-Manifesto($caminho, $mapa) {
+    $ordenado = [ordered]@{}
+    foreach ($k in ($mapa.Keys | Sort-Object)) { $ordenado[$k] = $mapa[$k] }
+    ($ordenado | ConvertTo-Json -Depth 2) | Set-Content -Path $caminho -Encoding UTF8
+}
+
 function Invoke-Sql($query) {
     $conn = New-Object System.Data.SqlClient.SqlConnection
     $conn.ConnectionString = "Server=$sqlServer;Database=$sqlDatabase;User id=$sqlUser;Password=$sqlPassword;TrustServerCertificate=True"
@@ -101,6 +123,8 @@ $total = $files.Count
 $count = 0
 $arquivosAlterados = @()
 $precisaReiniciar  = $false
+$manifestoPath     = Join-Path $PSScriptRoot 'publish-hashes.json'
+$manifesto         = Read-Manifesto $manifestoPath
 
 foreach ($file in $files) {
     $count++
@@ -109,10 +133,13 @@ foreach ($file in $files) {
     $percent  = [math]::Round(($count / $total) * 100)
     Write-Progress -Activity 'Comparando arquivos...' -Status "$count/$total - $relative" -PercentComplete $percent
 
-    $remoteSize = Get-FtpFileSize $ftpUrl $credential
-    if ($remoteSize -ne $file.Length) {
-        $arquivosAlterados += @{ File = $file; Url = $ftpUrl; Relative = $relative }
-        if ($relative -match '\.(dll|pdb)$') { $precisaReiniciar = $true }
+    # Envia se o conteudo mudou desde o ultimo deploy (hash) OU se o tamanho no servidor difere/arquivo nao existe
+    $hash       = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
+    $hashMudou  = (-not $manifesto.ContainsKey($relative)) -or ($manifesto[$relative] -ne $hash)
+    $remoteSize = if ($hashMudou) { -2 } else { Get-FtpFileSize $ftpUrl $credential }
+    if ($hashMudou -or ($remoteSize -ne $file.Length)) {
+        $arquivosAlterados += @{ File = $file; Url = $ftpUrl; Relative = $relative; Hash = $hash }
+        if ($relative -match '\.(dll|pdb|exe)$' -or $relative -match '\.(deps|runtimeconfig)\.json$' -or $relative -eq 'web.config') { $precisaReiniciar = $true }
     }
 }
 
@@ -145,10 +172,11 @@ if (-not $precisaReiniciar) {
 
         $bytes = [System.IO.File]::ReadAllBytes($item.File.FullName)
         $ok    = Send-FtpFileWithRetry $item.Url $credential $bytes
-        if ($ok) { $enviados++ } else { $falhas += $item.Relative }
+        if ($ok) { $enviados++; $manifesto[$item.Relative] = $item.Hash } else { $falhas += $item.Relative }
     }
 
     Write-Progress -Activity 'Enviando arquivos...' -Completed
+    Save-Manifesto $manifestoPath $manifesto
 
     try {
         Invoke-Sql "INSERT INTO DeployNotificacao (Tipo, Versao, Mensagem) VALUES ('atualizacao', '$versao', 'Sistema atualizado! Recarregue a pagina para ver as novidades.')"
@@ -170,7 +198,13 @@ if (-not $precisaReiniciar) {
 Write-Host ''
 Write-Host '>>> Colocando site em manutencao agora...' -ForegroundColor Yellow
 
-$offlineContent = [System.Text.Encoding]::UTF8.GetBytes('<html><body><h2>Atualizando sistema, aguarde...</h2></body></html>')
+$offlineContent = [System.Text.Encoding]::UTF8.GetBytes(@'
+<!DOCTYPE html><html lang="pt-br"><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="10"><title>Atualizando o HELP</title></head>
+<body style="font-family:sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#0f172a;color:#e2e8f0">
+<div style="text-align:center"><h2>Atualizando o HELP...</h2><p>A tela volta sozinha em instantes.</p></div>
+</body></html>
+'@)
 $offlineUrl     = $ftpHost.TrimEnd('/') + '/app_offline.htm'
 
 Send-FtpFile $offlineUrl $credential $offlineContent
@@ -194,6 +228,7 @@ foreach ($item in $arquivosAlterados) {
     $ok    = Send-FtpFileWithRetry $item.Url $credential $bytes
     if ($ok) {
         $enviados++
+        $manifesto[$item.Relative] = $item.Hash
     } else {
         $falhas += $item.Relative
         Write-Host "    FALHA: $($item.Relative)" -ForegroundColor Red
@@ -201,6 +236,7 @@ foreach ($item in $arquivosAlterados) {
 }
 
 Write-Progress -Activity 'Enviando arquivos...' -Completed
+Save-Manifesto $manifestoPath $manifesto
 Write-Host "    $enviados/$($arquivosAlterados.Count) arquivo(s) enviado(s)." -ForegroundColor Green
 
 # ============================================================
@@ -218,6 +254,29 @@ try {
 } catch {
     Write-Host '    AVISO: Nao foi possivel remover app_offline.htm automaticamente.' -ForegroundColor Yellow
     Write-Host '    Remova manualmente via FileZilla para o site voltar.' -ForegroundColor Yellow
+}
+
+# ============================================================
+# PASSO EXTRA: ACORDAR O HELP (forca o IIS a subir o app agora)
+# ============================================================
+Write-Host ''
+Write-Host '>>> Acordando o HELP...' -ForegroundColor Cyan
+
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+$helpNoAr = $false
+for ($i = 1; $i -le 12; $i++) {
+    try {
+        $r = Invoke-WebRequest 'https://help.evoluttech.com/' -UseBasicParsing -TimeoutSec 30
+        if ($r.StatusCode -eq 200) { $helpNoAr = $true; break }
+    } catch {
+        Write-Host "    Tentativa $i/12: HELP ainda iniciando..." -ForegroundColor Gray
+        Start-Sleep -Seconds 5
+    }
+}
+if ($helpNoAr) {
+    Write-Host '    HELP no ar!' -ForegroundColor Green
+} else {
+    Write-Host '    AVISO: o HELP nao respondeu em ~1 minuto. Verifique o site no IIS.' -ForegroundColor Yellow
 }
 
 # ============================================================

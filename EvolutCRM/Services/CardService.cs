@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using EvolutCRM.Helpers;
 using EvolutCRM.Models;
 using Microsoft.Data.SqlClient;
 
@@ -301,7 +302,7 @@ VALUES
                     using var cmd = new SqlCommand(sql, conn);
                     cmd.Parameters.AddWithValue("@CodCRMC", codCrm);
                     cmd.Parameters.AddWithValue("@DataHora", anot.DataHora);
-                    cmd.Parameters.Add("@Anotacao", SqlDbType.VarChar, -1).Value = anot.Texto ?? "";
+                    cmd.Parameters.Add("@Anotacao", SqlDbType.NVarChar, -1).Value = anot.Texto ?? ""; // NVarChar: preserva emojis
                     cmd.Parameters.AddWithValue("@Funil", anot.Funil ?? "");
                     cmd.Parameters.AddWithValue("@Usuario", usuario ?? "");
                     cmd.Parameters.AddWithValue("@EnvioCliente", anot.EnvioCliente ?? "N");
@@ -362,21 +363,9 @@ VALUES
             if (string.IsNullOrWhiteSpace(telefone))
                 return "";
 
-            telefone = new string(
-                telefone.Where(char.IsDigit).ToArray()
-            );
-
-            while (telefone.StartsWith("0"))
-            {
-                telefone = telefone.Substring(1);
-            }
-
-            if (!telefone.StartsWith("55"))
-            {
-                telefone = "55" + telefone;
-            }
-
-            return telefone;
+            // Mesmo formato que o webhook grava (TelefoneBR): DDD 11–30 com o 9, DDD 31+ sem o 9.
+            // Antes só colocava o 55, e o card manual ficava num formato diferente do WhatsApp.
+            return TelefoneBR.Normalizar(telefone);
         }
 
         public async Task SalvarAgendaAsync(AgendaModel agenda)
@@ -797,7 +786,8 @@ ORDER BY DataAgendamento DESC, HoraAgendamento DESC";
 
 
 
-            var sql = @"SELECT Codigo, DataHora, Anotacao, Funil, EnvioCliente, StatusWhatsApp, CaminhoImagem, NomeImagem, Imagem, Audio, AudioMimeType, Alterado, MensagemExcluida, Usuario
+            var sql = @"SELECT Codigo, DataHora, Anotacao, Funil, EnvioCliente, StatusWhatsApp, CaminhoImagem, NomeImagem, Imagem, Audio, AudioMimeType, Alterado, MensagemExcluida, Usuario,
+       TranscricaoAudio, AudioTranscrito
 FROM CRMAnotacao
 WHERE CodCRMC = @CodCRMC
 ORDER BY Codigo DESC";
@@ -824,6 +814,8 @@ ORDER BY Codigo DESC";
                     Alterado = rd["Alterado"]?.ToString() ?? "N",
                     MensagemExcluida = rd["MensagemExcluida"]?.ToString() ?? "N",
                     Usuario = rd["Usuario"]?.ToString() ?? "",
+                    TranscricaoAudio = rd["TranscricaoAudio"] == DBNull.Value ? "" : rd["TranscricaoAudio"]?.ToString() ?? "",
+                    AudioTranscrito = rd["AudioTranscrito"] == DBNull.Value ? "N" : rd["AudioTranscrito"]?.ToString() ?? "N",
                     ImagemBytes = rd["Imagem"] == DBNull.Value ? null : (byte[])rd["Imagem"],
                     CaminhoImagem = rd["Imagem"] == DBNull.Value
     ? rd["CaminhoImagem"]?.ToString() ?? ""
@@ -966,14 +958,18 @@ ORDER BY Nome";
             using var conn = new SqlConnection(_connection);
             await conn.OpenAsync();
 
+            // Gravada como nota INTERNA (StatusWhatsApp = 'interno') para o
+            // EnvioWhatsAppBackgroundService não disparar esse aviso para o lead.
             var sql = @"
         INSERT INTO CRMAnotacao
-        (CodCRMC, DataHora, Anotacao)
-        VALUES
-        (@Cod, GETDATE(), @Texto)";
+        (CodCRMC, DataHora, Anotacao, Usuario, EnvioCliente, StatusWhatsApp, LidoSuporte, Alterado, MensagemExcluida, CodEmp)
+        SELECT @Cod, GETDATE(), @Texto, @Usuario, 'N', 'interno', 'S', 'N', 'N', C.CodEmp
+        FROM CRMC C
+        WHERE C.Codigo = @Cod";
 
             using var cmd = new SqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@Cod", codCrm);
+            cmd.Parameters.AddWithValue("@Usuario", (usuario ?? "").Trim().ToUpper());
             cmd.Parameters.AddWithValue("@Texto",
                 $"WhatsApp visualizado pelo usuário {usuario} em {DateTime.Now:dd/MM/yyyy HH:mm}");
 
@@ -1111,6 +1107,11 @@ OUTER APPLY
     ORDER BY a.DataHora DESC
 ) ua
 WHERE c.CodEmp = @Empresa
+  -- Só cards em andamento ou mexidos nos últimos 2 dias (antes trazia a base inteira a cada ciclo)
+  AND (
+        ISNULL(c.Status, 'ABERTO') NOT IN ('CONCLUIDO', 'PERDIDO', 'CANCELADO')
+     OR c.DataHoraUltimaGravacao >= DATEADD(DAY, -2, GETDATE())
+  )
 ORDER BY ISNULL(ua.DataHora, c.DataHoraUltimaGravacao) DESC";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -1187,6 +1188,27 @@ ORDER BY ISNULL(ua.DataHora, c.DataHoraUltimaGravacao) DESC";
             if (codigos == null || codigos.Count == 0)
                 return resultado;
 
+            // O SQL Server aceita no máximo 2100 parâmetros por comando:
+            // consulta em lotes de 1000 para não quebrar quando a base cresce.
+            var distintos = codigos.Distinct().ToList();
+            for (int i = 0; i < distintos.Count; i += 1000)
+            {
+                var lote = distintos.Skip(i).Take(1000).ToList();
+                var parcial = await GetUltimasMensagensClienteLoteAsync(lote);
+                foreach (var kv in parcial)
+                    resultado.TryAdd(kv.Key, kv.Value);
+            }
+
+            return resultado;
+        }
+
+        private async Task<Dictionary<int, AnotacaoModel>> GetUltimasMensagensClienteLoteAsync(List<int> codigos)
+        {
+            var resultado = new Dictionary<int, AnotacaoModel>();
+
+            if (codigos == null || codigos.Count == 0)
+                return resultado;
+
             using var conn = new SqlConnection(_connection);
             await conn.OpenAsync();
 
@@ -1251,6 +1273,64 @@ WHERE ISNULL(d.MensagemExcluida,'N') = 'N'
             }
 
             return resultado;
+        }
+
+        /// <summary>
+        /// Edita o texto de uma mensagem do card (somente mensagens do próprio usuário, não enviadas pelo cliente).
+        /// Mesmo critério do TicketService.EditarMensagemAsync.
+        /// </summary>
+        public async Task EditarAnotacaoAsync(int codigoAnotacao, int codCrm, string novoTexto, string usuario)
+        {
+            if (string.IsNullOrWhiteSpace(novoTexto))
+                throw new Exception("A mensagem não pode ficar vazia.");
+
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+UPDATE CRMAnotacao
+SET Anotacao = @Texto,
+    Alterado = 'S'
+WHERE Codigo  = @Codigo
+  AND CodCRMC = @CodCRMC
+  AND UPPER(ISNULL(Usuario, '')) = UPPER(@Usuario)
+  AND ISNULL(EnvioCliente, 'N') <> 'S'
+  AND ISNULL(MensagemExcluida, 'N') <> 'S'
+  AND ISNULL(Anotacao, '') <> ''
+  AND Audio IS NULL", conn);
+
+            cmd.Parameters.Add("@Texto", SqlDbType.NVarChar, -1).Value = novoTexto.Trim(); // NVarChar: preserva emojis
+            cmd.Parameters.AddWithValue("@Codigo", codigoAnotacao);
+            cmd.Parameters.AddWithValue("@CodCRMC", codCrm);
+            cmd.Parameters.AddWithValue("@Usuario", (usuario ?? "").Trim());
+
+            if (await cmd.ExecuteNonQueryAsync() == 0)
+                throw new Exception("Essa mensagem não pode ser editada.");
+
+            _monitor.Log(LogCategory.CRM, LogSeverity.Info,
+                $"Anotação #{codigoAnotacao} do card #{codCrm} editada por {usuario}");
+        }
+
+        /// <summary>
+        /// Marca uma mensagem do card como excluída (não apaga do banco). Mensagens do cliente não podem ser excluídas.
+        /// </summary>
+        public async Task ExcluirAnotacaoAsync(int codigoAnotacao, int codCrm)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+UPDATE CRMAnotacao
+SET MensagemExcluida = 'S'
+WHERE Codigo  = @Codigo
+  AND CodCRMC = @CodCRMC
+  AND ISNULL(EnvioCliente, 'N') <> 'S'", conn);
+
+            cmd.Parameters.AddWithValue("@Codigo", codigoAnotacao);
+            cmd.Parameters.AddWithValue("@CodCRMC", codCrm);
+
+            if (await cmd.ExecuteNonQueryAsync() == 0)
+                throw new Exception("Essa mensagem não pode ser excluída.");
         }
 
         public async Task<int> CriarTicketAPartirDoCardAsync(

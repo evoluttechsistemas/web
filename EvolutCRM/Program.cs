@@ -1,7 +1,9 @@
 ﻿using EvolutCRM.Abas;
 using EvolutCRM.APIEvolutTech.Services;
+using EvolutCRM.Blog;
 using EvolutCRM.Components;
 using EvolutCRM.Data;
+using EvolutCRM.Mobile;
 using EvolutCRM.Models;
 using EvolutCRM.Services;
 using EvolutTech.CRM.Services;
@@ -50,6 +52,14 @@ builder.Services.AddScoped<AiTicketInsightsRepository>();
 builder.Services.AddScoped<DocService>();
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient("local", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["App:BaseUrl"]!);
+});
+builder.Services.AddScoped<BlogRepository>();
+builder.Services.AddScoped<System.Data.IDbConnection>(_ =>
+    new Microsoft.Data.SqlClient.SqlConnection(
+        builder.Configuration.GetConnectionString("Connection")));
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<TicketQueryRepository>();
 // NOVO (acrescente)
@@ -80,9 +90,55 @@ builder.Services.AddScoped<CadastroUsuarioService>();
 builder.Services.AddScoped<ClienteCadastroService>();
 builder.Services.AddScoped<ParametroDinamicoService>();
 builder.Services.AddScoped<TicketClassificacaoService>();
+builder.Services.AddSingleton<UsuarioStatusNotifier>();   // avisa todas as telas quando alguém troca de status
+builder.Services.AddScoped<UsuarioStatusService>();
+builder.Services.AddScoped<EquipeStatusState>();
+builder.Services.AddScoped<MiniChatState>();          // conversa aberta na janelinha de chat da faixa da equipe
 builder.Services.AddScoped<ClienteWhatsAppFotoService>();
 builder.Services.AddSingleton<DeployNotificacaoState>();
 builder.Services.AddHostedService<DeployNotificacaoService>();
+
+// HELP Mobile (API + notificações push)
+builder.Services.AddScoped<MobileRepository>();
+builder.Services.AddSingleton<MobileTokenService>();
+builder.Services.AddHostedService<MobilePushWorker>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowSite", policy =>
+    {
+        // Site + HELP Mobile (os endereços do app ficam no appsettings → Mobile:Origens)
+        var origens = new List<string>
+        {
+            "http://localhost:4321",
+            "https://www.evoluttech.com.br/"  // adicionar o domínio de produção depois
+        };
+        origens.AddRange(builder.Configuration.GetSection("Mobile:Origens").Get<string[]>() ?? Array.Empty<string>());
+
+        // Origem não pode terminar com "/" (senão o navegador bloqueia)
+        var permitidas = origens.Select(o => o.TrimEnd('/')).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+        if (builder.Environment.IsDevelopment())
+        {
+            // Desenvolvimento: libera também a rede local (testar o HELP Mobile no celular pelo IP do PC)
+            policy.SetIsOriginAllowed(origem =>
+                permitidas.Contains(origem, StringComparer.OrdinalIgnoreCase) || OrigemDaRedeLocal(origem));
+        }
+        else
+        {
+            policy.WithOrigins(permitidas);
+        }
+
+        policy.AllowAnyMethod()
+              .AllowAnyHeader()
+              // O navegador guarda a liberação do CORS por 2h (sem isso o Chrome guarda só 5s
+              // e o HELP Mobile fazia 2 viagens — OPTIONS + chamada — em quase toda requisição).
+              .SetPreflightMaxAge(TimeSpan.FromHours(2));
+    });
+});
+
+
+
 
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AcessoRemoto), "Acesso Remoto", "fas fa-desktop", "admin/acesso-remoto");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AdminLogs), "Admin Logs", "fas fa-file-shield", "admin/logs");
@@ -114,6 +170,10 @@ AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorBackups), "Mon
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorHealth), "Monitor HELP", "fas fa-heart-pulse", "admin/monitor");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CadastroUsuario), "Cadastro de Usuário", "fas fa-user-plus", "cadastro-usuario");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CadastroCliente), "Cadastro de Cliente", "fas fa-users", "cadastro-cliente");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Blog.BlogList), "Blog", "fas fa-pen-to-square", "blog");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Blog.BlogEditor), "Blog Editor", "fas fa-pen-to-square", "blog/editar");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Blog.BlogEditor), "Novo Post", "fas fa-pen-to-square", "blog/novo");
+
 AbaService.RegistrarMeta(
     typeof(EvolutCRM.Components.Pages.ParametroDinamico),
     "Parametro Dinamico",
@@ -139,6 +199,13 @@ AbaService.RegistrarMeta(
     "Tipos do Ticket",
     "fas fa-tags",
     "cadastro-ticket-tipo"
+);
+
+AbaService.RegistrarMeta(
+    typeof(EvolutCRM.Components.Pages.CadastroUsuarioStatus),
+    "Status do Usuário",
+    "fas fa-user-clock",
+    "cadastro-usuario-status"
 );
 
 builder.Services.AddHttpContextAccessor();
@@ -244,6 +311,8 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("AllowSite");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -259,7 +328,7 @@ app.MapControllerRoute(
 // =========================
 // STATIC FILES (Uploads)
 // =========================
-var uploadsPath = @"C:\FTP\Site\Help\uploads";
+var uploadsPath = builder.Configuration["Uploads:PastaFisica"] ?? @"C:\FTP\Site\Help\uploads";
 
 // garante que a pasta exista
 if (!Directory.Exists(uploadsPath))
@@ -273,7 +342,7 @@ app.UseStaticFiles();
 // uploads (fora do wwwroot)
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(uploadsPath),
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
     RequestPath = "/uploads"
 });
 
@@ -327,4 +396,20 @@ _ = Task.Run(async () =>
     }
 });
 
+app.MapBlogEndpoints();
+app.MapMobileEndpoints();
+
 app.Run();
+
+// Origem da rede local (localhost, 127.x, 10.x, 172.16-31.x, 192.168.x) — usado só em desenvolvimento
+static bool OrigemDaRedeLocal(string origem)
+{
+    if (!Uri.TryCreate(origem, UriKind.Absolute, out var uri)) return false;
+    if (uri.IsLoopback) return true;
+    if (!System.Net.IPAddress.TryParse(uri.Host, out var ip)) return false;
+    var b = ip.GetAddressBytes();
+    if (b.Length != 4) return false;
+    return b[0] == 10
+        || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+        || (b[0] == 192 && b[1] == 168);
+}

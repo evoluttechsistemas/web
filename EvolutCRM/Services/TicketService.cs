@@ -166,7 +166,7 @@ WHERE Codigo = @CodInstancia", con);
             await con.OpenAsync();
 
             var sql = @"
-SELECT 
+    SELECT 
     T.Codigo,
     ISNULL(T.CodSetor, 1) AS CodSetor,
     ISNULL(T.CodCliente, 0) AS CodCliente,
@@ -239,6 +239,83 @@ ORDER BY
                     UsuarioUltimaGravacao = rd.IsDBNull(14) ? "" : rd.GetString(14),
                     StatusAprovacao = rd.IsDBNull(15) ? null : rd.GetString(15),
                     FotoClienteUrl = rd.IsDBNull(16) ? null : rd.GetString(16)
+                });
+            }
+
+            return lista;
+        }
+
+        /// <summary>
+        /// Versão leve da ListarChamadosAsync para os avisos do MainLayout (a cada 5s):
+        /// só traz os tickets que podem gerar aviso (novos ou aguardando resposta do atendente)
+        /// e sem as colunas que só a tela de Tickets usa (aprovação e foto do cliente).
+        /// </summary>
+        public async Task<List<TicketChamadoCModel>> ListarChamadosParaNotificacaoAsync()
+        {
+            var lista = new List<TicketChamadoCModel>();
+
+            using var con = new SqlConnection(_conn);
+            await con.OpenAsync();
+
+            const string sql = @"
+SELECT
+    T.Codigo,
+    ISNULL(T.CodSetor, 1) AS CodSetor,
+    ISNULL(T.CodCliente, 0) AS CodCliente,
+    C.Nome AS NomeCliente,
+    C.Apelido AS ApelidoCliente,
+    ISNULL(T.Assunto, '') AS Assunto,
+    T.Usuario,
+    T.UsuarioAbertura,
+    ISNULL(T.CodSituacao, 1) AS CodSituacao,
+    ISNULL(T.DataHoraAbertura, GETDATE()) AS DataHoraAbertura,
+    ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) AS DataHoraUltimaGravacao,
+    ISNULL(T.Novo, 'N') AS Novo,
+    ISNULL(T.CodTipo, 1) AS CodTipo,
+    ISNULL(T.Prioridade, 2) AS Prioridade,
+    ISNULL(T.UsuarioUltimaGravacao, '') AS UsuarioUltimaGravacao
+FROM TicketChamadoC T
+LEFT JOIN Cliente C ON C.Codigo = T.CodCliente AND C.CodEmp = T.CodEmp
+WHERE T.CodEmp = @CodEmp
+  AND ISNULL(T.CodSituacao, 1) <> 3
+  AND ISNULL(T.ChatInterno, 'N') <> 'S'
+  AND (
+        ISNULL(T.Novo, 'N') = 'S'
+        OR (
+            ISNULL(T.CodSituacao, 1) = 1
+            AND UPPER(LTRIM(RTRIM(ISNULL(T.UsuarioUltimaGravacao, ''))))
+                IN ('', 'NOVO', 'WHATSAPP', 'CLIENTE', 'BOT', 'SISTEMA')
+        )
+      )
+ORDER BY
+    CASE WHEN ISNULL(T.Novo, 'N') = 'S' THEN 0 ELSE 1 END,
+    ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura) DESC";
+
+            using var cmd = new SqlCommand(sql, con);
+            AddCodEmp(cmd);
+            using var rd = await cmd.ExecuteReaderAsync();
+
+            while (await rd.ReadAsync())
+            {
+                lista.Add(new TicketChamadoCModel
+                {
+                    Codigo = rd.IsDBNull(0) ? 0 : rd.GetInt32(0),
+                    CodSetor = rd.IsDBNull(1) ? 1 : rd.GetInt32(1),
+                    CodCliente = rd.IsDBNull(2) ? 0 : rd.GetInt32(2),
+                    NomeCliente = rd.IsDBNull(3) ? null : rd.GetString(3),
+                    ApelidoCliente = rd.IsDBNull(4) ? null : rd.GetString(4),
+                    Assunto = rd.IsDBNull(5) ? "" : rd.GetString(5),
+                    Usuario = rd.IsDBNull(6) ? null : rd.GetString(6),
+                    UsuarioAbertura = rd.IsDBNull(7) ? null : rd.GetString(7),
+                    CodSituacao = rd.IsDBNull(8) ? 1 : rd.GetInt32(8),
+                    DataHoraAbertura = rd.IsDBNull(9) ? DateTime.Now : rd.GetDateTime(9),
+                    DataHoraUltimaGravacao = rd.IsDBNull(10)
+                        ? (rd.IsDBNull(9) ? DateTime.Now : rd.GetDateTime(9))
+                        : rd.GetDateTime(10),
+                    Novo = rd.IsDBNull(11) ? "N" : rd.GetString(11),
+                    CodTipo = rd.IsDBNull(12) ? 1 : rd.GetInt32(12),
+                    Prioridade = rd.IsDBNull(13) ? 2 : rd.GetInt32(13),
+                    UsuarioUltimaGravacao = rd.IsDBNull(14) ? "" : rd.GetString(14)
                 });
             }
 
@@ -1817,8 +1894,7 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn))
                 mensagens.Add(anotacao.Trim());
             else if (criarAgenda && dataHoraAgenda.HasValue)
                 mensagens.Add("📅 Agenda criada para este ticket.");
-            else if (temImagem || temVideo || temAudio)
-                mensagens.Add("");
+            // Só mídia (sem texto): não grava linha de texto vazia — a mídia é gravada logo abaixo
 
             foreach (var msg in mensagens)
             {
@@ -1914,7 +1990,8 @@ INSERT INTO TicketChamadoD
     Imagem, NomeImagem, Video, VideoMimeType, VideoFileName,
     Audio, AudioMimeType, AudioFileName,
     NovaAgenda, DataHoraAgenda, AgendaResolvida,
-    UltimaNotificacaoAgenda, NotificarAgenda, StatusWhatsApp
+    UltimaNotificacaoAgenda, NotificarAgenda, StatusWhatsApp,
+    Interno
 )
 VALUES
 (
@@ -1924,7 +2001,8 @@ VALUES
     @Imagem, @NomeImagem, @Video, @VideoMimeType, @VideoFileName,
     @Audio, @AudioMimeType, @AudioFileName,
     'N', NULL, 'N',
-    NULL, 'N', @StatusWhatsApp
+    NULL, 'N', @StatusWhatsApp,
+    @Interno
 )", conn);
 
                 AddCodEmp(cmdMidia);
@@ -1932,18 +2010,26 @@ VALUES
                 AddCodEmp(cmdMidia);
                 cmdMidia.Parameters.AddWithValue("@Usuario", usuario);
 
+                // Mídia interna não vai para o cliente (mesma regra do texto)
+                var deveEnviarMidia = deveEnviarWhatsApp && !mensagemInterna;
+
                 AddCodEmp(cmdMidia);
                 cmdMidia.Parameters.Add("@TelefoneWhatsApp", SqlDbType.VarChar, 30).Value =
-                    deveEnviarWhatsApp && !string.IsNullOrWhiteSpace(telefoneWhats)
+                    deveEnviarMidia && !string.IsNullOrWhiteSpace(telefoneWhats)
                         ? telefoneWhats : (object)DBNull.Value;
 
                 AddCodEmp(cmdMidia);
                 cmdMidia.Parameters.Add("@CodInstancia", SqlDbType.Int).Value =
-                    deveEnviarWhatsApp && codInstanciaWhats > 0
+                    deveEnviarMidia && codInstanciaWhats > 0
                         ? codInstanciaWhats : (object)DBNull.Value;
 
                 AddCodEmp(cmdMidia);
-                cmdMidia.Parameters.Add("@StatusWhatsApp", SqlDbType.VarChar, 50).Value = DBNull.Value;
+                cmdMidia.Parameters.Add("@StatusWhatsApp", SqlDbType.VarChar, 50).Value =
+                    mensagemInterna ? (object)"interno" : DBNull.Value;
+
+                AddCodEmp(cmdMidia);
+                cmdMidia.Parameters.Add("@Interno", SqlDbType.Char, 1).Value =
+                    mensagemInterna ? "S" : "N";
 
                 AddCodEmp(cmdMidia);
                 cmdMidia.Parameters.Add("@Imagem", SqlDbType.VarBinary, -1).Value = temImagem ? imagemBytes! : DBNull.Value;
@@ -2215,7 +2301,9 @@ VALUES
                         "@CodUsuario",
                         (object?)codUsuarioCliente ?? DBNull.Value);
 
-                    cmd.Parameters.AddWithValue("@Cliente", codCliente);
+                    // Sem cliente (ticket rápido por número ainda não vinculado): grava NULL, igual o webhook
+                    cmd.Parameters.Add("@Cliente", SqlDbType.Int).Value =
+                        codCliente > 0 ? codCliente : (object)DBNull.Value;
                     cmd.Parameters.AddWithValue("@Assunto", assunto);
                     cmd.Parameters.AddWithValue("@Situacao", codSituacao);
                     cmd.Parameters.AddWithValue("@CodTipo", codTipo);
@@ -3626,26 +3714,60 @@ ORDER BY D.DataHora ASC", conn);
             var termoLimpo = (termo ?? "").Trim();
             var termoSoDigitos = new string(termoLimpo.Where(char.IsDigit).ToArray());
 
-            var cmd = new SqlCommand(@"
+            // Remove formatação para comparar só dígitos (cobre "(73) 99990-2958", "+55 73 ...", etc.)
+            static string Limpa(string col) =>
+                $"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL({col},''),' ',''),'-',''),'(',''),')',''),'+',''),'.','')";
+
+            // Telefone completo (10+ dígitos): compara com TODAS as formas do número
+            // (com/sem 55, com/sem o 9) — igual o webhook do WhatsApp faz.
+            var variantes = termoSoDigitos.Length >= 10
+                ? TelefoneBR.GerarVariantes(termoSoDigitos)
+                : new List<string>();
+
+            string filtroTelefone;
+            if (variantes.Count > 0)
+            {
+                var pV = string.Join(",", variantes.Select((_, i) => "@V" + i));
+                filtroTelefone = $@"
+        OR {Limpa("C.Celular")}  IN ({pV})
+        OR {Limpa("C.Telefone")} IN ({pV})
+        -- celular salvo sem DDD (8 ou 9 dígitos): compara o final do número
+        OR (LEN({Limpa("C.Celular")})  BETWEEN 8 AND 9 AND RIGHT({Limpa("C.Celular")}, 8)  = @Fim8)
+        OR (LEN({Limpa("C.Telefone")}) BETWEEN 8 AND 9 AND RIGHT({Limpa("C.Telefone")}, 8) = @Fim8)
+        -- número já usado em ticket deste cliente (vínculo feito manualmente)
+        OR EXISTS (
+            SELECT 1 FROM TicketChamadoC T
+            WHERE T.CodEmp = C.CodEmp
+              AND T.CodCliente = C.Codigo
+              AND {Limpa("T.TelefoneWhatsApp")} IN ({pV})
+        )";
+            }
+            else
+            {
+                filtroTelefone = $@"
+        OR {Limpa("C.Celular")}  LIKE @BuscaDigitos
+        OR {Limpa("C.Telefone")} LIKE @BuscaDigitos
+        OR EXISTS (
+            SELECT 1 FROM TicketChamadoC T
+            WHERE T.CodEmp = C.CodEmp
+              AND T.CodCliente = C.Codigo
+              AND {Limpa("T.TelefoneWhatsApp")} LIKE @BuscaDigitos
+        )";
+            }
+
+            var cmd = new SqlCommand($@"
 SELECT TOP 15
     C.Codigo,
     ISNULL(NULLIF(LTRIM(RTRIM(C.Apelido)),''), ISNULL(C.Nome,'')) AS NomeExibicao
 FROM Cliente C
 WHERE C.CodEmp = @CodEmp
+  -- ignora cadastros cujo nome é só um número de telefone (criados por engano)
+  AND ISNULL(C.Nome,'') LIKE '%[^0-9 ()+.-]%'
   AND (
         C.Nome LIKE @Busca
         OR C.Apelido LIKE @Busca
         OR CAST(C.Codigo AS VARCHAR(20)) = @Termo
-        OR REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(C.Celular,''), '-', ''), '(', ''), ')', ''), ' ', '') LIKE @BuscaDigitos
-        OR REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(C.Telefone,''), '-', ''), '(', ''), ')', ''), ' ', '') LIKE @BuscaDigitos
-        OR EXISTS (
-            SELECT 1 FROM TicketChamadoC T
-            WHERE T.CodEmp = C.CodEmp
-              AND T.CodCliente = C.Codigo
-              AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
-                      ISNULL(T.TelefoneWhatsApp,''),
-                  '+',''),'-',''),'(',''),')',''),' ','') LIKE @BuscaDigitos
-        )
+        {filtroTelefone}
         OR EXISTS (
             SELECT 1 FROM TicketChamadoC T
             WHERE T.CodEmp = C.CodEmp
@@ -3663,6 +3785,9 @@ ORDER BY
             cmd.Parameters.AddWithValue("@Termo", termoLimpo);
             cmd.Parameters.AddWithValue("@BuscaDigitos",
                 string.IsNullOrWhiteSpace(termoSoDigitos) ? "%" + termoLimpo + "%" : "%" + termoSoDigitos + "%");
+            cmd.Parameters.AddWithValue("@Fim8", termoSoDigitos.Length >= 8 ? termoSoDigitos[^8..] : "");
+            for (int i = 0; i < variantes.Count; i++)
+                cmd.Parameters.AddWithValue("@V" + i, variantes[i]);
 
             var resultado = new List<ClienteModel>();
 
@@ -3690,7 +3815,10 @@ ORDER BY
             DataHoraUltimaGravacao = GETDATE(),
             UsuarioUltimaGravacao = @Usuario
         WHERE Codigo = @CodCliente
-          AND CodEmp = @CodEmp", conn);
+          AND CodEmp = @CodEmp
+          -- só preenche quando o cliente ainda não tem celular:
+          -- o número de um contato/funcionário não pode apagar o celular principal da empresa
+          AND ISNULL(LTRIM(RTRIM(Celular)), '') = ''", conn);
 
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@CodCliente", codCliente);
@@ -3728,5 +3856,40 @@ ORDER BY
         //    cmd.Parameters.AddWithValue("@CodTicket", codTicket);
         //    await cmd.ExecuteNonQueryAsync();
         //}
+
+        public async Task<Dictionary<int, List<string>>> ObterVisualizadoresTodosAsync()
+        {
+            var mapa = new Dictionary<int, List<string>>();
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+
+            using (var cmdLimpar = new SqlCommand(@"
+        UPDATE Usuario SET TicketVisualizando=NULL, DataHoraVisualizando=NULL
+        WHERE CodEmp = @CodEmp
+          AND TicketVisualizando IS NOT NULL
+          AND DataHoraVisualizando < DATEADD(SECOND,-45,GETDATE())", conn))
+            {
+                AddCodEmp(cmdLimpar);
+                await cmdLimpar.ExecuteNonQueryAsync();
+            }
+
+            using var cmd = new SqlCommand(@"
+        SELECT TicketVisualizando, LTRIM(RTRIM(Usuario))
+        FROM Usuario
+        WHERE CodEmp = @CodEmp
+          AND TicketVisualizando IS NOT NULL
+          AND ISNULL(Inativo,'N')='N'
+        ORDER BY Usuario", conn);
+            AddCodEmp(cmd);
+
+            using var rd = await cmd.ExecuteReaderAsync();
+            while (await rd.ReadAsync())
+            {
+                var cod = rd.GetInt32(0);
+                if (!mapa.TryGetValue(cod, out var l)) mapa[cod] = l = new List<string>();
+                l.Add(rd.IsDBNull(1) ? "" : rd.GetString(1));
+            }
+            return mapa;
+        }
     }
 }

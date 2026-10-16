@@ -41,7 +41,8 @@ namespace EvolutCRM.Services
             await conn.OpenAsync();
 
             await using var cmd = new SqlCommand(@"
-    SELECT TOP 1 Id, Tipo, Mensagem
+    SELECT TOP 1 Id, Tipo, Mensagem,
+           DATEDIFF(MILLISECOND, DataHora, GETDATE()) AS DecorridoMs
     FROM DeployNotificacao
     WHERE Lido = 0
       AND DataHora >= DATEADD(MINUTE, -10, GETDATE())
@@ -59,6 +60,7 @@ namespace EvolutCRM.Services
             var id = rd.GetInt32(0);
             var tipo = rd.GetString(1);
             var mensagem = rd.GetString(2);
+            var decorridoMs = rd.GetInt32(3); // tempo desde que o script gravou o aviso (calculado no SQL Server)
             rd.Close();
 
             await using var cmdUpdate = new SqlCommand(
@@ -66,7 +68,15 @@ namespace EvolutCRM.Services
             cmdUpdate.Parameters.AddWithValue("@Id", id);
             await cmdUpdate.ExecuteNonQueryAsync();
 
-            _state.Notificar(tipo, mensagem);
+            // Horario em que a contagem termina, descontando o atraso da consulta (timer de 15s)
+            DateTime? fimUtc = tipo switch
+            {
+                "aviso30seg" => DateTime.UtcNow.AddMilliseconds(30_000 - decorridoMs),
+                "aviso5min"  => DateTime.UtcNow.AddMilliseconds(300_000 - decorridoMs),
+                _ => null
+            };
+
+            _state.Notificar(tipo, mensagem, fimUtc);
         }
     }
 }

@@ -8,13 +8,14 @@ public class AbaService
 
     public event Action? OnMudanca;
 
-    private static readonly Dictionary<Type, (string Titulo, string Icone)> _meta = new();
+    private static readonly Dictionary<string, (string Titulo, string Icone, Type Tipo)> _meta = new();
     private static readonly Dictionary<string, Type> _rotaParaTipo = new();
 
     public static void RegistrarMeta(Type tipo, string titulo, string icone, string rota)
     {
-        _meta[tipo] = (titulo, icone);
-        _rotaParaTipo[Normalizar(rota)] = tipo;
+        rota = Normalizar(rota);
+        _meta[rota] = (titulo, icone, tipo);
+        _rotaParaTipo[rota] = tipo;
     }
 
     public void AbrirOuAtivarPorRota(string rotaRelativa)
@@ -36,10 +37,19 @@ public class AbaService
         {
             var prefixo2 = partes[0] + "/" + partes[1];
 
-            // Se segundo segmento é número, tenta como parâmetro do primeiro tipo com dois segmentos
+            // ex: "blog/editar/74" → prefixo2 = "blog/editar", partes[2] = "74"
+            if (_rotaParaTipo.TryGetValue(prefixo2, out tipo))
+            {
+                var parametros = new Dictionary<string, object?>();
+                if (partes.Length >= 3 && int.TryParse(partes[2], out var idValor))
+                    parametros["Id"] = (object?)idValor;
+                AbrirOuAtivar(tipo!, parametros, rotaRelativa);
+                return;
+            }
+
+            // segundo segmento é número: "ticket/5", "card/3"
             if (int.TryParse(partes[1], out var codigoValor))
             {
-                // busca qualquer tipo registrado com o mesmo primeiro segmento + "novo"
                 var rotaNovo = partes[0] + "/novo";
                 if (_rotaParaTipo.TryGetValue(rotaNovo, out tipo))
                 {
@@ -50,12 +60,6 @@ public class AbaService
                     AbrirOuAtivar(tipo!, parametros, rotaRelativa);
                     return;
                 }
-            }
-
-            if (_rotaParaTipo.TryGetValue(prefixo2, out tipo))
-            {
-                AbrirOuAtivar(tipo!, new Dictionary<string, object?>(), rotaRelativa);
-                return;
             }
         }
 
@@ -81,7 +85,7 @@ public class AbaService
         var existente = _abas.FirstOrDefault(a => a.Rota == rotaRelativa);
         if (existente is null)
         {
-            var (titulo, icone) = ResolverMeta(componenteTipo, parametros);
+            var (titulo, icone) = ResolverMeta(componenteTipo, parametros, rotaRelativa);
             _abas.Add(new AbaItem
             {
                 Rota = rotaRelativa,
@@ -121,15 +125,21 @@ public class AbaService
         return proxima;
     }
 
-    private (string, string) ResolverMeta(Type tipo, IDictionary<string, object?> parametros)
+    private (string, string) ResolverMeta(Type tipo, IDictionary<string, object?> parametros, string rotaRelativa)
     {
-        if (_meta.TryGetValue(tipo, out var m))
+        var chave = _meta.Keys
+            .Where(r => rotaRelativa.StartsWith(r))
+            .OrderByDescending(r => r.Length)
+            .FirstOrDefault();
+
+        if (chave != null && _meta.TryGetValue(chave, out var m))
         {
             var titulo = m.Titulo;
             if (parametros.Count > 0 && parametros.Values.First() is { } v)
                 titulo = $"{m.Titulo} #{v}";
             return (titulo, m.Icone);
         }
+
         return (Humanizar(tipo.Name), "fas fa-window-maximize");
     }
     public void Reordenar(string rotaOrigem, string rotaDestino)

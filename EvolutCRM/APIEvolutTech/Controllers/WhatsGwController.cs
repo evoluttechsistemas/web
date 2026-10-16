@@ -398,7 +398,21 @@ WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
               AND ISNULL(StatusWhatsApp,'') NOT IN ('read','deleted')", conn);
 
                 cmd.Parameters.AddWithValue("@Waid", dto.Waid ?? "");
-                int afetados = await cmd.ExecuteNonQueryAsync();                        // ← MUDOU: captura o retorno
+                int afetados = await cmd.ExecuteNonQueryAsync();
+
+                // Comercial: marca como lida também a mensagem do card
+                if (!string.IsNullOrWhiteSpace(dto.Waid))
+                {
+                    using var cmdCrm = new SqlCommand(@"
+            UPDATE CRMAnotacao
+            SET StatusWhatsApp = 'read',
+                DataHoraStatusWhatsApp = GETDATE()
+            WHERE WaidWhatsApp = @Waid
+              AND ISNULL(EnvioCliente, 'N') <> 'S'
+              AND ISNULL(StatusWhatsApp,'') NOT IN ('read','deleted','interno')", conn);
+                    cmdCrm.Parameters.AddWithValue("@Waid", dto.Waid);
+                    afetados += await cmdCrm.ExecuteNonQueryAsync();
+                }                        // ← MUDOU: captura o retorno
 
                 if (afetados > 0)                                                       // ← ADD
                     _monitor.Log(LogCategory.Tickets, LogSeverity.Info,                // ← ADD
@@ -507,7 +521,11 @@ WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
                 return codigoTicketExistente.Value;
             }
 
-            // ── Cliente: reconhece pelo número em TODAS as variantes (Celular OU Telefone) ──
+            // ── Cliente ──────────────────────────────────────────────────────────
+            //  1º) histórico de tickets deste número (vínculo feito manualmente num ticket anterior)
+            //  2º) cadastro de Clientes (Celular OU Telefone)
+            //  Antes só existia o 2º: quem chamava de um número que não está no cadastro do cliente
+            //  voltava sem cliente sempre que um ticket novo era criado (finalizado há mais de 24h).
             int codClienteEncontrado = 0;
             string nomeClienteEncontrado = "";
 
@@ -519,11 +537,41 @@ WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
 
             string limpaCelular = string.Format(LIMPA_FMT, "Celular");
             string limpaTelefone = string.Format(LIMPA_FMT, "Telefone");
+            string limpaTelTicket = string.Format(LIMPA_FMT, "T.TelefoneWhatsApp");
 
+            // 1º) Último ticket deste número que tenha cliente vinculado
+            using (var cmdHistorico = new SqlCommand($@"
+        SELECT TOP 1 T.CodCliente, ISNULL(C.Nome, '')
+        FROM TicketChamadoC T
+        LEFT JOIN Cliente C ON C.Codigo = T.CodCliente AND C.CodEmp = T.CodEmp
+        WHERE T.CodEmp = @CodEmp
+          AND ISNULL(T.CodCliente, 0) > 0
+          AND {limpaTelTicket} IN ({inCli})
+          -- ignora cadastros cujo nome é só um número de telefone (criados por engano)
+          AND C.Codigo IS NOT NULL
+          AND ISNULL(C.Nome, '') LIKE '%[^0-9 ()+.-]%' 
+        ORDER BY T.Codigo DESC", conn, transaction))
+            {
+                cmdHistorico.CommandTimeout = 10;
+                cmdHistorico.Parameters.AddWithValue("@CodEmp", codEmp);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmdHistorico.Parameters.AddWithValue(pCli[i], variantes[i]);
+
+                using var readerHist = await cmdHistorico.ExecuteReaderAsync();
+                if (await readerHist.ReadAsync())
+                {
+                    codClienteEncontrado = readerHist.GetInt32(0);
+                    nomeClienteEncontrado = readerHist.GetString(1);
+                }
+            }
+
+            // 2º) Não achou no histórico: procura no cadastro de Clientes
+            if (codClienteEncontrado <= 0)
             using (var cmdCliente = new SqlCommand($@"
         SELECT TOP 1 Codigo, ISNULL(Nome,'')
         FROM Cliente
         WHERE CodEmp = @CodEmp
+          AND ISNULL(Nome, '') LIKE '%[^0-9 ()+.-]%'
           AND (
                {limpaCelular}  IN ({inCli})
             OR {limpaTelefone} IN ({inCli})
@@ -829,6 +877,46 @@ WHERE CodEmp = @CodEmp
             cmd.Parameters.AddWithValue("@MessageIdWhatsApp", messageId ?? "");
 
             await cmd.ExecuteNonQueryAsync();
+
+            // ── COMERCIAL (CRMAnotacao): antes o status só era gravado nos tickets e o card
+            //    ficava sempre em "Enviado". Só avança (um 'delivered' atrasado não apaga 'read').
+            int codigoCustomComercial = 0;
+            if (!string.IsNullOrWhiteSpace(messageCustomId)
+                && messageCustomId.StartsWith("COMERCIAL_", StringComparison.OrdinalIgnoreCase))
+                int.TryParse(messageCustomId.Substring("COMERCIAL_".Length), out codigoCustomComercial);
+
+            const string RANK_NOVO = @"CASE LOWER(@StatusWhatsApp)
+        WHEN 'read' THEN 3 WHEN 'read_ack' THEN 3 WHEN 'played' THEN 3
+        WHEN 'delivered' THEN 2 WHEN 'delivery_ack' THEN 2 WHEN 'delivered2user' THEN 2
+        WHEN 'sent' THEN 1 ELSE 0 END";
+            const string RANK_ATUAL = @"CASE LOWER(ISNULL(StatusWhatsApp, ''))
+        WHEN 'read' THEN 3 WHEN 'read_ack' THEN 3 WHEN 'played' THEN 3
+        WHEN 'delivered' THEN 2 WHEN 'delivery_ack' THEN 2 WHEN 'delivered2user' THEN 2
+        WHEN 'sent' THEN 1 ELSE 0 END";
+
+            using var cmdCrm = new SqlCommand($@"
+UPDATE CRMAnotacao
+SET StatusWhatsApp = @StatusWhatsApp,
+    DataHoraStatusWhatsApp = GETDATE()
+WHERE CodEmp = @CodEmp
+  AND ISNULL(EnvioCliente, 'N') <> 'S'
+  AND ISNULL(StatusWhatsApp, '') NOT IN ('deleted', 'interno', 'transcrevendo', 'transcricao_erro')
+  AND (
+        (NULLIF(@MessageCustomIdWhatsApp, '') IS NOT NULL AND MessageCustomIdWhatsApp = @MessageCustomIdWhatsApp)
+     OR (@CodigoCustom > 0 AND Codigo = @CodigoCustom)
+     OR (NULLIF(@WaidWhatsApp, '')        IS NOT NULL AND WaidWhatsApp        = @WaidWhatsApp)
+     OR (NULLIF(@MessageIdWhatsApp, '')   IS NOT NULL AND MessageIdWhatsApp   = @MessageIdWhatsApp)
+  )
+  AND ({RANK_NOVO}) > ({RANK_ATUAL})", conn, transaction);
+
+            cmdCrm.Parameters.AddWithValue("@CodEmp", codEmp);
+            cmdCrm.Parameters.AddWithValue("@StatusWhatsApp", messageState ?? "");
+            cmdCrm.Parameters.AddWithValue("@WaidWhatsApp", waid ?? "");
+            cmdCrm.Parameters.AddWithValue("@MessageCustomIdWhatsApp", messageCustomId ?? "");
+            cmdCrm.Parameters.AddWithValue("@MessageIdWhatsApp", messageId ?? "");
+            cmdCrm.Parameters.AddWithValue("@CodigoCustom", codigoCustomComercial);
+
+            await cmdCrm.ExecuteNonQueryAsync();
         }
 
         // =========================================================
@@ -897,11 +985,17 @@ WHERE CodEmp = @CodEmp
 
             if (codCardExistente.HasValue)
             {
-                if (string.Equals(statusAtual, "FECHADO", StringComparison.OrdinalIgnoreCase))
+                // Card finalizado (CONCLUIDO/PERDIDO/FECHADO) que recebeu mensagem: reabre
+                // para voltar ao funil. Mantém o responsável (se não tiver, vai para NOVO).
+                var stFinalizado = (statusAtual ?? "").Trim().ToUpperInvariant();
+                if (stFinalizado is "FECHADO" or "CONCLUIDO" or "PERDIDO")
                 {
                     using var cmdReabre = new SqlCommand(@"
                 UPDATE CRMC
-                SET Status = 'ABERTO', UsuarioCard = 'NOVO', Novo = 'S',
+                SET Status = 'ABERTO',
+                    UsuarioCard = CASE WHEN ISNULL(LTRIM(RTRIM(UsuarioCard)), '') = '' THEN 'NOVO' ELSE UsuarioCard END,
+                    Novo = 'S',
+                    DataFinalizacao = NULL,
                     DataHoraUltimaGravacao = GETDATE(), UsuarioUltimaGravacao = 'WHATSAPP',
                     CodInstanciaWhatsApp = CASE
                         WHEN @CodInstancia > 0 THEN @CodInstancia
@@ -947,16 +1041,52 @@ WHERE CodEmp = @CodEmp
                     cmdFunil.Parameters.AddWithValue(pTel[i], variantes[i]);
 
                 var r = await cmdFunil.ExecuteScalarAsync();
-                if (r != null && r != DBNull.Value) funilParaUsar = r.ToString()!;
+                // Herda o funil do último card do número, MENOS etapas finais de negociação
+                // (Fechamento, Pendente Fechamento, Implantação): um lead antigo que volta a
+                // escrever recomeça em "Em Progresso" em vez de cair direto no fim do funil.
+                if (r != null && r != DBNull.Value)
+                {
+                    var funilAnterior = r.ToString()!.Trim().ToUpperInvariant();
+                    if (!string.IsNullOrWhiteSpace(funilAnterior) && funilAnterior is not ("FC" or "PF" or "IM"))
+                        funilParaUsar = funilAnterior;
+                }
             }
 
             // Cliente pelo número (todas as variantes)
             int codCliente = 0;
             string nomeCliente = contactName ?? "";
+            // 1º) Último card deste número que tenha cliente vinculado (mesma regra do ticket)
+            using (var cmdHistCli = new SqlCommand($@"
+        SELECT TOP 1 K.CodCliente, COALESCE(NULLIF(LTRIM(RTRIM(CL.Apelido)), ''), CL.Nome, '')
+        FROM CRMC K
+        INNER JOIN Cliente CL ON CL.Codigo = K.CodCliente AND CL.CodEmp = K.CodEmp
+        WHERE K.CodEmp = @CodEmp
+          AND ISNULL(K.CodCliente, 0) > 0
+          AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(K.TelefoneWhatsApp,''),'(',''),')',''),'-',''),' ',''),'+',''),'.','') IN ({inTel})
+          -- ignora cadastros cujo nome é só um número de telefone (criados por engano)
+          AND ISNULL(CL.Nome, '') LIKE '%[^0-9 ()+.-]%'
+        ORDER BY K.Codigo DESC", conn, transaction))
+            {
+                cmdHistCli.Parameters.AddWithValue("@CodEmp", codEmp);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmdHistCli.Parameters.AddWithValue(pTel[i], variantes[i]);
+
+                using var rdH = await cmdHistCli.ExecuteReaderAsync();
+                if (await rdH.ReadAsync())
+                {
+                    codCliente = rdH.GetInt32(0);
+                    var nomeHist = rdH.IsDBNull(1) ? "" : rdH.GetString(1);
+                    if (!string.IsNullOrWhiteSpace(nomeHist)) nomeCliente = nomeHist;
+                }
+            }
+
+            // 2º) Não achou no histórico: procura no cadastro de Clientes (sem cadastro-lixo)
+            if (codCliente <= 0)
             using (var cmdCliente = new SqlCommand($@"
         SELECT TOP 1 Codigo, ISNULL(Apelido, Nome)
         FROM Cliente
         WHERE CodEmp = @CodEmp
+          AND ISNULL(Nome, '') LIKE '%[^0-9 ()+.-]%'
           AND (
                {LIMPA_CEL} IN ({inTel})
             OR REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefone,''),'(',''),')',''),'-',''),' ',''),'+',''),'.','') IN ({inTel})
@@ -1057,6 +1187,35 @@ WHERE CodEmp = @CodEmp
             bool temAudio = audioBytes != null && audioBytes.Length > 0;
             bool temVideo = videoBytes != null && videoBytes.Length > 0;
 
+            // Vídeo não tem coluna própria no CRMAnotacao: vai na coluna Imagem com nome .mp4
+            // (o card mostra o player pelo nome do arquivo, igual à gravação de tela enviada pelo card).
+            bool videoNaImagem = false;
+            if (!temImagem && temVideo)
+            {
+                imagemBytes = videoBytes;
+                temImagem = true;
+                videoNaImagem = true;
+            }
+
+            string extArquivo = Path.GetExtension(fileName ?? "").ToLowerInvariant();
+            string nomeArquivoFinal =
+                videoNaImagem
+                    ? (extArquivo is ".mp4" or ".webm" or ".mov" or ".mkv" ? fileName! : "video-whatsapp.mp4")
+                    : !string.IsNullOrWhiteSpace(fileName)
+                        ? fileName!
+                        // Sem nome: só é documento se o tipo for application/*; senão é imagem (como antes)
+                        : (mimeType ?? "").ToLowerInvariant() switch
+                        {
+                            "application/pdf" => "documento.pdf",
+                            "application/msword" => "documento.doc",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => "documento.docx",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "planilha.xlsx",
+                            "application/vnd.ms-excel" => "planilha.xls",
+                            "application/zip" => "arquivo.zip",
+                            var m when m.StartsWith("application/") => "documento.pdf",
+                            _ => "imagem-whatsapp.jpg"
+                        };
+
             string envioCliente = (ehEnviadoPeloCelular ||
     string.Equals(contactName?.Trim(), "WhatsApp", StringComparison.OrdinalIgnoreCase))
     ? "N" : "S";
@@ -1093,8 +1252,8 @@ VALUES
 
             cmd.Parameters.AddWithValue("@CodEmp", codEmp);
             cmd.Parameters.AddWithValue("@CodCRMC", codCrmc);
-            cmd.Parameters.Add("@Anotacao", SqlDbType.VarChar, 500).Value =
-                (anotacao?.Length > 500 ? anotacao.Substring(0, 500) : anotacao) ?? "";
+            // NVarChar(max): mesmo tipo da coluna — não corta o texto nem perde emojis
+            cmd.Parameters.Add("@Anotacao", SqlDbType.NVarChar, -1).Value = anotacao ?? "";
             cmd.Parameters.AddWithValue("@DataHora", dataHora ?? DateTime.Now);
             cmd.Parameters.Add("@Usuario", SqlDbType.VarChar, 100).Value = usuario;
             cmd.Parameters.Add("@TelefoneWhatsApp", SqlDbType.VarChar, 30).Value = telefone;
@@ -1116,15 +1275,17 @@ VALUES
             cmd.Parameters.Add("@Imagem", SqlDbType.VarBinary, -1).Value =
                 temImagem ? (object)imagemBytes! : DBNull.Value;
             cmd.Parameters.Add("@NomeImagem", SqlDbType.VarChar, 255).Value =
-                temImagem ? (object)(fileName ?? "imagem-whatsapp.jpg") : DBNull.Value;
+                temImagem ? (object)nomeArquivoFinal : DBNull.Value;
 
             // Áudio
             cmd.Parameters.Add("@Audio", SqlDbType.VarBinary, -1).Value =
                 temAudio ? (object)audioBytes! : DBNull.Value;
+            // Usa o tipo real do áudio (arquivo .mp3/.m4a também chega); áudio de voz continua ogg/opus
+            bool mimeAudioValido = (mimeType ?? "").StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
             cmd.Parameters.Add("@AudioMimeType", SqlDbType.VarChar, 200).Value =
-                temAudio ? "audio/ogg; codecs=opus" : (object)DBNull.Value;
+                temAudio ? (mimeAudioValido ? mimeType! : "audio/ogg; codecs=opus") : (object)DBNull.Value;
             cmd.Parameters.Add("@AudioFileName", SqlDbType.VarChar, 255).Value =
-                temAudio ? "file.ogg" : (object)DBNull.Value;
+                temAudio ? (!string.IsNullOrWhiteSpace(fileName) ? fileName! : "file.ogg") : (object)DBNull.Value;
 
             await cmd.ExecuteNonQueryAsync();
         }
@@ -1204,20 +1365,46 @@ VALUES
             const string LIMPA_CEL =
                 "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Celular,''),'(',''),')',''),'-',''),' ',''),'+',''),'.','')";
 
-            using var cmd = new SqlCommand($@"
-        SELECT TOP 1 Codigo
+            // Prefere o card em andamento; se não houver, usa o card mais recente do número
+            // (mesmo CONCLUIDO/PERDIDO) só para registrar no histórico — antes a mensagem
+            // enviada pelo celular era descartada. Não reabre o card.
+            int codCard = 0;
+            bool finalizado = false;
+
+            using (var cmd = new SqlCommand($@"
+        SELECT TOP 1 Codigo,
+               CASE WHEN UPPER(ISNULL(Status,'')) IN ('FECHADO','CONCLUIDO','PERDIDO','CANCELADO') THEN 1 ELSE 0 END AS Finalizado
         FROM CRMC
         WHERE CodEmp = @CodEmp
           AND ({LIMPA_WA} IN ({inTel}) OR {LIMPA_CEL} IN ({inTel}))
-          AND UPPER(ISNULL(Status,'')) NOT IN ('FECHADO','CONCLUIDO','PERDIDO')
-        ORDER BY Codigo DESC", conn, transaction);
+        ORDER BY CASE WHEN UPPER(ISNULL(Status,'')) IN ('FECHADO','CONCLUIDO','PERDIDO','CANCELADO') THEN 1 ELSE 0 END,
+                 Codigo DESC", conn, transaction))
+            {
+                cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmd.Parameters.AddWithValue(pTel[i], variantes[i]);
 
-            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
-            for (int i = 0; i < variantes.Count; i++)
-                cmd.Parameters.AddWithValue(pTel[i], variantes[i]);
+                using var rd = await cmd.ExecuteReaderAsync();
+                if (await rd.ReadAsync())
+                {
+                    codCard = rd.GetInt32(0);
+                    finalizado = rd.GetInt32(1) == 1;
+                }
+            }
 
-            var r = await cmd.ExecuteScalarAsync();
-            return r == null || r == DBNull.Value ? 0 : Convert.ToInt32(r);
+            // Card finalizado: atualiza a data da última gravação para que, se o cliente
+            // responder em até 24h, a resposta caia (e reabra) neste mesmo card, com o histórico.
+            if (codCard > 0 && finalizado)
+            {
+                using var cmdToque = new SqlCommand(@"
+            UPDATE CRMC SET DataHoraUltimaGravacao = GETDATE()
+            WHERE Codigo = @Codigo AND CodEmp = @CodEmp", conn, transaction);
+                cmdToque.Parameters.AddWithValue("@Codigo", codCard);
+                cmdToque.Parameters.AddWithValue("@CodEmp", codEmp);
+                await cmdToque.ExecuteNonQueryAsync();
+            }
+
+            return codCard;
         }
 
         /// <summary>

@@ -715,6 +715,11 @@
         color: var(--a800);
     }
 
+    .fx-pf {
+        background: #ccfbf1;
+        color: #115e59;
+    }
+
     .fx-im {
         background: var(--p100);
         color: var(--p800);
@@ -1109,6 +1114,10 @@
                     @onclick='() => SelecionarFunil("NO")'>
                 Nutrição <span class="cm-tab-n">@CountPorFunil("NO")</span>
             </button>
+            <button type="button" class="cm-tab @(FunilSelecionado == "PF" ? "active" : "") @(TemNovoNoFunil("PF") ? "cm-tab-novo" : "")"
+                    @onclick='() => SelecionarFunil("PF")'>
+                Pendente Fechamento <span class="cm-tab-n">@CountPorFunil("PF")</span>
+            </button>
             <button type="button" class="cm-tab @(FunilSelecionado == "IM" ? "active" : "") @(TemNovoNoFunil("IM") ? "cm-tab-novo" : "")"
                     @onclick='() => SelecionarFunil("IM")'>
                 Implantação <span class="cm-tab-n">@CountPorFunil("IM")</span>
@@ -1501,6 +1510,7 @@
         "EP" => "Contato Feito",
         "FU" => "Qualificado",
         "NO" => "Nutrição",
+        "PF" => "Pendente Fechamento",
         "IM" => "Implantação",
         "CONCLUIDO" => "Concluído",
         "PERDIDO" => "Perdido",
@@ -1513,6 +1523,7 @@
         "EP" => "fx-ep",
         "FU" => "fx-fu",
         "NO" => "fx-no",
+        "PF" => "fx-pf",
         "IM" => "fx-im",
         "CONCLUIDO" => "fx-ok",
         "PERDIDO" => "fx-lost",
