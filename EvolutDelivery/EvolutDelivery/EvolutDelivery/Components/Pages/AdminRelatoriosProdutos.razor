@@ -1,0 +1,181 @@
+@page "/admin-relatorios-produtos"
+@rendermode InteractiveServer
+@layout AdminLayout
+
+<PageTitle>Relatório de Produtos - Admin</PageTitle>
+
+<style>
+    .produtos-ranking {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        margin-bottom: 24px;
+    }
+
+    .produto-item {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+        .produto-item:last-child {
+            border-bottom: none;
+        }
+
+    .ranking-numero {
+        font-size: 2rem;
+        font-weight: 900;
+        color: #e2e8f0;
+        width: 50px;
+        text-align: center;
+    }
+
+        .ranking-numero.top {
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+    .produto-img {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 12px;
+    }
+
+    .produto-info {
+        flex: 1;
+    }
+
+        .produto-info h4 {
+            margin: 0 0 4px 0;
+            font-size: 1.1rem;
+        }
+
+        .produto-info p {
+            margin: 0;
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+    .produto-stats {
+        text-align: right;
+    }
+
+        .produto-stats .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #16a34a;
+        }
+
+        .produto-stats .label {
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+</style>
+
+<h2>📊 Relatório de Produtos</h2>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin:24px 0;">
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">🍔 Total de Produtos</div>
+        <div style="font-size:2rem; font-weight:700;">142</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">⭐ Média de Avaliação</div>
+        <div style="font-size:2rem; font-weight:700;">4.7</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+        <div style="font-size:0.85rem; color:#64748b; margin-bottom:8px;">🔥 Mais Vendido</div>
+        <div style="font-size:1.2rem; font-weight:700;">Pizza 4 Queijos</div>
+    </div>
+</div>
+
+<div class="produtos-ranking">
+    <h3>🏆 Top 10 Produtos Mais Vendidos</h3>
+
+    <div class="produto-item">
+        <div class="ranking-numero top">1º</div>
+        <img src="/imagens/sem-imagem.png" class="produto-img" />
+        <div class="produto-info">
+            <h4>🍕 Pizza 4 Queijos Grande</h4>
+            <p>Categoria: Pizzas</p>
+        </div>
+        <div class="produto-stats">
+            <div class="value">342</div>
+            <div class="label">vendas</div>
+        </div>
+    </div>
+
+    <div class="produto-item">
+        <div class="ranking-numero top">2º</div>
+        <img src="/imagens/sem-imagem.png" class="produto-img" />
+        <div class="produto-info">
+            <h4>🍔 X-Bacon Especial</h4>
+            <p>Categoria: Lanches</p>
+        </div>
+        <div class="produto-stats">
+            <div class="value">289</div>
+            <div class="label">vendas</div>
+        </div>
+    </div>
+
+    <div class="produto-item">
+        <div class="ranking-numero top">3º</div>
+        <img src="/imagens/sem-imagem.png" class="produto-img" />
+        <div class="produto-info">
+            <h4>🥤 Refrigerante 2L</h4>
+            <p>Categoria: Bebidas</p>
+        </div>
+        <div class="produto-stats">
+            <div class="value">267</div>
+            <div class="label">vendas</div>
+        </div>
+    </div>
+
+    <div class="produto-item">
+        <div class="ranking-numero">4º</div>
+        <img src="/imagens/sem-imagem.png" class="produto-img" />
+        <div class="produto-info">
+            <h4>🍕 Pizza Calabresa</h4>
+            <p>Categoria: Pizzas</p>
+        </div>
+        <div class="produto-stats">
+            <div class="value">234</div>
+            <div class="label">vendas</div>
+        </div>
+    </div>
+
+    <div class="produto-item">
+        <div class="ranking-numero">5º</div>
+        <img src="/imagens/sem-imagem.png" class="produto-img" />
+        <div class="produto-info">
+            <h4>🍟 Batata Frita Grande</h4>
+            <p>Categoria: Porções</p>
+        </div>
+        <div class="produto-stats">
+            <div class="value">198</div>
+            <div class="label">vendas</div>
+        </div>
+    </div>
+
+</div>
+
+<div class="produtos-ranking">
+    <h3>📉 Produtos com Baixa Saída</h3>
+    <div style="padding:20px; text-align:center; color:#64748b;">
+        <p>Produtos que tiveram menos de 10 vendas no último mês:</p>
+        <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+            <span style="background:#fee2e2; color:#991b1b; padding:8px 16px; border-radius:20px; font-weight:600;">🍰 Brownie (7 vendas)</span>
+            <span style="background:#fee2e2; color:#991b1b; padding:8px 16px; border-radius:20px; font-weight:600;">🥗 Salada (5 vendas)</span>
+            <span style="background:#fee2e2; color:#991b1b; padding:8px 16px; border-radius:20px; font-weight:600;">🍺 Cerveja Premium (8 vendas)</span>
+        </div>
+    </div>
+</div>
+
+@code {
+    // Dados serão carregados do banco
+}

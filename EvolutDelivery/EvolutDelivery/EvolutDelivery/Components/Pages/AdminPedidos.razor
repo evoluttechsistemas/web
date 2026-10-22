@@ -1,0 +1,498 @@
+@page "/admin-pedidos"
+@rendermode InteractiveServer
+@layout AdminLayout
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject PedidoService PedidoService
+@inject EntregadorService EntregadorService
+@inject IJSRuntime JS
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Admin - Pedidos</PageTitle>
+
+<style>
+    :root {
+        --primary: #2563eb;
+        --success: #16a34a;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --bg: #f8fafc;
+    }
+
+    .admin-page {
+        padding: 20px;
+        background: var(--bg);
+        min-height: 100vh;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+        .admin-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        text-align: center;
+    }
+
+        .stat-card .numero {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-card .label {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .stat-card.pendentes .numero {
+            color: var(--warning);
+        }
+
+        .stat-card.preparando .numero {
+            color: var(--primary);
+        }
+
+        .stat-card.entrega .numero {
+            color: #7c3aed;
+        }
+
+        .stat-card.entregues .numero {
+            color: var(--success);
+        }
+
+    .filtros {
+        background: white;
+        padding: 16px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+        .filtros select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+    .pedidos-grid {
+        display: grid;
+        gap: 16px;
+    }
+
+    .pedido-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 4px solid var(--primary);
+    }
+
+        .pedido-card.status-PENDENTE {
+            border-left-color: var(--warning);
+        }
+
+        .pedido-card.status-PREPARANDO {
+            border-left-color: var(--primary);
+        }
+
+        .pedido-card.status-SAIU_ENTREGA {
+            border-left-color: #7c3aed;
+        }
+
+        .pedido-card.status-ENTREGUE {
+            border-left-color: var(--success);
+        }
+
+    .pedido-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+        .pedido-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        color: white;
+    }
+
+        .status-badge.PENDENTE {
+            background: var(--warning);
+        }
+
+        .status-badge.CONFIRMADO {
+            background: var(--primary);
+        }
+
+        .status-badge.PREPARANDO {
+            background: #7c3aed;
+        }
+
+        .status-badge.SAIU_ENTREGA {
+            background: #8b5cf6;
+        }
+
+        .status-badge.ENTREGUE {
+            background: var(--success);
+        }
+
+    .pedido-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+        margin: 12px 0;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+    }
+
+        .pedido-info .info-item {
+            font-size: 0.9rem;
+        }
+
+            .pedido-info .info-item strong {
+                display: block;
+                color: #64748b;
+                font-size: 0.75rem;
+                margin-bottom: 4px;
+            }
+
+    .pedido-acoes {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn.confirmar {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn.preparar {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn.despachar {
+            background: #7c3aed;
+            color: white;
+        }
+
+        .btn.entregue {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn.cancelar {
+            background: var(--danger);
+            color: white;
+        }
+</style>
+
+<div class="admin-page">
+
+    @* <p><strong>CodEmp logado:</strong> @codEmp</p>
+    <p><strong>Total de pedidos carregados:</strong> @pedidos.Count</p>
+    <p><strong>Debug:</strong> @debugMsg</p> *@
+
+    <div class="admin-header">
+        <h1>Painel de Pedidos</h1>
+        <button class="btn" @onclick="AtualizarPedidos">Atualizar</button>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card pendentes">
+            <div class="label">Pendentes</div>
+            <div class="numero">@estatisticas.GetValueOrDefault("Pendentes", 0)</div>
+        </div>
+
+        <div class="stat-card preparando">
+            <div class="label">Em Preparo</div>
+            <div class="numero">@estatisticas.GetValueOrDefault("Preparando", 0)</div>
+        </div>
+
+        <div class="stat-card entrega">
+            <div class="label">Em Entrega</div>
+            <div class="numero">@estatisticas.GetValueOrDefault("EmEntrega", 0)</div>
+        </div>
+
+        <div class="stat-card entregues">
+            <div class="label">Entregues Hoje</div>
+            <div class="numero">@estatisticas.GetValueOrDefault("Entregues", 0)</div>
+        </div>
+    </div>
+
+    <div class="filtros">
+        <select @bind="filtroStatus" @bind:after="AtualizarPedidos">
+            <option value="">Todos os Status</option>
+            <option value="PENDENTE">Pendentes</option>
+            <option value="CONFIRMADO">Confirmados</option>
+            <option value="PREPARANDO">Preparando</option>
+            <option value="SAIU_ENTREGA">Em Entrega</option>
+            <option value="ENTREGUE">Entregues</option>
+            <option value="CANCELADO">Cancelados</option>
+        </select>
+    </div>
+
+    <div class="pedidos-grid">
+        @foreach (var pedido in pedidos)
+        {
+            <div class="pedido-card status-@pedido.Status">
+                <div class="pedido-header">
+                    <h3>#@pedido.Codigo - @pedido.NomeCliente</h3>
+                    <span class="status-badge @pedido.Status">@pedido.StatusFormatado</span>
+                </div>
+
+                <div class="pedido-info">
+                    <div class="info-item">
+                        <strong>Data/Hora</strong>
+                        @pedido.DataPedido.ToString("dd/MM/yyyy HH:mm")
+                    </div>
+
+                    <div class="info-item">
+                        <strong>Telefone</strong>
+                        @pedido.TelefoneCliente
+                    </div>
+
+                    <div class="info-item">
+                        <strong>Valor Total</strong>
+                        R$ @pedido.ValorTotal.ToString("F2")
+                    </div>
+
+                    <div class="info-item">
+                        <strong>Pagamento</strong>
+                        @pedido.FormaPagamento
+                    </div>
+
+                    @if (pedido.TipoEntrega == "ENTREGA")
+                    {
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <strong>Endereço</strong>
+                            @pedido.EnderecoCompleto
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="info-item">
+                            <strong>Retirada</strong>
+                            Cliente retira no local
+                        </div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(pedido.Observacao))
+                    {
+                        <div class="info-item" style="grid-column: 1 / -1;">
+                            <strong>Observações</strong>
+                            @pedido.Observacao
+                        </div>
+                    }
+                </div>
+
+                <div class="pedido-acoes">
+                    @if (pedido.Status == "PENDENTE")
+                    {
+                        <button class="btn confirmar" @onclick="() => ConfirmarPedido(pedido.Codigo)">
+                            Confirmar
+                        </button>
+                    }
+
+                    @if (pedido.Status == "CONFIRMADO")
+                    {
+                        <button class="btn preparar" @onclick="() => IniciarPreparo(pedido.Codigo)">
+                            Iniciar Preparo
+                        </button>
+                    }
+
+                    @if (pedido.Status == "PREPARANDO" && pedido.TipoEntrega == "ENTREGA")
+                    {
+                        <button class="btn despachar" @onclick="() => AbrirModalEntregador(pedido.Codigo)">
+                            Despachar
+                        </button>
+                    }
+
+                    @if (pedido.Status == "SAIU_ENTREGA" || (pedido.Status == "PREPARANDO" && pedido.TipoEntrega == "RETIRADA"))
+                    {
+                        <button class="btn entregue" @onclick="() => MarcarComoEntregue(pedido.Codigo)">
+                            Marcar Entregue
+                        </button>
+                    }
+
+                    @if (pedido.PodeCancelar)
+                    {
+                        <button class="btn cancelar" @onclick="() => CancelarPedido(pedido.Codigo)">
+                            Cancelar
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (!pedidos.Any())
+    {
+        <div style="text-align:center; padding:40px; color:#64748b;">
+            Nenhum pedido encontrado com os filtros selecionados.
+        </div>
+    }
+
+</div>
+
+@code {
+    private List<Pedido> pedidos = new();
+    private Dictionary<string, int> estatisticas = new();
+    private List<Entregador> entregadores = new();
+    private string filtroStatus = "";
+    private int codEmp;
+    private string debugMsg = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!(user.Identity?.IsAuthenticated ?? false))
+        {
+            debugMsg = "Usuário não autenticado.";
+            return;
+        }
+
+        var codEmpClaim = user.FindFirst("CodEmp")?.Value;
+
+        if (!int.TryParse(codEmpClaim, out codEmp) || codEmp <= 0)
+        {
+            debugMsg = $"Claim CodEmp inválido: {codEmpClaim}";
+            return;
+        }
+
+        await AtualizarPedidos();
+
+        try
+        {
+            entregadores = await EntregadorService.BuscarDisponiveisAsync(codEmp);
+        }
+        catch (Exception ex)
+        {
+            debugMsg += $" | Erro entregadores: {ex.Message}";
+        }
+    }
+
+    private async Task AtualizarPedidos()
+    {
+        try
+        {
+            var resultado = await PedidoService.ListarPedidosAsync(codEmp);
+            var resultadoHoje = await PedidoService.ListarPedidosAsync(codEmp, dataInicio: DateTime.Today);
+            var stats = await PedidoService.ObterEstatisticasAsync(codEmp);
+
+            pedidos = resultado;
+            estatisticas = stats;
+
+            debugMsg = $"codEmp={codEmp} | total={resultado.Count} | hoje={resultadoHoje.Count}";
+        }
+        catch (Exception ex)
+        {
+            debugMsg = $"Erro ao carregar pedidos: {ex.Message}";
+            pedidos = new();
+            estatisticas = new();
+        }
+    }
+
+    private async Task ConfirmarPedido(int codigo)
+    {
+        if (await JS.InvokeAsync<bool>("confirm", "Confirmar este pedido?"))
+        {
+            await PedidoService.AtualizarStatusAsync(codigo, "CONFIRMADO");
+            await AtualizarPedidos();
+        }
+    }
+
+    private async Task IniciarPreparo(int codigo)
+    {
+        await PedidoService.AtualizarStatusAsync(codigo, "PREPARANDO");
+        await AtualizarPedidos();
+    }
+
+    private async Task AbrirModalEntregador(int codigo)
+    {
+        var entregador = entregadores.FirstOrDefault();
+        if (entregador != null)
+        {
+            await PedidoService.AtualizarStatusAsync(codigo, "SAIU_ENTREGA", entregador.Codigo);
+            await EntregadorService.AtualizarStatusAsync(entregador.Codigo, "EM_ENTREGA");
+            await AtualizarPedidos();
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("alert", "Nenhum entregador disponível no momento!");
+        }
+    }
+
+    private async Task MarcarComoEntregue(int codigo)
+    {
+        var pedido = await PedidoService.BuscarPorIdAsync(codigo);
+        if (pedido?.CodEntregador.HasValue == true)
+        {
+            await EntregadorService.RegistrarEntregaConcluidaAsync(pedido.CodEntregador.Value);
+        }
+
+        await PedidoService.AtualizarStatusAsync(codigo, "ENTREGUE");
+        await AtualizarPedidos();
+    }
+
+    private async Task CancelarPedido(int codigo)
+    {
+        var motivo = await JS.InvokeAsync<string>("prompt", "Motivo do cancelamento:");
+        if (!string.IsNullOrWhiteSpace(motivo))
+        {
+            await PedidoService.CancelarPedidoAsync(codigo, motivo);
+            await AtualizarPedidos();
+        }
+    }
+}

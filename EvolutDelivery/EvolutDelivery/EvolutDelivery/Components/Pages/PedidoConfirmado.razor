@@ -1,0 +1,237 @@
+@page "/delivery/{slug}/pedido-confirmado/{CodPedido:int}"
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject PedidoService PedidoService
+@inject NavigationManager Nav
+
+<PageTitle>Pedido Confirmado!</PageTitle>
+
+<style>
+    .sucesso-page {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        text-align: center;
+    }
+
+    .icone-sucesso {
+        font-size: 5rem;
+        margin-bottom: 20px;
+        animation: bounce 1s ease-in-out;
+    }
+
+    @@keyframes bounce {
+        0%, 100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-20px);
+        }
+    }
+
+    .sucesso-card {
+        background: white;
+        padding: 30px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+
+        .sucesso-card h1 {
+            color: #16a34a;
+            margin-bottom: 10px;
+        }
+
+        .sucesso-card p {
+            color: #64748b;
+            font-size: 1.1rem;
+        }
+
+    .pedido-numero {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2563eb;
+        margin: 20px 0;
+    }
+
+    .informacoes {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 12px;
+        margin: 20px 0;
+        text-align: left;
+    }
+
+        .informacoes h3 {
+            margin-top: 0;
+            color: #2563eb;
+        }
+
+        .informacoes .linha {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+            .informacoes .linha:last-child {
+                border-bottom: none;
+            }
+
+    .btn-container {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    .btn {
+        flex: 1;
+        padding: 14px;
+        border: none;
+        border-radius: 10px;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: transform 0.2s;
+    }
+
+        .btn:hover {
+            transform: scale(1.03);
+        }
+
+    .btn-primary {
+        background: #2563eb;
+        color: white;
+    }
+
+    .btn-secondary {
+        background: #f1f5f9;
+        color: #334155;
+    }
+</style>
+
+<div class="sucesso-page">
+
+    <div class="icone-sucesso">
+        ✅
+    </div>
+
+    <div class="sucesso-card">
+        <h1>Pedido Confirmado!</h1>
+        <p>Seu pedido foi recebido com sucesso</p>
+
+        <div class="pedido-numero">
+            #@CodPedido
+        </div>
+
+        @if (pedido != null)
+        {
+            <div class="informacoes">
+                <h3>📋 Detalhes do Pedido</h3>
+
+                <div class="linha">
+                    <strong>📅 Data:</strong>
+                    <span>@pedido.DataPedido.ToString("dd/MM/yyyy HH:mm")</span>
+                </div>
+
+                <div class="linha">
+                    <strong>👤 Cliente:</strong>
+                    <span>@pedido.NomeCliente</span>
+                </div>
+
+                <div class="linha">
+                    <strong>📞 Telefone:</strong>
+                    <span>@pedido.TelefoneCliente</span>
+                </div>
+
+                @if (pedido.TipoEntrega == "ENTREGA")
+                {
+                    <div class="linha">
+                        <strong>🚚 Tipo:</strong>
+                        <span>Entrega</span>
+                    </div>
+
+                    <div class="linha">
+                        <strong>📍 Endereço:</strong>
+                        <span>@pedido.EnderecoCompleto</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="linha">
+                        <strong>🏪 Tipo:</strong>
+                        <span>Retirada no Local</span>
+                    </div>
+                }
+
+                <div class="linha">
+                    <strong>💳 Pagamento:</strong>
+                    <span>@pedido.FormaPagamento</span>
+                </div>
+
+                <div class="linha" style="font-size:1.2rem; font-weight:bold; color:#16a34a;">
+                    <strong>💰 Total:</strong>
+                    <span>R$ @pedido.ValorTotal.ToString("F2")</span>
+                </div>
+            </div>
+
+            <div style="background:#eff6ff; padding:16px; border-radius:8px; margin:20px 0;">
+                <p style="margin:0; color:#1e40af;">
+                    <strong>⏱️ Tempo estimado:</strong>
+                    @if (pedido.TipoEntrega == "ENTREGA")
+                    {
+                        <text>40-60 minutos</text>
+                    }
+                    else
+                    {
+                        <text>20-30 minutos</text>
+                    }
+                </p>
+            </div>
+        }
+
+        <div class="btn-container">
+            <button class="btn btn-primary" @onclick="RastrearPedido">
+                📍 Acompanhar Pedido
+            </button>
+
+            <button class="btn btn-secondary" @onclick="VoltarInicio">
+                🏠 Voltar ao Início
+            </button>
+        </div>
+
+    </div>
+
+</div>
+
+@code {
+    [Parameter]
+    public string? slug { get; set; }
+
+    [Parameter]
+    public int CodPedido { get; set; }
+
+    private Pedido? pedido;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pedido = await PedidoService.BuscarPorIdAsync(CodPedido);
+    }
+
+    private void RastrearPedido()
+    {
+        if (pedido != null && !string.IsNullOrWhiteSpace(slug))
+        {
+            string telefoneUrl = Uri.EscapeDataString(pedido.TelefoneCliente ?? "");
+            Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}/meus-pedidos/{telefoneUrl}");
+        }
+    }
+
+    private void VoltarInicio()
+    {
+        if (string.IsNullOrWhiteSpace(slug))
+            return;
+
+        Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}");
+    }
+}

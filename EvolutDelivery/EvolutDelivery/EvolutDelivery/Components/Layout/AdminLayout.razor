@@ -1,0 +1,387 @@
+@inherits LayoutComponentBase
+@using Microsoft.AspNetCore.Components.Routing
+@implements IDisposable
+
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    :root {
+        --primary: #2563eb;
+        --primary-dark: #1e40af;
+        --success: #16a34a;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --sidebar-width: 280px;
+        --header-height: 70px;
+    }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background: #f8fafc;
+    }
+
+    /* ===== SIDEBAR ===== */
+    .admin-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: var(--sidebar-width);
+        height: 100vh;
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        color: white;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+    }
+
+    .sidebar-header {
+        padding: 24px 20px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        background: rgba(0,0,0,0.2);
+    }
+
+        .sidebar-header h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-header p {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+
+    /* ===== MENU ===== */
+    .menu-section {
+        padding: 20px 0;
+    }
+
+    .menu-title {
+        padding: 8px 20px;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: #64748b;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 20px;
+        color: #cbd5e1;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        border-left: 3px solid transparent;
+        font-weight: 500;
+    }
+
+        .menu-item:hover {
+            background: rgba(255,255,255,0.05);
+            color: white;
+            border-left-color: var(--primary);
+        }
+
+        .menu-item.active {
+            background: rgba(37,99,235,0.15);
+            color: white;
+            border-left-color: var(--primary);
+            font-weight: 600;
+        }
+
+        .menu-item .icon {
+            font-size: 1.3rem;
+            width: 24px;
+            text-align: center;
+        }
+
+        .menu-item .badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+    /* ===== MAIN CONTENT ===== */
+    .admin-main {
+        margin-left: var(--sidebar-width);
+        min-height: 100vh;
+        background: #f8fafc;
+    }
+
+    .admin-header {
+        height: var(--header-height);
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 30px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+        .admin-header h1 {
+            font-size: 1.6rem;
+            color: #0f172a;
+            font-weight: 700;
+        }
+
+    .header-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .btn-header {
+        padding: 10px 18px;
+        border-radius: 8px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn-site {
+        background: var(--primary);
+        color: white;
+    }
+
+        .btn-site:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+    .btn-logout {
+        background: #f1f5f9;
+        color: #475569;
+    }
+
+        .btn-logout:hover {
+            background: #e2e8f0;
+        }
+
+    .admin-content {
+        padding: 30px;
+    }
+
+    /* ===== SCROLL ===== */
+    .admin-sidebar::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .admin-sidebar::-webkit-scrollbar-track {
+        background: rgba(255,255,255,0.05);
+    }
+
+    .admin-sidebar::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.2);
+        border-radius: 3px;
+    }
+
+        .admin-sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+    /* ===== RESPONSIVE ===== */
+    @@media (max-width: 768px) {
+        .admin-sidebar {
+            transform: translateX(-100%);
+            transition: transform 0.3s;
+        }
+
+            .admin-sidebar.open {
+                transform: translateX(0);
+            }
+
+        .admin-main {
+            margin-left: 0;
+        }
+    }
+</style>
+
+<div class="admin-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="admin-sidebar">
+
+        <div class="sidebar-header">
+            <h2>🎯 EvolutDelivery</h2>
+            <p>Painel Administrativo</p>
+        </div>
+
+        <!-- MENU PRINCIPAL -->
+        <div class="menu-section">
+            <div class="menu-title">📊 Dashboard</div>
+            
+            <NavLink href="/admin-pedidos" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">📦</span>
+                <span>Pedidos</span>
+                <span class="badge">5</span>
+            </NavLink>
+
+            <NavLink href="/admin-dashboard" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">📈</span>
+                <span>Dashboard</span>
+            </NavLink>
+        </div>
+
+        <!-- GESTÃO -->
+        <div class="menu-section">
+            <div class="menu-title">⚙️ Gestão</div>
+
+            <NavLink href="/admin-produtos" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">🍔</span>
+                <span>Produtos</span>
+            </NavLink>
+
+            <NavLink href="/admin-categorias" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">📂</span>
+                <span>Categorias</span>
+            </NavLink>
+
+            <NavLink href="/admin-entregadores" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">🚚</span>
+                <span>Entregadores</span>
+            </NavLink>
+
+            <NavLink href="/admin-clientes" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">👥</span>
+                <span>Clientes</span>
+            </NavLink>
+        </div>
+
+        <!-- MARKETING -->
+        <div class="menu-section">
+            <div class="menu-title">🎁 Marketing</div>
+
+            <NavLink href="/admin-promocoes" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">🏷️</span>
+                <span>Promoções</span>
+            </NavLink>
+
+            <NavLink href="/admin-cupons" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">🎫</span>
+                <span>Cupons</span>
+            </NavLink>
+        </div>
+
+        <!-- RELATÓRIOS -->
+        <div class="menu-section">
+            <div class="menu-title">📊 Relatórios</div>
+
+            <NavLink href="/admin-relatorios-vendas" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">💰</span>
+                <span>Vendas</span>
+            </NavLink>
+
+            <NavLink href="/admin-relatorios-produtos" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">📊</span>
+                <span>Produtos</span>
+            </NavLink>
+
+            <NavLink href="/admin-avaliacoes" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">⭐</span>
+                <span>Avaliações</span>
+            </NavLink>
+        </div>
+
+        <!-- CONFIGURAÇÕES -->
+        <div class="menu-section">
+            <div class="menu-title">🔧 Sistema</div>
+
+            <NavLink href="/admin-configuracoes" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">⚙️</span>
+                <span>Configurações</span>
+            </NavLink>
+
+            <NavLink href="/admin-usuarios" class="menu-item" Match="NavLinkMatch.All">
+                <span class="icon">👤</span>
+                <span>Usuários</span>
+            </NavLink>
+        </div>
+
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="admin-main">
+
+        <header class="admin-header">
+            <h1>@CurrentPageTitle</h1>
+
+            <div class="header-actions">
+                <button class="btn-header btn-site" @onclick='() => Nav.NavigateTo("/")'>
+                    🏠 Ver Site
+                </button>
+                <button class="btn-header btn-logout">
+                    🚪 Sair
+                </button>
+            </div>
+        </header>
+
+        <div class="admin-content">
+            @Body
+        </div>
+
+    </main>
+
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private string CurrentPageTitle { get; set; } = "Painel Administrativo";
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        UpdateTitle();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        UpdateTitle();
+        StateHasChanged();
+    }
+
+    private void UpdateTitle()
+    {
+        CurrentPageTitle = Nav.Uri.Contains("/admin-pedidos") ? "Gestão de Pedidos" :
+                          Nav.Uri.Contains("/admin-dashboard") ? "Dashboard" :
+                          Nav.Uri.Contains("/admin-produtos") ? "Produtos" :
+                          Nav.Uri.Contains("/admin-categorias") ? "Categorias" :
+                          Nav.Uri.Contains("/admin-entregadores") ? "Entregadores" :
+                          Nav.Uri.Contains("/admin-clientes") ? "Clientes" :
+                          Nav.Uri.Contains("/admin-promocoes") ? "Promoções" :
+                          Nav.Uri.Contains("/admin-cupons") ? "Cupons" :
+                          Nav.Uri.Contains("/admin-relatorios") ? "Relatórios" :
+                          Nav.Uri.Contains("/admin-configuracoes") ? "Configurações" :
+                          Nav.Uri.Contains("/admin-usuarios") ? "Usuários" :
+                          "Painel Administrativo";
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

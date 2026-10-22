@@ -1,0 +1,147 @@
+@page "/admin-clientes"
+@rendermode InteractiveServer
+@layout AdminLayout
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject ClienteService ClienteService
+@inject IJSRuntime JS
+
+<PageTitle>Clientes - Admin</PageTitle>
+
+<style>
+    .clientes-table {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        margin-top: 24px;
+    }
+
+        .clientes-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .clientes-table th {
+            background: #f8fafc;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            color: #64748b;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .clientes-table td {
+            padding: 16px;
+            border-top: 1px solid #f1f5f9;
+        }
+</style>
+
+<div style="display:flex; justify-content:space-between; margin-bottom:24px;">
+    <h2>👥 Gestão de Clientes</h2>
+    <input type="text" placeholder="🔍 Buscar cliente..." @bind="filtro" @bind:after="Filtrar"
+           style="padding:10px; border:1px solid #e2e8f0; border-radius:8px; width:300px;" />
+</div>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:16px; margin-bottom:24px;">
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:2rem; font-weight:900; color:#2563eb;">@totalClientes</div>
+        <div style="font-size:0.85rem; color:#64748b;">Total de Clientes</div>
+    </div>
+
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:2rem; font-weight:900; color:#16a34a;">@clientesComPedido</div>
+        <div style="font-size:0.85rem; color:#64748b;">Clientes com Pedidos</div>
+    </div>
+
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:2rem; font-weight:900; color:#f59e0b;">@clientesComEmail</div>
+        <div style="font-size:0.85rem; color:#64748b;">Clientes com E-mail</div>
+    </div>
+</div>
+
+@if (!clientes.Any())
+{
+    <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
+        📦 Nenhum cliente cadastrado ainda.
+    </div>
+}
+else
+{
+    <div class="clientes-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Telefone</th>
+                    <th>Email</th>
+                    <th>Total Pedidos</th>
+                    <th>Total Gasto</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var cliente in clientesFiltrados)
+                {
+                    <tr>
+                        <td><strong>@cliente.Nome</strong></td>
+                        <td>@cliente.Telefone</td>
+                        <td>@(string.IsNullOrWhiteSpace(cliente.Email) ? "-" : cliente.Email)</td>
+                        <td>@cliente.TotalPedidos</td>
+                        <td style="color:#16a34a; font-weight:700;">R$ @cliente.TotalGasto.ToString("F2")</td>
+                        <td>
+                            <button style="background:#2563eb; color:white; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:600;"
+                                    @onclick='() => VerDetalhes(cliente.Codigo)'>
+                                👁️ Ver
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Cliente> clientes = new();
+    private List<Cliente> clientesFiltrados = new();
+    private string filtro = "";
+
+    private int totalClientes => clientes.Count;
+    private int clientesComPedido => clientes.Count(c => c.TotalPedidos > 0);
+    private int clientesComEmail => clientes.Count(c => !string.IsNullOrWhiteSpace(c.Email));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            clientes = new List<Cliente>
+            {
+                new() { Codigo = 1, Nome = "João Silva", Telefone = "(17) 99999-0001", Email = "joao@email.com", TotalPedidos = 15, TotalGasto = 450.00m, CodEmp = 1 },
+                new() { Codigo = 2, Nome = "Maria Santos", Telefone = "(17) 99999-0002", Email = "maria@email.com", TotalPedidos = 8, TotalGasto = 320.00m, CodEmp = 1 },
+                new() { Codigo = 3, Nome = "Pedro Oliveira", Telefone = "(17) 99999-0003", Email = "", TotalPedidos = 1, TotalGasto = 45.00m, CodEmp = 1 },
+            };
+
+            clientesFiltrados = clientes;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Erro: {ex.Message}");
+        }
+    }
+
+    private void Filtrar()
+    {
+        clientesFiltrados = clientes
+            .Where(c => string.IsNullOrEmpty(filtro)
+                     || c.Nome.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                     || c.Telefone.Contains(filtro, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private async Task VerDetalhes(int codigo)
+    {
+        await JS.InvokeVoidAsync("alert", $"Ver detalhes do cliente #{codigo} - Em desenvolvimento!");
+    }
+}

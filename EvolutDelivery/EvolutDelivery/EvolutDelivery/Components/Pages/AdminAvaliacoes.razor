@@ -1,0 +1,165 @@
+@page "/admin-avaliacoes"
+@rendermode InteractiveServer
+@layout AdminLayout
+
+<PageTitle>Avaliações - Admin</PageTitle>
+
+<style>
+    .avaliacoes-list {
+        display: grid;
+        gap: 16px;
+        margin-top: 24px;
+    }
+
+    .avaliacao-card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .avaliacao-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 12px;
+    }
+
+    .cliente-info h4 {
+        margin: 0 0 4px 0;
+        font-size: 1.1rem;
+    }
+
+    .cliente-info p {
+        margin: 0;
+        color: #64748b;
+        font-size: 0.85rem;
+    }
+
+    .estrelas {
+        font-size: 1.5rem;
+        color: #fbbf24;
+    }
+
+    .comentario {
+        margin: 12px 0;
+        padding: 16px;
+        background: #f8fafc;
+        border-radius: 8px;
+        color: #0f172a;
+        line-height: 1.6;
+    }
+
+    .pedido-info {
+        font-size: 0.85rem;
+        color: #64748b;
+        padding-top: 12px;
+        border-top: 1px solid #f1f5f9;
+    }
+</style>
+
+<h2>⭐ Avaliações dos Clientes</h2>
+
+<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:16px; margin:24px 0;">
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:3rem; font-weight:900; color:#fbbf24;">4.8</div>
+        <div style="font-size:0.85rem; color:#64748b;">Média Geral</div>
+        <div style="font-size:1.2rem; margin-top:8px;">⭐⭐⭐⭐⭐</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:2rem; font-weight:900; color:#16a34a;">1,248</div>
+        <div style="font-size:0.85rem; color:#64748b;">Total de Avaliações</div>
+    </div>
+    <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); text-align:center;">
+        <div style="font-size:2rem; font-weight:900; color:#2563eb;">94%</div>
+        <div style="font-size:0.85rem; color:#64748b;">Positivas</div>
+    </div>
+</div>
+
+<div class="avaliacoes-list">
+
+    <div class="avaliacao-card">
+        <div class="avaliacao-header">
+            <div class="cliente-info">
+                <h4>João Silva</h4>
+                <p>Há 2 horas</p>
+            </div>
+            <div class="estrelas">⭐⭐⭐⭐⭐</div>
+        </div>
+        <div class="comentario">
+            "Excelente! A pizza chegou quentinha e o entregador foi super educado. Com certeza vou pedir de novo!"
+        </div>
+        <div class="pedido-info">
+            📦 Pedido #1234 • 🍕 Pizza 4 Queijos Grande
+        </div>
+    </div>
+
+    <div class="avaliacao-card">
+        <div class="avaliacao-header">
+            <div class="cliente-info">
+                <h4>Maria Santos</h4>
+                <p>Há 5 horas</p>
+            </div>
+            <div class="estrelas">⭐⭐⭐⭐⭐</div>
+        </div>
+        <div class="comentario">
+            "Melhor hambúrguer da cidade! Muito saboroso e bem recheado. Recomendo!"
+        </div>
+        <div class="pedido-info">
+            📦 Pedido #1233 • 🍔 X-Bacon Especial
+        </div>
+    </div>
+
+    <div class="avaliacao-card">
+        <div class="avaliacao-header">
+            <div class="cliente-info">
+                <h4>Pedro Oliveira</h4>
+                <p>Ontem às 20:30</p>
+            </div>
+            <div class="estrelas">⭐⭐⭐⭐</div>
+        </div>
+        <div class="comentario">
+            "Muito bom! Única ressalva é que demorou um pouco mais do que o esperado, mas a qualidade compensa."
+        </div>
+        <div class="pedido-info">
+            📦 Pedido #1228 • 🍕 Pizza Calabresa
+        </div>
+    </div>
+
+    <div class="avaliacao-card">
+        <div class="avaliacao-header">
+            <div class="cliente-info">
+                <h4>Ana Costa</h4>
+                <p>Ontem às 19:15</p>
+            </div>
+            <div class="estrelas">⭐⭐⭐⭐⭐</div>
+        </div>
+        <div class="comentario">
+            "Perfeito! Entrega rápida, embalagem impecável e comida deliciosa. Parabéns!"
+        </div>
+        <div class="pedido-info">
+            📦 Pedido #1220 • 🍕 Pizza Portuguesa + 🥤 Refrigerante
+        </div>
+    </div>
+
+    <div class="avaliacao-card">
+        <div class="avaliacao-header">
+            <div class="cliente-info">
+                <h4>Carlos Ferreira</h4>
+                <p>2 dias atrás</p>
+            </div>
+            <div class="estrelas">⭐⭐⭐</div>
+        </div>
+        <div class="comentario">
+            "Produto bom, mas veio diferente da foto. Esperava algo maior."
+        </div>
+        <div class="pedido-info">
+            📦 Pedido #1205 • 🍔 X-Tudo
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Dados serão carregados do banco
+}
