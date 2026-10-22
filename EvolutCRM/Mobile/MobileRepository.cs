@@ -150,6 +150,7 @@ SELECT
     ISNULL(U.StatusWhatsApp, '')                            AS UltStatus,
     ISNULL(U.MensagemExcluida, 'N')                         AS UltExcluida,
     ISNULL(N.Qtd, 0)                                        AS NaoRespondidas,
+    ISNULL(L.Qtd, 0)                                        AS NaoLidas,
     ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura)    AS DataRef
 FROM TicketChamadoC T
 LEFT JOIN Cliente C
@@ -190,6 +191,15 @@ OUTER APPLY (
               AND UPPER(LTRIM(RTRIM(ISNULL(D3.Usuario, '')))) NOT IN ({UsuariosAutomaticosSql})
           ), 0)
 ) N
+OUTER APPLY (
+    SELECT COUNT(1) AS Qtd
+    FROM TicketChamadoD DL
+    WHERE DL.CodTicketChamadoC = T.Codigo
+      AND DL.CodEmp = T.CodEmp
+      AND ISNULL(DL.EnvioCliente, 'N') = 'S'
+      AND ISNULL(DL.MensagemExcluida, 'N') <> 'S'
+      AND ISNULL(DL.LidoSuporte, 'N') <> 'S'
+) L
 WHERE T.CodEmp = @CodEmp
   AND ISNULL(T.CodSetor, 1) = 1          -- só Suporte (Desenvolvimento = 2 fica fora do mobile por enquanto)
   -- Padrão igual ao HELP desktop: os tickets do usuário + os sem responsável (fila).
@@ -199,7 +209,7 @@ WHERE T.CodEmp = @CodEmp
         OR UPPER(LTRIM(RTRIM(ISNULL(T.Usuario, '')))) = UPPER(@Usuario)
         OR UPPER(LTRIM(RTRIM(ISNULL(T.Usuario, '')))) IN ({FilaSql})
       )
-  AND ISNULL(T.CodSituacao, 1) <> 3
+  AND ISNULL(T.CodSituacao, 1) = 1        -- só situação Suporte (tira Desenvolvimento, Atualizar, Pendente, Aprovação e Finalizado)
   AND ISNULL(T.ChatInterno, 'N') <> 'S'
 ORDER BY ISNULL(U.DataHora, ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura)) DESC";
 
@@ -249,7 +259,8 @@ ORDER BY ISNULL(U.DataHora, ISNULL(T.DataHoraUltimaGravacao, T.DataHoraAbertura)
                     DataHora = rd["UltDataHora"] != DBNull.Value
                         ? Convert.ToDateTime(rd["UltDataHora"])
                         : (rd["DataRef"] != DBNull.Value ? Convert.ToDateTime(rd["DataRef"]) : DateTime.Now),
-                    NaoRespondidas = Convert.ToInt32(rd["NaoRespondidas"])
+                    NaoRespondidas = Convert.ToInt32(rd["NaoRespondidas"]),
+                    NaoLidas = Convert.ToInt32(rd["NaoLidas"])
                 });
             }
 

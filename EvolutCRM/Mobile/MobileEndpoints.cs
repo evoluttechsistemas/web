@@ -205,6 +205,51 @@ namespace EvolutCRM.Mobile
             api.MapGet("/usuarios", async (TicketService ts) =>
                 Results.Ok(await ListarAtendentesAsync(ts)));
 
+            // Buscar cliente para vincular ao ticket (mesma busca da tela Ticket do HELP)
+            api.MapGet("/clientes", async (string? busca, TicketService ts) =>
+            {
+                var termo = (busca ?? "").Trim();
+                if (termo.Length < 2) return Results.Ok(new List<MobileClienteDto>());
+                var lista = await ts.BuscarClientesAsync(termo);
+                return Results.Ok(lista.Select(c => new MobileClienteDto { Codigo = c.Codigo, Nome = (c.Nome ?? "").Trim() }).ToList());
+            });
+
+            // Vincular (ou trocar) o cliente do ticket — igual ao SelecionarCliente da tela Ticket do HELP
+            api.MapPost("/tickets/{id:int}/cliente", async (
+                int id, MobileVincularClienteRequest req, HttpContext http, TicketService ts, AdminService admin) =>
+            {
+                var u = Contexto(http);
+                if (!await admin.UsuarioTemPermissaoAsync(u.Usuario, "TICKETS_RESPONDER"))
+                    return Falha("Você não tem permissão para responder ou alterar este ticket.", 403);
+                if (req.CodCliente <= 0) return Falha("Escolha um cliente.");
+
+                var t = await ts.BuscarChamadoAsync(id);
+                if (t == null) return Falha("Ticket não encontrado.");
+                if (t.CodSituacao == 3) return Falha("Ticket finalizado. Reabra pelo HELP para alterar.");
+
+                var nome = await ts.BuscarNomeCliente(req.CodCliente);
+                if (string.IsNullOrWhiteSpace(nome) || nome == "Cliente não encontrado")
+                    return Falha("Cliente não encontrado.");
+
+                t.CodCliente = req.CodCliente;
+
+                // Traz a observação já gravada para esse cliente em outros tickets
+                if (string.IsNullOrWhiteSpace(t.ObservacaoCliente))
+                    t.ObservacaoCliente = await ts.BuscarObservacaoClienteAsync(req.CodCliente);
+
+                // Ticket na fila: quem vincula assume (o próximo passo é responder, que também assume)
+                if (UsuariosAutomaticos.Contains((t.Usuario ?? "").Trim()))
+                    t.Usuario = u.Usuario;
+
+                var result = await ts.SalvarCabecalhoTicketAsync(t, u.Usuario);
+                if (!result.Sucesso) return Falha(result.Mensagem);
+
+                await ts.PropagarClientePorTelefoneAsync(t.Codigo, req.CodCliente);
+
+                Console.WriteLine($"[MOBILE] Ticket #{id} vinculado ao cliente {req.CodCliente} por {u.Usuario}");
+                return Results.Ok(new MobileEnviarResponse { Sucesso = true, Mensagem = "Cliente vinculado: " + nome.Trim() });
+            });
+
             // Finalizar: mesmo caminho do F3 "Finalizar sem insight" da tela Ticket do HELP
             api.MapPost("/tickets/{id:int}/finalizar", async (
                 int id, HttpContext http, TicketService ts, AdminService admin) =>
@@ -438,11 +483,10 @@ namespace EvolutCRM.Mobile
         /// <summary>Mesma lógica de "lido" da tela Ticket do HELP.</summary>
         private static async Task MarcarLidoAsync(TicketChamadoCModel t, MobileUsuarioContexto u, TicketService ts)
         {
+            await ts.MarcarComoLidoSuporteAsync(t.Codigo, u.Usuario);
+
             if (t.Novo == "S")
             {
-                var temResponsavel = !UsuariosAutomaticos.Contains((t.Usuario ?? "").Trim());
-                if (temResponsavel)
-                    await ts.MarcarComoLidoSuporteAsync(t.Codigo, u.Usuario);
 
                 if (!string.IsNullOrWhiteSpace(t.TelefoneWhatsApp)
                     && t.CodInstanciaWhatsApp.HasValue && t.CodInstanciaWhatsApp.Value > 0)

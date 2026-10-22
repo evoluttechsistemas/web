@@ -1303,6 +1303,28 @@
                                 }
                             </button>
 
+                            @if (PodeGerenciarIndicacoes)
+                            {
+                                <button class="@(GetNavItemClass("/indicacoes")) flyout-item"
+                                        @onclick="@(() => NavigateAndCloseMobile("/indicacoes"))">
+                                    <span class="ni-icon">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" /></svg>
+                                    </span>
+                                    <span class="ni-lbl">Indicações</span>
+                                </button>
+                            }
+
+                            @if (PodeAcessarReunioes)
+                            {
+                                <button class="@(GetNavItemClass("/reunioes")) flyout-item"
+                                        @onclick="@(() => NavigateAndCloseMobile("/reunioes"))">
+                                    <span class="ni-icon">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" /></svg>
+                                    </span>
+                                    <span class="ni-lbl">Reuniões</span>
+                                </button>
+                            }
+
                             @if (PodeVisualizarAgendas)
                             {
                                 <button class="@(GetNavItemClass("/agendas")) flyout-item"
@@ -1807,6 +1829,8 @@
     private bool PodeAcessarTicketSituacoes;
     private bool PodeAcessarTicketTipos;
     private bool PodeAcessarUsuarioStatus;
+    private bool PodeAcessarReunioes;
+    private bool PodeGerenciarIndicacoes;
 
     private bool PodeAdministrarClientes;
     private bool PodeGerenciarPermissoes;
@@ -1942,7 +1966,9 @@
                 {
                     if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
                         continue;
-                    await InvokeAsync(CarregarBadgeComercialAsync);
+                    // Um erro (banco/queda de conexão) não pode encerrar o loop do badge
+                    try { await InvokeAsync(CarregarBadgeComercialAsync); }
+                    catch (Exception) when (!_timerBadgeComercialCts.IsCancellationRequested) { }
                 }
             }
             catch (OperationCanceledException) { }
@@ -2089,6 +2115,8 @@
         PodeAcessarTicketSituacoes = false;
         PodeAcessarTicketTipos = false;
         PodeAcessarUsuarioStatus = false;
+        PodeAcessarReunioes = false;
+        PodeGerenciarIndicacoes = false;
 
         PodeAdministrarClientes = false;
         PodeGerenciarPermissoes = false;
@@ -2120,6 +2148,8 @@
         PodeAcessarTicketSituacoes = perms.Contains("CADASTROS_TICKET_SITUACOES_VISUALIZAR");
         PodeAcessarTicketTipos = perms.Contains("CADASTROS_TICKET_TIPOS_VISUALIZAR");
         PodeAcessarUsuarioStatus = perms.Contains("CADASTROS_USUARIO_STATUS_VISUALIZAR");
+        PodeAcessarReunioes = perms.Contains("REUNIOES_ACESSAR");
+        PodeGerenciarIndicacoes = perms.Contains("INDICACOES_GERENCIAR");
         PodeAdministrarClientes = perms.Contains("ADMIN_ADMINISTRAR_CLIENTES");
         PodeGerenciarPermissoes = perms.Contains("ADMIN_PERMISSOES");
         PodeVisualizarTarefas = perms.Contains("ADMIN_TAREFAS_VISUALIZAR");

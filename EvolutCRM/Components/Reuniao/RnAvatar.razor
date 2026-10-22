@@ -1,0 +1,13 @@
+@* Avatar redondo com iniciais e cor fixa por usuário (a mesma cor usada nos vídeos) *@
+<span class="rn-av @ClasseTamanho @(NaSala ? "na-sala" : "")"
+      style="background:@ReuniaoVisual.Cor(Usuario)"
+      title="@(Titulo ?? ReuniaoVisual.Nome(Usuario))">@ReuniaoVisual.Iniciais(ReuniaoVisual.Nome(Usuario))</span>
+
+@code {
+    [Parameter] public string Usuario { get; set; } = "";
+    [Parameter] public string Tamanho { get; set; } = "";   // "", sm, lg, xl
+    [Parameter] public bool NaSala { get; set; }
+    [Parameter] public string? Titulo { get; set; }
+
+    private string ClasseTamanho => string.IsNullOrEmpty(Tamanho) ? "" : $"rn-av--{Tamanho}";
+}

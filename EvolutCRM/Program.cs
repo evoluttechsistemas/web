@@ -98,6 +98,16 @@ builder.Services.AddScoped<ClienteWhatsAppFotoService>();
 builder.Services.AddSingleton<DeployNotificacaoState>();
 builder.Services.AddHostedService<DeployNotificacaoService>();
 
+// Reuniões (vídeo/áudio/tela entre usuários do HELP) — sinalização WebRTC via SignalR
+builder.Services.AddScoped<ReuniaoService>();
+builder.Services.AddSingleton<ReuniaoAcessoStore>();
+builder.Services.AddSingleton<ReuniaoPresencaStore>();     // quem está em cada sala agora
+builder.Services.AddSingleton<ReuniaoConviteNotifier>();   // convites chegam na hora em todas as telas
+
+// Indique e Ganhe (página pública do cliente + tela interna)
+builder.Services.AddScoped<IndicacaoService>();
+builder.Services.AddSignalR();
+
 // HELP Mobile (API + notificações push)
 builder.Services.AddScoped<MobileRepository>();
 builder.Services.AddSingleton<MobileTokenService>();
@@ -200,6 +210,9 @@ AbaService.RegistrarMeta(
     "fas fa-tags",
     "cadastro-ticket-tipo"
 );
+
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Reunioes), "Reuniões", "fas fa-video", "reunioes");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Indicacoes), "Indicações", "fas fa-handshake", "indicacoes");
 
 AbaService.RegistrarMeta(
     typeof(EvolutCRM.Components.Pages.CadastroUsuarioStatus),
@@ -398,6 +411,8 @@ _ = Task.Run(async () =>
 
 app.MapBlogEndpoints();
 app.MapMobileEndpoints();
+app.MapIndicacaoEndpoints();   // botão "Indique e ganhe" do sistema desktop
+app.MapHub<ReuniaoHub>("/hubs/reuniao");
 
 app.Run();
 

@@ -56,6 +56,8 @@ namespace EvolutCRM.Mobile
 
         /// <summary>Mensagens do cliente depois da última resposta de um atendente.</summary>
         public int NaoRespondidas { get; set; }
+
+        public int NaoLidas { get; set; }
     }
 
     public class MobileTicketDto
@@ -161,5 +163,15 @@ namespace EvolutCRM.Mobile
     {
         public string Usuario { get; set; } = "";
         public int CodEmp { get; set; }
+    }
+    public class MobileClienteDto
+    {
+        public int Codigo { get; set; }
+        public string Nome { get; set; } = "";
+    }
+
+    public class MobileVincularClienteRequest
+    {
+        public int CodCliente { get; set; }
     }
 }

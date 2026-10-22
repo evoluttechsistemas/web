@@ -1,0 +1,957 @@
+@* Sala de reunião: pré-entrada (teste de câmera/microfone) → chamada → tela final *@
+@using System.Text.Json
+@using Microsoft.AspNetCore.SignalR
+@inject ReuniaoService ReuniaoService
+@inject ReuniaoAcessoStore AcessoStore
+@inject ReuniaoConviteNotifier Notifier
+@inject IHubContext<ReuniaoHub> HubContext
+@inject AbaService Abas
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@switch (Etapa)
+{
+    case EtapaSala.Carregando:
+        <div class="rn-previa"><div class="rn-carregando">Abrindo a reunião...</div></div>
+        break;
+
+    case EtapaSala.Indisponivel:
+        <div class="rn-fim">
+            <div>
+                <div class="rn-vazio-icone"><i class="fa-solid fa-video-slash"></i></div>
+                <h1>Esta reunião não está mais disponível</h1>
+                <p>@(string.IsNullOrWhiteSpace(Erro) ? "Ela foi encerrada pelo organizador ou você não faz parte dela." : Erro)</p>
+                <div class="rn-fim-acoes">
+                    <button type="button" class="rn-btn rn-btn--primario" @onclick="FecharAba">Ver minhas reuniões</button>
+                </div>
+            </div>
+        </div>
+        break;
+
+    case EtapaSala.Previa:
+        <div class="rn-previa">
+            <div class="rn-previa-inner">
+                <div>
+                    <div class="rn-previa-video @(PreviaCam ? "" : "sem-video")">
+                        <video id="rn-previa-video" autoplay playsinline muted></video>
+                        <div class="rn-previa-avatar">
+                            <RnAvatar Usuario="@UsuarioAtual" Tamanho="xl" />
+                            <span>Sua câmera está desligada</span>
+                        </div>
+                        <span class="rn-previa-nome">@ReuniaoVisual.Nome(UsuarioAtual)</span>
+                        <span class="rn-nivel" title="Fale algo para testar o microfone">
+                            <i class="fa-solid @(PreviaMic ? "fa-microphone" : "fa-microphone-slash")"></i>
+                            <span id="rn-previa-nivel" class="rn-nivel-barra"></span>
+                        </span>
+                        <div class="rn-previa-controles">
+                            <button type="button" class="rn-ctl @(PreviaMic ? "" : "off")" title="@(PreviaMic ? "Desligar microfone" : "Ligar microfone")" @onclick="@(() => PreviaAlternarAsync("mic"))">
+                                <i class="fa-solid @(PreviaMic ? "fa-microphone" : "fa-microphone-slash")"></i>
+                            </button>
+                            <button type="button" class="rn-ctl @(PreviaCam ? "" : "off")" title="@(PreviaCam ? "Desligar câmera" : "Ligar câmera")" @onclick="@(() => PreviaAlternarAsync("cam"))">
+                                <i class="fa-solid @(PreviaCam ? "fa-video" : "fa-video-slash")"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rn-previa-info">
+                    <h1>@(Reuniao!.Titulo)</h1>
+                    <p>
+                        @(EhOrganizador ? "Você criou esta reunião" : $"Organizada por {ReuniaoVisual.Nome(Reuniao.CriadoPor)}")
+                        @(" · começou " + ReuniaoVisual.Tempo(Reuniao.DataCriacao))
+                    </p>
+
+                    <div class="rn-previa-sala">
+                        @if (NaSala.Count > 0)
+                        {
+                            <span class="rn-pilha">
+                                @foreach (var p in NaSala.Take(4))
+                                {
+                                    <RnAvatar Usuario="@p.Usuario" Tamanho="sm" />
+                                }
+                            </span>
+                            <span><strong>@NomesNaSala()</strong> @(NaSala.Count == 1 ? "já está na sala" : "já estão na sala")</span>
+                        }
+                        else
+                        {
+                            <i class="fa-regular fa-clock"></i>
+                            <span>Ninguém entrou ainda. Quem foi chamado vê você assim que entrar.</span>
+                        }
+                    </div>
+
+                    @if (EmOutraReuniao)
+                    {
+                        <p class="rn-erro"><i class="fa-solid fa-circle-info"></i>Você está em outra reunião agora. Ao entrar nesta, a outra chamada será encerrada.</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(PreviaErro))
+                    {
+                        <p class="rn-erro"><i class="fa-solid fa-triangle-exclamation"></i>@PreviaErro. Você ainda pode entrar e usar o chat.</p>
+                    }
+
+                    @DispositivosSelects()
+
+                    <div class="rn-previa-entrar">
+                        <button type="button" class="rn-btn rn-btn--verde rn-btn--grande" @onclick="EntrarNaSala">
+                            <i class="fa-solid fa-right-to-bracket"></i> Entrar na reunião
+                        </button>
+                        <button type="button" class="rn-btn rn-btn--sec rn-btn--grande" @onclick="FecharAba">Voltar</button>
+                    </div>
+                    <p class="rn-dica">Na sala: <kbd>Ctrl</kbd> + <kbd>D</kbd> liga e desliga o microfone, <kbd>Ctrl</kbd> + <kbd>E</kbd> a câmera.</p>
+                </div>
+            </div>
+        </div>
+        break;
+
+    case EtapaSala.Sala:
+        <div class="rn-sala">
+            <div class="rn-toasts" aria-live="polite">
+                @foreach (var t in Toasts)
+                {
+                    <div class="rn-toast @t.Tipo" @key="t.Id"><i class="fa-solid @IconeToast(t.Tipo)"></i>@t.Texto</div>
+                }
+            </div>
+
+            <header class="rn-sala-topo">
+                <div class="rn-sala-titulo">
+                    <span class="rn-ao-vivo" aria-hidden="true"></span>
+                    <h1>@(Reuniao!.Titulo)</h1>
+                    <time id="rn-duracao">00:00</time>
+                </div>
+                <div class="rn-sala-topo-dir">
+                    @if (Conexao == "conectado")
+                    {
+                        <span class="rn-conexao" title="Áudio e vídeo vão direto entre os computadores, criptografados"><i class="fa-solid fa-lock"></i>Conexão criptografada</span>
+                    }
+                    else if (Conexao == "reconectando" || Conexao == "conectando")
+                    {
+                        <span class="rn-conexao alerta"><i class="fa-solid fa-rotate fa-spin"></i>@(Conexao == "conectando" ? "Conectando..." : "Reconectando...")</span>
+                    }
+                    else
+                    {
+                        <span class="rn-conexao erro"><i class="fa-solid fa-plug-circle-xmark"></i>@TextoConexao()</span>
+                    }
+                    <span class="rn-conexao"><i class="fa-solid fa-user-group"></i>@NaSala.Count na sala</span>
+                </div>
+            </header>
+
+            <div class="rn-sala-corpo">
+                <main class="rn-palco">
+                    <div id="rn-grid" class="rn-grid" data-qtd="1"></div>
+                </main>
+
+                @if (Painel != "")
+                {
+                    <aside class="rn-painel">
+                        <div class="rn-painel-topo">
+                            <button type="button" class="rn-aba @(Painel == "chat" ? "ativa" : "")" @onclick="@(() => AbrirPainel("chat"))">Chat</button>
+                            <button type="button" class="rn-aba @(Painel == "pessoas" ? "ativa" : "")" @onclick="@(() => AbrirPainel("pessoas"))">Pessoas (@Participantes.Count)</button>
+                            <button type="button" class="rn-btn rn-btn--fantasma rn-btn--icone rn-painel-fechar" title="Fechar painel" @onclick="@(() => Painel = "")"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+
+                        @if (Painel == "chat")
+                        {
+                            <div class="rn-painel-corpo" id="rn-chat-lista">
+                                <div class="rn-chat-lista">
+                                    @if (Mensagens.Count == 0)
+                                    {
+                                        <div class="rn-chat-vazio">As mensagens ficam salvas na reunião. Use para mandar links, números de ticket e anotações.</div>
+                                    }
+                                    @foreach (var m in Mensagens)
+                                    {
+                                        var minha = m.Usuario.Equals(UsuarioAtual, StringComparison.OrdinalIgnoreCase);
+                                        <div class="rn-msg @(minha ? "minha" : "")">
+                                            <p class="rn-msg-autor"><strong>@(minha ? "Você" : ReuniaoVisual.Nome(m.Usuario))</strong> · @m.DataHora.ToString("HH:mm")</p>
+                                            <div class="rn-msg-texto">@m.Mensagem</div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                            <div class="rn-chat-envio">
+                                <input @bind="TextoMensagem" @bind:event="oninput" @onkeydown="AoTeclarChat" maxlength="2000" placeholder="Mensagem para todos" aria-label="Mensagem para todos" />
+                                <button type="button" class="rn-btn rn-btn--primario" title="Enviar" disabled="@string.IsNullOrWhiteSpace(TextoMensagem)" @onclick="EnviarMensagemAsync"><i class="fa-solid fa-paper-plane"></i></button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="rn-painel-corpo">
+                                <div class="rn-pessoas">
+                                    <div class="rn-pessoas-acao">
+                                        <button type="button" class="rn-btn rn-btn--sec" disabled="@(Vagas <= 0)" @onclick="@(() => MostrarConvidar = true)">
+                                            <i class="fa-solid fa-user-plus"></i> @(Vagas <= 0 ? "Sala cheia" : "Convidar pessoas")
+                                        </button>
+                                    </div>
+
+                                    <p class="rn-pessoas-grupo">Na sala · @NaSala.Count</p>
+                                    @foreach (var p in NaSala)
+                                    {
+                                        <div class="rn-pessoa" @key="p.Usuario">
+                                            <RnAvatar Usuario="@p.Usuario" NaSala="true" />
+                                            <div class="rn-pessoa-texto">
+                                                <p class="rn-pessoa-nome">@p.NomeExibicao @(EhEu(p.Usuario) ? "(você)" : "")</p>
+                                                <p class="rn-pessoa-sub">@(p.Papel == "Organizador" ? "Organizador" : "Participante")</p>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (ForaDaSala.Count > 0)
+                                    {
+                                        <p class="rn-pessoas-grupo">Convidados · @ForaDaSala.Count</p>
+                                        @foreach (var p in ForaDaSala)
+                                        {
+                                            <div class="rn-pessoa" @key="p.Usuario">
+                                                <RnAvatar Usuario="@p.Usuario" />
+                                                <div class="rn-pessoa-texto">
+                                                    <p class="rn-pessoa-nome">@p.NomeExibicao</p>
+                                                    <p class="rn-pessoa-sub">
+                                                        @(p.Situacao switch { "Recusou" => "Recusou o convite", "Saiu" => "Saiu da reunião", _ => p.Online ? "Chamando..." : "Offline · verá ao entrar no HELP" })
+                                                    </p>
+                                                </div>
+                                                <button type="button" class="rn-btn rn-btn--fantasma rn-btn--icone" title="Chamar de novo" @onclick="() => ChamarDeNovoAsync(p)">
+                                                    <i class="fa-solid fa-phone-volume"></i>
+                                                </button>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </aside>
+                }
+            </div>
+
+            <footer class="rn-barra">
+                <div class="rn-barra-esq">@(EhOrganizador ? "Você é o organizador" : $"Organizada por {ReuniaoVisual.Nome(Reuniao.CriadoPor)}")</div>
+
+                <div class="rn-barra-centro">
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Mic ? "" : "off")" disabled="@(!EmChamada)" title="@(Mic ? "Desligar microfone (Ctrl+D)" : "Ligar microfone (Ctrl+D)")" @onclick="AlternarMicAsync">
+                            <i class="fa-solid @(Mic ? "fa-microphone" : "fa-microphone-slash")"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Microfone</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Cam ? "" : "off")" disabled="@(!EmChamada)" title="@(Cam ? "Desligar câmera (Ctrl+E)" : "Ligar câmera (Ctrl+E)")" @onclick="AlternarCamAsync">
+                            <i class="fa-solid @(Cam ? "fa-video" : "fa-video-slash")"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Câmera</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Tela ? "ativo" : "")" disabled="@(!EmChamada)" title="@(Tela ? "Parar de apresentar" : "Apresentar a tela")" @onclick="AlternarTelaAsync">
+                            <i class="fa-solid fa-display"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">@(Tela ? "Parar" : "Apresentar")</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Mao ? "mao-ativa" : "")" disabled="@(!EmChamada)" title="@(Mao ? "Baixar a mão" : "Levantar a mão")" @onclick="AlternarMaoAsync">
+                            <i class="fa-solid fa-hand"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Mão</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        @if (MostrarReacoes)
+                        {
+                            <div class="rn-flutuante rn-reacoes-menu">
+                                @foreach (var emoji in Reacoes)
+                                {
+                                    <button type="button" title="Reagir" @onclick="() => ReagirAsync(emoji)">@emoji</button>
+                                }
+                            </div>
+                        }
+                        <button type="button" class="rn-ctl @(MostrarReacoes ? "ativo" : "")" disabled="@(!EmChamada)" title="Reagir" @onclick="@(() => { MostrarReacoes = !MostrarReacoes; MostrarMenuSair = false; })">
+                            <i class="fa-regular fa-face-smile"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Reagir</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Painel == "chat" ? "ativo" : "")" title="Chat" @onclick="@(() => AbrirPainel("chat", alternar: true))">
+                            <i class="fa-regular fa-message"></i>
+                            @if (NaoLidas > 0)
+                            {
+                                <span class="rn-ctl-badge">@(NaoLidas > 9 ? "9+" : NaoLidas.ToString())</span>
+                            }
+                        </button>
+                        <span class="rn-ctl-rotulo">Chat</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl @(Painel == "pessoas" ? "ativo" : "")" title="Pessoas" @onclick="@(() => AbrirPainel("pessoas", alternar: true))">
+                            <i class="fa-solid fa-user-group"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Pessoas</span>
+                    </div>
+                    <div class="rn-ctl-grupo">
+                        <button type="button" class="rn-ctl" disabled="@(!EmChamada)" title="Configurar câmera e microfone" @onclick="AbrirConfigAsync">
+                            <i class="fa-solid fa-gear"></i>
+                        </button>
+                        <span class="rn-ctl-rotulo">Ajustes</span>
+                    </div>
+                </div>
+
+                <div class="rn-barra-dir">
+                    <div class="rn-ctl-grupo">
+                        @if (MostrarMenuSair)
+                        {
+                            <div class="rn-flutuante rn-flutuante--dir">
+                                <button type="button" class="rn-menu-item" @onclick="SairAsync">
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                    <span>Sair da reunião<small>Os outros continuam conversando</small></span>
+                                </button>
+                                <button type="button" class="rn-menu-item perigo" @onclick="EncerrarParaTodosAsync">
+                                    <i class="fa-solid fa-phone-slash"></i>
+                                    <span>Encerrar para todos<small>Todos saem e a reunião é finalizada</small></span>
+                                </button>
+                            </div>
+                        }
+                        <button type="button" class="rn-btn rn-btn--perigo rn-btn-sair" @onclick="CliqueSairAsync">
+                            <i class="fa-solid fa-phone-slash"></i> Sair
+                            @if (EhOrganizador)
+                            {
+                                <i class="fa-solid fa-chevron-up" style="font-size:.7rem; margin-left:2px;"></i>
+                            }
+                        </button>
+                    </div>
+                </div>
+            </footer>
+        </div>
+        break;
+
+    case EtapaSala.Fim:
+        <div class="rn-fim">
+            <div>
+                <div class="rn-vazio-icone"><i class="fa-solid @(MotivoFim == "saiu" ? "fa-right-from-bracket" : "fa-video-slash")"></i></div>
+                <h1>@TituloFim()</h1>
+                <p>@TextoFim()</p>
+                <div class="rn-fim-acoes">
+                    @if (MotivoFim is "saiu" or "erro" or "outra-aba")
+                    {
+                        <button type="button" class="rn-btn rn-btn--verde" @onclick="EntrarDeNovoAsync"><i class="fa-solid fa-rotate-left"></i> Entrar de novo</button>
+                    }
+                    <button type="button" class="rn-btn rn-btn--sec" @onclick="FecharAba">Voltar para reuniões</button>
+                </div>
+            </div>
+        </div>
+        break;
+}
+
+@if (MostrarConvidar && Reuniao is not null)
+{
+    <ReuniaoConvidarModal CodReuniao="Reuniao.Codigo" VagasDisponiveis="Vagas" OnFechar="() => MostrarConvidar = false" OnConcluido="AoConvidar" />
+}
+
+@if (MostrarConfig)
+{
+    <div class="rn-modal-fundo" @onclick="() => MostrarConfig = false">
+        <section class="rn-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <header class="rn-modal-topo">
+                <div>
+                    <h2>Câmera e microfone</h2>
+                    <p>A troca vale na hora, sem sair da reunião.</p>
+                </div>
+                <button type="button" class="rn-btn rn-btn--fantasma rn-btn--icone" title="Fechar" @onclick="() => MostrarConfig = false"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="rn-modal-corpo">@DispositivosSelects()</div>
+            <footer class="rn-modal-rodape">
+                <small>Se o dispositivo não aparecer, conecte-o e abra esta janela de novo.</small>
+                <button type="button" class="rn-btn rn-btn--primario" @onclick="() => MostrarConfig = false">Pronto</button>
+            </footer>
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public int CodReuniao { get; set; }
+
+    private enum EtapaSala { Carregando, Indisponivel, Previa, Sala, Fim }
+
+    private static readonly string[] Reacoes = ["👍", "👏", "😂", "❤️", "🎉", "😮"];
+
+    private EtapaSala Etapa = EtapaSala.Carregando;
+    private ReuniaoModel? Reuniao;
+    private List<ReuniaoParticipanteModel> Participantes = [];
+    private List<ReuniaoMensagemModel> Mensagens = [];
+    private readonly List<ToastItem> Toasts = [];
+    private DispositivosJs Dispositivos = new();
+
+    private IJSObjectReference? js;
+    private DotNetObjectReference<ReuniaoSala>? dotNetRef;
+    private readonly string _idAba = Guid.NewGuid().ToString("N");
+    private int _carregado = -1;
+    private int _recarregandoPessoas;
+    private bool _iniciarPrevia;
+    private bool _entrarPendente;
+    private bool _rolarChat;
+    private bool _descartado;
+
+    private bool PreviaMic = true;
+    private bool PreviaCam;
+    private bool EmOutraReuniao;
+    private string PreviaErro = "";
+
+    private bool EmChamada;
+    private bool Mic;
+    private bool Cam;
+    private bool Tela;
+    private bool Mao;
+    private string Conexao = "conectando";
+    private string Painel = "";
+    private int NaoLidas;
+    private bool MostrarReacoes;
+    private bool MostrarMenuSair;
+    private bool MostrarConfig;
+    private bool MostrarConvidar;
+    private string TextoMensagem = "";
+    private string Erro = "";
+    private string MotivoFim = "";
+
+    private string UsuarioAtual => (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+    private bool EhOrganizador => ReuniaoService.EhOrganizador(Reuniao);
+    private bool EhEu(string usuario) => usuario.Equals(UsuarioAtual, StringComparison.OrdinalIgnoreCase);
+    private List<ReuniaoParticipanteModel> NaSala => Participantes.Where(p => p.NaSala).ToList();
+    private List<ReuniaoParticipanteModel> ForaDaSala => Participantes.Where(p => !p.NaSala).ToList();
+    private int Vagas => (Reuniao?.LimiteParticipantes ?? EvolutCRM.Services.ReuniaoService.LimitePadrao) - Participantes.Count;
+
+    // ------------------------------------------------------------------
+    // Ciclo de vida
+    // ------------------------------------------------------------------
+    protected override void OnInitialized()
+    {
+        Notifier.OnEvento += AoEvento;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // O layout de abas reenvia os parâmetros a cada renderização: só carrega se mudou
+        if (_carregado == CodReuniao) return;
+        _carregado = CodReuniao;
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        Erro = "";
+        try
+        {
+            Reuniao = await ReuniaoService.ObterAsync(CodReuniao);
+            if (Reuniao is null)
+            {
+                Etapa = EtapaSala.Indisponivel;
+                return;
+            }
+            Participantes = await ReuniaoService.ListarParticipantesAsync(CodReuniao);
+            Mensagens = await ReuniaoService.ListarMensagensAsync(CodReuniao);
+            Etapa = EtapaSala.Previa;
+            _iniciarPrevia = true;
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+            Etapa = EtapaSala.Indisponivel;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_descartado) return;
+
+        if (Etapa == EtapaSala.Previa && _iniciarPrevia)
+        {
+            _iniciarPrevia = false;
+            try
+            {
+                await GarantirJsAsync();
+                var r = await js!.InvokeAsync<PreviaJs>("previaIniciar", _idAba, new { mic = PreviaMic, cam = PreviaCam });
+                EmOutraReuniao = r.EmOutraReuniao;
+                if (!r.EmOutraReuniao)
+                {
+                    PreviaMic = r.Mic;
+                    PreviaCam = r.Cam;
+                }
+                PreviaErro = r.Erro ?? "";
+                Dispositivos = await js.InvokeAsync<DispositivosJs>("listarDispositivos");
+            }
+            catch (Exception ex)
+            {
+                PreviaErro = LimparErro(ex);
+            }
+            StateHasChanged();
+        }
+
+        if (Etapa == EtapaSala.Sala && _entrarPendente)
+        {
+            _entrarPendente = false;
+            try
+            {
+                await GarantirJsAsync();
+                var token = AcessoStore.Emitir(CodReuniao, UserState.CurrentCompanyId, UsuarioAtual);
+                await js!.InvokeVoidAsync("entrar", token, dotNetRef, _idAba, UsuarioAtual);
+                EmChamada = true;
+                Conexao = "conectado";
+                await RecarregarPessoasAsync();
+            }
+            catch (Exception ex)
+            {
+                try { await js!.InvokeVoidAsync("encerrarSeDono", _idAba); } catch { }
+                EmChamada = false;
+                Erro = LimparErro(ex);
+                MotivoFim = "erro";
+                Etapa = EtapaSala.Fim;
+            }
+            StateHasChanged();
+        }
+
+        if (_rolarChat && js is not null)
+        {
+            _rolarChat = false;
+            try { await js.InvokeVoidAsync("rolarChat", "rn-chat-lista"); } catch { }
+        }
+    }
+
+    private async Task GarantirJsAsync()
+    {
+        js ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/reunioes.js?v=4");
+        dotNetRef ??= DotNetObjectReference.Create(this);
+    }
+
+    private void AoEvento(ReuniaoEvento ev)
+    {
+        if (ev.CodReuniao != CodReuniao || ev.CodEmp != UserState.CurrentCompanyId || _descartado) return;
+
+        if (ev.Tipo == "Encerrada" && !EhEu(ev.Remetente) && Etapa is EtapaSala.Previa or EtapaSala.Sala)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                await EncerrarMidiaAsync();
+                MotivoFim = "encerrada";
+                Etapa = EtapaSala.Fim;
+                StateHasChanged();
+            });
+            return;
+        }
+
+        _ = InvokeAsync(RecarregarPessoasAsync);
+    }
+
+    private async Task RecarregarPessoasAsync()
+    {
+        if (Interlocked.Exchange(ref _recarregandoPessoas, 1) == 1) return;
+        try { Participantes = await ReuniaoService.ListarParticipantesAsync(CodReuniao); }
+        catch { }
+        finally { Interlocked.Exchange(ref _recarregandoPessoas, 0); }
+        StateHasChanged();
+    }
+
+    // ------------------------------------------------------------------
+    // Pré-entrada
+    // ------------------------------------------------------------------
+    private async Task PreviaAlternarAsync(string tipo)
+    {
+        if (js is null) return;
+        try
+        {
+            PreviaErro = "";
+            var r = await js.InvokeAsync<EstadoJs>("previaAlternar", tipo);
+            PreviaMic = r.Mic;
+            PreviaCam = r.Cam;
+            Dispositivos = await js.InvokeAsync<DispositivosJs>("listarDispositivos");
+        }
+        catch (Exception ex)
+        {
+            PreviaErro = LimparErro(ex);
+        }
+    }
+
+    private async Task TrocarDispositivoAsync(string tipo, string? id)
+    {
+        if (js is null || string.IsNullOrWhiteSpace(id)) return;
+        try
+        {
+            var r = await js.InvokeAsync<EstadoJs>("trocarDispositivo", tipo, id);
+            if (Etapa == EtapaSala.Previa) { PreviaMic = r.Mic; PreviaCam = r.Cam; }
+            Dispositivos = await js.InvokeAsync<DispositivosJs>("listarDispositivos");
+        }
+        catch (Exception ex)
+        {
+            if (Etapa == EtapaSala.Previa) PreviaErro = LimparErro(ex);
+            else MostrarToast(LimparErro(ex), "erro");
+        }
+    }
+
+    private void EntrarNaSala()
+    {
+        Conexao = "conectando";
+        Painel = "";
+        NaoLidas = 0;
+        Etapa = EtapaSala.Sala;
+        _entrarPendente = true;
+    }
+
+    private async Task EntrarDeNovoAsync()
+    {
+        Etapa = EtapaSala.Carregando;
+        StateHasChanged();
+        await CarregarAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Controles da sala
+    // ------------------------------------------------------------------
+    private async Task ExecutarAsync(Func<IJSObjectReference, Task> acao)
+    {
+        if (js is null) return;
+        try { await acao(js); }
+        catch (Exception ex) { MostrarToast(LimparErro(ex), "erro"); }
+    }
+
+    private Task AlternarMicAsync() => ExecutarAsync(async j => Mic = await j.InvokeAsync<bool>("alternarMicrofone"));
+    private Task AlternarCamAsync() => ExecutarAsync(async j => Cam = await j.InvokeAsync<bool>("alternarCamera"));
+    private Task AlternarTelaAsync() => ExecutarAsync(async j => Tela = await j.InvokeAsync<bool>("compartilharTela"));
+    private Task AlternarMaoAsync() => ExecutarAsync(async j => Mao = await j.InvokeAsync<bool>("alternarMao"));
+
+    private Task ReagirAsync(string emoji)
+    {
+        MostrarReacoes = false;
+        return ExecutarAsync(j => j.InvokeVoidAsync("enviarReacao", emoji).AsTask());
+    }
+
+    private async Task AbrirConfigAsync()
+    {
+        if (js is not null)
+        {
+            try { Dispositivos = await js.InvokeAsync<DispositivosJs>("listarDispositivos"); } catch { }
+        }
+        MostrarConfig = true;
+    }
+
+    private void AbrirPainel(string nome) => AbrirPainel(nome, false);
+
+    private void AbrirPainel(string nome, bool alternar)
+    {
+        MostrarReacoes = false;
+        MostrarMenuSair = false;
+        Painel = alternar && Painel == nome ? "" : nome;
+        if (Painel == "chat")
+        {
+            NaoLidas = 0;
+            _rolarChat = true;
+        }
+    }
+
+    private async Task EnviarMensagemAsync()
+    {
+        var texto = TextoMensagem.Trim();
+        if (string.IsNullOrWhiteSpace(texto)) return;
+        TextoMensagem = "";
+
+        try
+        {
+            await ReuniaoService.AdicionarMensagemAsync(CodReuniao, texto);
+            Mensagens.Add(new ReuniaoMensagemModel { CodReuniao = CodReuniao, Usuario = UsuarioAtual, Mensagem = texto, DataHora = DateTime.Now });
+            _rolarChat = true;
+            if (js is not null) await js.InvokeVoidAsync("enviarChat", texto);
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Mensagem não enviada: " + LimparErro(ex), "erro");
+        }
+    }
+
+    private async Task AoTeclarChat(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey) await EnviarMensagemAsync();
+    }
+
+    private async Task ChamarDeNovoAsync(ReuniaoParticipanteModel p)
+    {
+        try
+        {
+            await ReuniaoService.ConvidarAsync(CodReuniao, [p.Usuario]);
+            MostrarToast($"Chamando {p.NomeExibicao}...", "info");
+            await RecarregarPessoasAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast(LimparErro(ex), "erro");
+        }
+    }
+
+    private async Task AoConvidar(int _)
+    {
+        MostrarConvidar = false;
+        MostrarToast("Convite enviado. As pessoas estão sendo chamadas.", "info");
+        await RecarregarPessoasAsync();
+    }
+
+    private async Task CliqueSairAsync()
+    {
+        MostrarReacoes = false;
+        if (EhOrganizador)
+        {
+            MostrarMenuSair = !MostrarMenuSair;
+            return;
+        }
+        await SairAsync();
+    }
+
+    private async Task SairAsync()
+    {
+        MostrarMenuSair = false;
+        await EncerrarMidiaAsync();
+        MotivoFim = "saiu";
+        Etapa = EtapaSala.Fim;
+    }
+
+    private async Task EncerrarParaTodosAsync()
+    {
+        MostrarMenuSair = false;
+        try
+        {
+            await ReuniaoService.EncerrarAsync(CodReuniao);
+            await HubContext.Clients.Group(ReuniaoHub.Sala(CodReuniao)).SendAsync("reuniaoEncerrada");
+        }
+        catch (Exception ex)
+        {
+            MostrarToast(LimparErro(ex), "erro");
+            return;
+        }
+        await EncerrarMidiaAsync();
+        MotivoFim = "encerrei";
+        Etapa = EtapaSala.Fim;
+    }
+
+    private void FecharAba()
+    {
+        Abas.Fechar($"reunioes/{CodReuniao}");
+        Nav.NavigateTo("/reunioes");
+    }
+
+    private async Task EncerrarMidiaAsync()
+    {
+        if (js is not null)
+        {
+            try
+            {
+                if (EmChamada) await js.InvokeVoidAsync("encerrarSeDono", _idAba);
+                else await js.InvokeVoidAsync("previaParar", _idAba);
+            }
+            catch (JSDisconnectedException) { }
+            catch (JSException) { }
+            catch (TaskCanceledException) { }
+        }
+        EmChamada = false;
+        Mic = Cam = Tela = Mao = false;
+        MostrarReacoes = MostrarMenuSair = false;
+    }
+
+    // ------------------------------------------------------------------
+    // Chamadas vindas do JavaScript
+    // ------------------------------------------------------------------
+    [JSInvokable]
+    public Task AtualizarEstadoConexao(string estado) => InvokeAsync(() =>
+    {
+        Conexao = estado;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task AtualizarMidiaLocal(bool mic, bool cam, bool tela, bool mao) => InvokeAsync(() =>
+    {
+        Mic = mic; Cam = cam; Tela = tela; Mao = mao;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task AtualizarParticipantes() => InvokeAsync(RecarregarPessoasAsync);
+
+    [JSInvokable]
+    public Task Aviso(string texto, string tipo) => InvokeAsync(() =>
+    {
+        MostrarToast(texto, tipo);
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task ReceberMensagemRealtime(JsonElement mensagem) => InvokeAsync(() =>
+    {
+        var usuario = mensagem.TryGetProperty("usuario", out var u) ? u.GetString() ?? "" : "";
+        var texto = mensagem.TryGetProperty("mensagem", out var t) ? t.GetString() ?? "" : "";
+        Mensagens.Add(new ReuniaoMensagemModel { CodReuniao = CodReuniao, Usuario = usuario, Mensagem = texto, DataHora = DateTime.Now });
+
+        if (Painel == "chat") _rolarChat = true;
+        else
+        {
+            NaoLidas++;
+            MostrarToast($"{ReuniaoVisual.Nome(usuario)}: {(texto.Length > 60 ? texto[..60] + "…" : texto)}", "info");
+        }
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task ReuniaoEncerradaPeloOrganizador() => InvokeAsync(() =>
+    {
+        EmChamada = false;
+        MotivoFim = "encerrada";
+        Etapa = EtapaSala.Fim;
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task ReuniaoEncerradaPorOutraAba() => InvokeAsync(() =>
+    {
+        EmChamada = false;
+        MotivoFim = "outra-aba";
+        Etapa = EtapaSala.Fim;
+        StateHasChanged();
+    });
+
+    // ------------------------------------------------------------------
+    // Auxiliares de tela
+    // ------------------------------------------------------------------
+    private void MostrarToast(string texto, string tipo)
+    {
+        var item = new ToastItem(Guid.NewGuid(), texto, tipo);
+        Toasts.Add(item);
+        if (Toasts.Count > 4) Toasts.RemoveAt(0);
+        _ = RemoverToastDepoisAsync(item.Id);
+    }
+
+    private async Task RemoverToastDepoisAsync(Guid id)
+    {
+        await Task.Delay(4000);
+        if (_descartado) return;
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                Toasts.RemoveAll(t => t.Id == id);
+                StateHasChanged();
+            });
+        }
+        catch { }
+    }
+
+    private static string IconeToast(string tipo) => tipo switch
+    {
+        "entrou" => "fa-right-to-bracket",
+        "saiu" => "fa-right-from-bracket",
+        "mao" => "fa-hand",
+        "erro" => "fa-circle-exclamation",
+        _ => "fa-circle-info"
+    };
+
+    private string NomesNaSala()
+    {
+        var nomes = NaSala.Select(p => EhEu(p.Usuario) ? "Você" : ReuniaoVisual.Nome(p.Usuario).Split(' ')[0]).ToList();
+        return nomes.Count switch
+        {
+            1 => nomes[0],
+            2 => $"{nomes[0]} e {nomes[1]}",
+            _ => $"{string.Join(", ", nomes.Take(nomes.Count - 1))} e {nomes[^1]}"
+        };
+    }
+
+    private string TextoConexao() => Conexao.StartsWith("falhou:") ? Conexao[7..] : "Sem conexão com o servidor";
+
+    private string TituloFim() => MotivoFim switch
+    {
+        "encerrada" => "O organizador encerrou a reunião",
+        "encerrei" => "Reunião encerrada para todos",
+        "outra-aba" => "Você entrou em outra reunião",
+        "erro" => "Não foi possível entrar na chamada",
+        _ => "Você saiu da reunião"
+    };
+
+    private string TextoFim() => MotivoFim switch
+    {
+        "encerrada" or "encerrei" => "A conversa do chat fica salva em Reuniões > Recentes.",
+        "outra-aba" => "Só dá para participar de uma reunião por vez. Esta chamada foi fechada.",
+        "erro" => string.IsNullOrWhiteSpace(Erro) ? "Verifique a conexão e tente de novo." : Erro,
+        _ => "A reunião continua para quem ficou. Você pode voltar enquanto ela estiver aberta."
+    };
+
+    private RenderFragment DispositivosSelects() => __builder =>
+    {
+        if (Dispositivos.Microfones.Count > 0)
+        {
+            <div class="rn-campo">
+                <label for="rn-sel-mic">Microfone</label>
+                <select id="rn-sel-mic" @onchange="@(e => TrocarDispositivoAsync("mic", e.Value?.ToString()))">
+                    @foreach (var d in Dispositivos.Microfones)
+                    {
+                        <option value="@d.Id" selected="@(d.Id == Dispositivos.MicAtual)">@d.Nome</option>
+                    }
+                </select>
+            </div>
+        }
+        if (Dispositivos.Cameras.Count > 0)
+        {
+            <div class="rn-campo">
+                <label for="rn-sel-cam">Câmera</label>
+                <select id="rn-sel-cam" @onchange="@(e => TrocarDispositivoAsync("cam", e.Value?.ToString()))">
+                    @if (string.IsNullOrEmpty(Dispositivos.CamAtual))
+                    {
+                        <option value="" selected>Escolha para ligar a câmera</option>
+                    }
+                    @foreach (var d in Dispositivos.Cameras)
+                    {
+                        <option value="@d.Id" selected="@(d.Id == Dispositivos.CamAtual)">@d.Nome</option>
+                    }
+                </select>
+            </div>
+        }
+    };
+
+    private static string LimparErro(Exception ex)
+    {
+        var msg = ex.Message;
+        var idx = msg.IndexOf("HubException: ", StringComparison.Ordinal);
+        if (idx >= 0) msg = msg[(idx + 14)..];
+        if (msg.Contains("NotAllowedError")) return "Permissão de câmera, microfone ou tela negada no navegador";
+        if (msg.Contains("NotFoundError")) return "Nenhuma câmera ou microfone encontrado";
+        if (msg.Contains("NotReadableError")) return "A câmera ou o microfone está em uso por outro programa";
+        return msg.Split('\n')[0].Trim();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _descartado = true;
+        Notifier.OnEvento -= AoEvento;
+        await EncerrarMidiaAsync();
+        if (js is not null)
+        {
+            try { await js.DisposeAsync(); }
+            catch (JSDisconnectedException) { }
+        }
+        dotNetRef?.Dispose();
+    }
+
+    private sealed record ToastItem(Guid Id, string Texto, string Tipo);
+
+    public sealed class PreviaJs
+    {
+        public bool EmOutraReuniao { get; set; }
+        public bool Mic { get; set; }
+        public bool Cam { get; set; }
+        public string? Erro { get; set; }
+    }
+
+    public sealed class EstadoJs
+    {
+        public bool Mic { get; set; }
+        public bool Cam { get; set; }
+    }
+
+    public sealed class DispositivoJs
+    {
+        public string Id { get; set; } = "";
+        public string Nome { get; set; } = "";
+    }
+
+    public sealed class DispositivosJs
+    {
+        public List<DispositivoJs> Microfones { get; set; } = [];
+        public List<DispositivoJs> Cameras { get; set; } = [];
+        public string MicAtual { get; set; } = "";
+        public string CamAtual { get; set; } = "";
+    }
+}

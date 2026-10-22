@@ -1,0 +1,191 @@
+@* Modal usado para criar uma reunião (CodReuniao = null) ou convidar mais pessoas para uma reunião aberta *@
+@inject ReuniaoService ReuniaoService
+
+<div class="rn-modal-fundo" @onclick="Fechar">
+    <section class="rn-modal" role="dialog" aria-modal="true" aria-labelledby="rn-modal-titulo" @onclick:stopPropagation="true">
+        <header class="rn-modal-topo">
+            <div>
+                <h2 id="rn-modal-titulo">@(Criando ? "Nova reunião" : "Convidar pessoas")</h2>
+                <p>@(Criando
+                       ? "Quem você convidar recebe uma chamada na tela do HELP na mesma hora."
+                       : "As pessoas escolhidas recebem uma chamada para entrar agora.")</p>
+            </div>
+            <button type="button" class="rn-btn rn-btn--fantasma rn-btn--icone" title="Fechar" @onclick="Fechar">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </header>
+
+        <div class="rn-modal-corpo">
+            @if (!string.IsNullOrWhiteSpace(Erro))
+            {
+                <p class="rn-erro"><i class="fa-solid fa-circle-exclamation"></i>@Erro</p>
+            }
+
+            @if (Criando)
+            {
+                <div class="rn-campo">
+                    <label for="rn-titulo">Assunto</label>
+                    <input id="rn-titulo" @bind="Titulo" maxlength="150" placeholder="Ex.: Alinhamento do suporte" />
+                </div>
+            }
+
+            <div class="rn-campo">
+                <label for="rn-busca">Pessoas (@Selecionados.Count de @MaxSelecionados)</label>
+                <div class="rn-busca">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="rn-busca" @bind="Busca" @bind:event="oninput" placeholder="Buscar pelo nome" autocomplete="off" />
+                </div>
+            </div>
+
+            @if (Selecionados.Count > 0)
+            {
+                <div class="rn-selecionados">
+                    @foreach (var u in Selecionados)
+                    {
+                        <span class="rn-selecionado">
+                            <RnAvatar Usuario="@u" Tamanho="sm" />
+                            @ReuniaoVisual.Nome(u)
+                            <button type="button" title="Remover" @onclick="() => Alternar(u)"><i class="fa-solid fa-xmark"></i></button>
+                        </span>
+                    }
+                </div>
+            }
+
+            @if (Carregando)
+            {
+                <div class="rn-carregando">Carregando a equipe...</div>
+            }
+            else if (Filtrados.Count == 0)
+            {
+                <div class="rn-chat-vazio">@(string.IsNullOrWhiteSpace(Busca) ? "Todas as pessoas com acesso a reuniões já estão nesta reunião." : "Ninguém encontrado com esse nome.")</div>
+            }
+            else
+            {
+                <div class="rn-escolhas">
+                    @foreach (var u in Filtrados)
+                    {
+                        var marcado = Selecionados.Contains(u.Usuario);
+                        var bloqueado = !marcado && Selecionados.Count >= MaxSelecionados;
+                        <label class="rn-escolha @(marcado ? "marcado" : "") @(bloqueado ? "bloqueado" : "")">
+                            <input type="checkbox" checked="@marcado" disabled="@bloqueado" @onchange="() => Alternar(u.Usuario)" />
+                            <RnAvatar Usuario="@u.Usuario" />
+                            <span class="rn-escolha-texto">
+                                <strong>@u.NomeExibicao</strong>
+                                <span><i class="rn-online @(u.Online ? "sim" : "")"></i>@(u.Online ? "Online agora" : "Offline · verá o convite ao entrar no HELP")</span>
+                            </span>
+                            <span class="rn-check">@if (marcado) {<i class="fa-solid fa-check"></i>}</span>
+                        </label>
+                    }
+                </div>
+            }
+        </div>
+
+        <footer class="rn-modal-rodape">
+            <small>@(Criando ? $"Até {Limite} pessoas por sala, contando você." : $"Vagas livres na sala: {MaxSelecionados}.")</small>
+            <div style="display:flex; gap:8px;">
+                <button type="button" class="rn-btn rn-btn--sec" @onclick="Fechar">Cancelar</button>
+                <button type="button" class="rn-btn rn-btn--primario" disabled="@(Salvando || (!Criando && Selecionados.Count == 0))" @onclick="Confirmar">
+                    @if (Salvando)
+                    {
+                        <span>@(Criando ? "Criando..." : "Enviando...")</span>
+                    }
+                    else if (Criando)
+                    {
+                        <i class="fa-solid fa-video"></i><span>@(Selecionados.Count > 0 ? "Criar e chamar" : "Criar e entrar")</span>
+                    }
+                    else
+                    {
+                        <i class="fa-solid fa-phone-volume"></i><span>Chamar @(Selecionados.Count == 1 ? "1 pessoa" : $"{Selecionados.Count} pessoas")</span>
+                    }
+                </button>
+            </div>
+        </footer>
+    </section>
+</div>
+
+@code {
+    /// <summary>null = criar uma reunião nova; preenchido = convidar para esta reunião.</summary>
+    [Parameter] public int? CodReuniao { get; set; }
+    /// <summary>Quantas pessoas ainda cabem (usado ao convidar).</summary>
+    [Parameter] public int VagasDisponiveis { get; set; } = Limite - 1;
+    [Parameter] public EventCallback OnFechar { get; set; }
+    /// <summary>Recebe o código da reunião criada/atualizada.</summary>
+    [Parameter] public EventCallback<int> OnConcluido { get; set; }
+
+    private List<ReuniaoParticipanteModel> Usuarios = [];
+    private readonly List<string> Selecionados = [];
+    private string Titulo = "";
+    private string Busca = "";
+    private string Erro = "";
+    private bool Carregando = true;
+    private bool Salvando;
+
+    private const int Limite = EvolutCRM.Services.ReuniaoService.LimitePadrao;
+    private bool Criando => CodReuniao is null or 0;
+    private int MaxSelecionados => Criando ? Limite - 1 : Math.Max(0, VagasDisponiveis);
+
+    private List<ReuniaoParticipanteModel> Filtrados => string.IsNullOrWhiteSpace(Busca)
+        ? Usuarios
+        : Usuarios.Where(u => u.NomeExibicao.Contains(Busca.Trim(), StringComparison.OrdinalIgnoreCase)
+                           || u.Usuario.Contains(Busca.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Usuarios = await ReuniaoService.ListarUsuariosParaConvidarAsync(Criando ? null : CodReuniao);
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private void Alternar(string usuario)
+    {
+        var existente = Selecionados.FirstOrDefault(s => s.Equals(usuario, StringComparison.OrdinalIgnoreCase));
+        if (existente is not null)
+            Selecionados.Remove(existente);
+        else if (Selecionados.Count < MaxSelecionados)
+            Selecionados.Add(usuario);
+    }
+
+    private async Task Confirmar()
+    {
+        Erro = "";
+        Salvando = true;
+        try
+        {
+            int codigo;
+            if (Criando)
+            {
+                codigo = await ReuniaoService.CriarAsync(new ReuniaoCriarRequest
+                {
+                    Titulo = Titulo,
+                    UsuariosConvidados = Selecionados.ToList()
+                });
+            }
+            else
+            {
+                await ReuniaoService.ConvidarAsync(CodReuniao!.Value, Selecionados);
+                codigo = CodReuniao.Value;
+            }
+
+            await OnConcluido.InvokeAsync(codigo);
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+        finally
+        {
+            Salvando = false;
+        }
+    }
+
+    private Task Fechar() => OnFechar.InvokeAsync();
+}

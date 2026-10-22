@@ -41,14 +41,38 @@ function Send-FtpFile($url, $credential, $bytes) {
     $req.GetResponse().Close()
 }
 
-function Send-FtpFileWithRetry($url, $credential, $bytes, $maxTentativas = 3) {
+# Cria no servidor as pastas do caminho do arquivo (o FTP nao cria pastas sozinho).
+# Pastas que ja existem dao erro e sao ignoradas.
+function New-FtpDirectories($url, $credential) {
+    $uri   = [Uri]$url
+    $base  = "$($uri.Scheme)://$($uri.Authority)"
+    $parts = $uri.AbsolutePath.Trim('/').Split('/')
+    $path  = ''
+    for ($i = 0; $i -lt $parts.Length - 1; $i++) {
+        $path += '/' + $parts[$i]
+        try {
+            $req = [System.Net.FtpWebRequest]::Create($base + $path)
+            $req.Credentials = $credential
+            $req.Method = [System.Net.WebRequestMethods+Ftp]::MakeDirectory
+            $req.GetResponse().Close()
+        } catch { }
+    }
+}
+
+function Send-FtpFileWithRetry($url, $credential, $bytes, $maxTentativas = 4) {
     $tentativa = 0
+    $pastasCriadas = $false
     while ($tentativa -lt $maxTentativas) {
         try {
             Send-FtpFile $url $credential $bytes
             return $true
         } catch {
             $tentativa++
+            # Primeira falha: pode ser pasta nova que ainda nao existe no servidor
+            if (-not $pastasCriadas) {
+                New-FtpDirectories $url $credential
+                $pastasCriadas = $true
+            }
             if ($tentativa -lt $maxTentativas) { Start-Sleep -Seconds 2 }
         }
     }
@@ -175,6 +199,23 @@ if (-not $precisaReiniciar) {
         if ($ok) { $enviados++; $manifesto[$item.Relative] = $item.Hash } else { $falhas += $item.Relative }
     }
 
+    if ($falhas.Count -gt 0) {
+        Write-Host "    Tentando de novo $($falhas.Count) arquivo(s) que falharam..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 5
+        $aindaFalhando = @()
+        foreach ($item in ($arquivosAlterados | Where-Object { $falhas -contains $_.Relative })) {
+            $bytes = [System.IO.File]::ReadAllBytes($item.File.FullName)
+            if (Send-FtpFileWithRetry $item.Url $credential $bytes 5) {
+                $enviados++
+                $manifesto[$item.Relative] = $item.Hash
+                Write-Host "    OK na nova tentativa: $($item.Relative)" -ForegroundColor Green
+            } else {
+                $aindaFalhando += $item.Relative
+            }
+        }
+        $falhas = $aindaFalhando
+    }
+
     Write-Progress -Activity 'Enviando arquivos...' -Completed
     Save-Manifesto $manifestoPath $manifesto
 
@@ -233,6 +274,23 @@ foreach ($item in $arquivosAlterados) {
         $falhas += $item.Relative
         Write-Host "    FALHA: $($item.Relative)" -ForegroundColor Red
     }
+}
+
+if ($falhas.Count -gt 0) {
+    Write-Host "    Tentando de novo $($falhas.Count) arquivo(s) que falharam..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
+    $aindaFalhando = @()
+    foreach ($item in ($arquivosAlterados | Where-Object { $falhas -contains $_.Relative })) {
+        $bytes = [System.IO.File]::ReadAllBytes($item.File.FullName)
+        if (Send-FtpFileWithRetry $item.Url $credential $bytes 5) {
+            $enviados++
+            $manifesto[$item.Relative] = $item.Hash
+            Write-Host "    OK na nova tentativa: $($item.Relative)" -ForegroundColor Green
+        } else {
+            $aindaFalhando += $item.Relative
+        }
+    }
+    $falhas = $aindaFalhando
 }
 
 Write-Progress -Activity 'Enviando arquivos...' -Completed

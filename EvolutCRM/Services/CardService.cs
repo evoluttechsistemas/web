@@ -31,8 +31,8 @@ namespace EvolutCRM.Services
 SELECT Codigo, Descricao, CodCliente, NomeCliente, EmailCliente,
        Telefone, Celular, Whats, Ligacao, Telegram,
        DataCriacao, DataHoraUltimaGravacao, DataPrevisaoFechamento,
-       UsuarioCard, Status, Funil, FaixaLead, TelefoneWhatsApp,
-       ObservacaoCliente
+              UsuarioCard, Status, Funil, FaixaLead, TelefoneWhatsApp,
+       ObservacaoCliente, ISNULL(CodInstanciaWhatsApp, 0) AS CodInstanciaWhatsApp
 FROM CRMC
 WHERE Codigo = @Codigo 
   AND CodEmp = @Empresa";
@@ -69,6 +69,7 @@ WHERE Codigo = @Codigo
                 Funil = reader.IsDBNull(15) ? "" : reader.GetString(15),
                 TelefoneWhatsApp = reader.IsDBNull(17) ? "" : reader.GetString(17),
                 ObservacaoCliente = reader.IsDBNull(18) ? "" : reader.GetString(18),
+                CodInstanciaWhatsApp = reader.GetInt32(19),
                 FaixaLead = reader.IsDBNull(16) ? "" : reader.GetString(16).Trim().ToUpper()
             };
         }
@@ -916,9 +917,14 @@ ORDER BY Nome";
             await conn.OpenAsync();
 
             // ✅ Busca todos os usuários cadastrados
-            var sql = @"SELECT DISTINCT Usuario FROM Usuario WHERE ISNULL(Inativo,'N') = 'N' AND ISNULL(Help,'N') = 'S' ORDER BY Usuario";
+            var sql = @"SELECT DISTINCT Usuario FROM Usuario
+            WHERE CodEmp = @Empresa
+              AND ISNULL(Inativo,'N') = 'N'
+              AND ISNULL(Help,'N') = 'S'
+            ORDER BY Usuario";
 
             using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@Empresa", empresa);
             using var rd = await cmd.ExecuteReaderAsync();
 
             while (await rd.ReadAsync())

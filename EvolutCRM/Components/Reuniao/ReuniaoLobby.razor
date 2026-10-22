@@ -1,0 +1,290 @@
+@* Tela inicial das Reuniões: convites, reuniões em andamento e histórico *@
+@inject ReuniaoService ReuniaoService
+@inject ReuniaoConviteNotifier Notifier
+@inject UserState UserState
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="rn-lobby">
+    <div class="rn-lobby-inner">
+        <header class="rn-lobby-topo">
+            <div>
+                <h1>Reuniões</h1>
+                <p>Chame a equipe para uma conversa com áudio, vídeo e tela compartilhada, sem sair do HELP.</p>
+            </div>
+            <div class="rn-lobby-acoes">
+                <button type="button" class="rn-btn rn-btn--sec rn-btn--icone" title="Atualizar" @onclick="RecarregarAsync">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <button type="button" class="rn-btn rn-btn--primario rn-btn--grande" @onclick="() => MostrarNova = true">
+                    <i class="fa-solid fa-video"></i> Nova reunião
+                </button>
+            </div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(Erro))
+        {
+            <p class="rn-erro"><i class="fa-solid fa-circle-exclamation"></i>@Erro</p>
+        }
+
+        @if (Carregando)
+        {
+            <div class="rn-carregando">Carregando reuniões...</div>
+        }
+        else
+        {
+            @if (Convites.Count > 0)
+            {
+                <section class="rn-secao">
+                    <h2 class="rn-secao-titulo">Convites para você <small>@Convites.Count aguardando resposta</small></h2>
+                    <div class="rn-lista rn-lista--convites">
+                        @foreach (var r in Convites)
+                        {
+                            <div class="rn-linha" @key="r.Codigo">
+                                <RnAvatar Usuario="@r.ConvidadoPor" Tamanho="lg" />
+                                <div class="rn-linha-texto">
+                                    <p class="rn-linha-titulo">@r.Titulo</p>
+                                    <p class="rn-linha-meta">@ReuniaoVisual.Nome(r.ConvidadoPor) chamou você @ReuniaoVisual.Tempo(r.DataConvite)</p>
+                                </div>
+                                <div class="rn-linha-lado">@(ChipSala(r))</div>
+                                <div class="rn-linha-acoes">
+                                    <button type="button" class="rn-btn rn-btn--fantasma" @onclick="() => RecusarAsync(r)">Recusar</button>
+                                    <button type="button" class="rn-btn rn-btn--verde" @onclick="() => Abrir(r.Codigo)"><i class="fa-solid fa-video"></i> Entrar</button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+
+            <section class="rn-secao">
+                <h2 class="rn-secao-titulo">Em andamento @if (EmAndamento.Count > 0) {<small>@EmAndamento.Count</small>}</h2>
+                @if (EmAndamento.Count == 0)
+                {
+                    <div class="rn-vazio">
+                        <div class="rn-vazio-icone"><i class="fa-solid fa-video"></i></div>
+                        <h3>Nenhuma reunião aberta agora</h3>
+                        <p>Crie uma reunião e escolha quem chamar. A pessoa recebe a chamada na tela, com som, mesmo se estiver em outra aba do HELP.</p>
+                        <button type="button" class="rn-btn rn-btn--primario" @onclick="() => MostrarNova = true"><i class="fa-solid fa-plus"></i> Nova reunião</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="rn-lista">
+                        @foreach (var r in EmAndamento)
+                        {
+                            <div class="rn-linha" @key="r.Codigo">
+                                <RnAvatar Usuario="@r.CriadoPor" Tamanho="lg" NaSala="@r.UsuariosNaSala.Contains(r.CriadoPor, StringComparer.OrdinalIgnoreCase)" />
+                                <div class="rn-linha-texto">
+                                    <p class="rn-linha-titulo">@r.Titulo</p>
+                                    <p class="rn-linha-meta">
+                                        @(r.MeuPapel == "Organizador" ? "Criada por você" : $"Criada por {ReuniaoVisual.Nome(r.CriadoPor)}")
+                                        @(" · começou " + ReuniaoVisual.Tempo(r.DataCriacao))
+                                        @if (r.MinhaResposta == "Recusado") { <span> · você recusou</span> }
+                                    </p>
+                                </div>
+                                <div class="rn-linha-lado">
+                                    @(Pilha(r.Participantes, r.UsuariosNaSala))
+                                    @(ChipSala(r))
+                                </div>
+                                <div class="rn-linha-acoes">
+                                    <button type="button" class="rn-btn @(r.QtdNaSala > 0 ? "rn-btn--verde" : "rn-btn--primario")" @onclick="() => Abrir(r.Codigo)">
+                                        <i class="fa-solid fa-video"></i> @(r.JaEntrei ? "Voltar" : "Entrar")
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+
+            @if (Historico.Count > 0)
+            {
+                <section class="rn-secao">
+                    <h2 class="rn-secao-titulo">Recentes <small>últimos 30 dias</small></h2>
+                    <div class="rn-lista">
+                        @foreach (var r in Historico)
+                        {
+                            <div class="rn-linha" @key="r.Codigo">
+                                <span class="rn-av rn-av--lg" style="background:#E9EEF6; color:#4A5A72;"><i class="fa-solid fa-clock-rotate-left"></i></span>
+                                <div class="rn-linha-texto">
+                                    <p class="rn-linha-titulo">@r.Titulo</p>
+                                    <p class="rn-linha-meta">
+                                        @r.DataCriacao.ToString("dd/MM 'às' HH:mm") · @ReuniaoVisual.Duracao(r.Duracao) · @(r.QtdParticipantes == 1 ? "1 pessoa" : $"{r.QtdParticipantes} pessoas")
+                                    </p>
+                                </div>
+                                <div class="rn-linha-lado">@(Pilha(r.Participantes, NinguemNaSala))</div>
+                                <div class="rn-linha-acoes">
+                                    @if (r.QtdMensagens > 0)
+                                    {
+                                        <button type="button" class="rn-btn rn-btn--sec" @onclick="() => VerConversaAsync(r)">
+                                            <i class="fa-regular fa-message"></i> Conversa (@r.QtdMensagens)
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </section>
+            }
+        }
+    </div>
+</div>
+
+@if (MostrarNova)
+{
+    <ReuniaoConvidarModal OnFechar="() => MostrarNova = false" OnConcluido="AoCriar" />
+}
+
+@if (ConversaAberta is not null)
+{
+    <div class="rn-modal-fundo" @onclick="() => ConversaAberta = null">
+        <section class="rn-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <header class="rn-modal-topo">
+                <div>
+                    <h2>@ConversaAberta.Titulo</h2>
+                    <p>Conversa da reunião de @ConversaAberta.DataCriacao.ToString("dd/MM 'às' HH:mm")</p>
+                </div>
+                <button type="button" class="rn-btn rn-btn--fantasma rn-btn--icone" title="Fechar" @onclick="() => ConversaAberta = null"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="rn-modal-corpo" style="padding:0;">
+                <div class="rn-chat-lista">
+                    @foreach (var m in MensagensConversa)
+                    {
+                        var minha = m.Usuario.Equals(UsuarioAtual, StringComparison.OrdinalIgnoreCase);
+                        <div class="rn-msg @(minha ? "minha" : "")">
+                            <p class="rn-msg-autor"><strong>@(minha ? "Você" : ReuniaoVisual.Nome(m.Usuario))</strong> · @m.DataHora.ToString("HH:mm")</p>
+                            <div class="rn-msg-texto">@m.Mensagem</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private static readonly List<string> NinguemNaSala = [];
+    private List<ReuniaoModel> Convites = [];
+    private List<ReuniaoModel> EmAndamento = [];
+    private List<ReuniaoModel> Historico = [];
+    private List<ReuniaoMensagemModel> MensagensConversa = [];
+    private ReuniaoModel? ConversaAberta;
+    private bool Carregando = true;
+    private bool MostrarNova;
+    private string Erro = "";
+    private Timer? _timer;
+    private int _recarregando;
+
+    private string UsuarioAtual => (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+
+    protected override async Task OnInitializedAsync()
+    {
+        Notifier.OnEvento += AoEvento;
+        await RecarregarAsync();
+        Carregando = false;
+
+        // Atualiza sozinho (contagem de quem está na sala e "há X min")
+        _timer = new Timer(_ => _ = InvokeAsync(RecarregarAsync), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private void AoEvento(ReuniaoEvento ev)
+    {
+        if (ev.CodEmp != UserState.CurrentCompanyId) return;
+        // Recarrega se o evento é sobre uma reunião que já aparece aqui ou se é um convite para mim
+        var relevante = ev.Destinatarios.Contains(UsuarioAtual, StringComparer.OrdinalIgnoreCase)
+                        || Convites.Concat(EmAndamento).Any(r => r.Codigo == ev.CodReuniao);
+        if (relevante) _ = InvokeAsync(RecarregarAsync);
+    }
+
+    private async Task RecarregarAsync()
+    {
+        if (Interlocked.Exchange(ref _recarregando, 1) == 1) return;
+        try
+        {
+            Erro = "";
+            var abertas = await ReuniaoService.ListarAbertasAsync();
+            Convites = abertas.Where(r => r.ConvitePendente).ToList();
+            EmAndamento = abertas.Where(r => !r.ConvitePendente)
+                .OrderByDescending(r => r.QtdNaSala > 0)
+                .ThenByDescending(r => r.DataCriacao)
+                .ToList();
+            Historico = await ReuniaoService.ListarHistoricoAsync();
+        }
+        catch (Exception ex)
+        {
+            Erro = "Não foi possível carregar as reuniões: " + ex.Message;
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _recarregando, 0);
+        }
+        StateHasChanged();
+    }
+
+    private void Abrir(int codigo) => Nav.NavigateTo($"/reunioes/{codigo}");
+
+    private void AoCriar(int codigo)
+    {
+        MostrarNova = false;
+        Abrir(codigo);
+    }
+
+    private async Task RecusarAsync(ReuniaoModel r)
+    {
+        try
+        {
+            await ReuniaoService.RecusarConviteAsync(r.Codigo);
+            await RecarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+    }
+
+    private async Task VerConversaAsync(ReuniaoModel r)
+    {
+        try
+        {
+            MensagensConversa = await ReuniaoService.ListarMensagensAsync(r.Codigo);
+            ConversaAberta = r;
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+    }
+
+    private RenderFragment ChipSala(ReuniaoModel r) => __builder =>
+    {
+        if (r.QtdNaSala > 0)
+        {
+            <span class="rn-chip rn-chip--vivo"><i></i>@(r.QtdNaSala == 1 ? "1 na sala" : $"{r.QtdNaSala} na sala")</span>
+        }
+        else
+        {
+            <span class="rn-chip rn-chip--vazio">Sala vazia</span>
+        }
+    };
+
+    private RenderFragment Pilha(List<string> usuarios, List<string> naSala) => __builder =>
+    {
+        <span class="rn-pilha">
+            @foreach (var u in usuarios.Take(4))
+            {
+                <RnAvatar Usuario="@u" Tamanho="sm" NaSala="@naSala.Contains(u, StringComparer.OrdinalIgnoreCase)" />
+            }
+            @if (usuarios.Count > 4)
+            {
+                <span class="rn-pilha-mais">+@(usuarios.Count - 4)</span>
+            }
+        </span>
+    };
+
+    public void Dispose()
+    {
+        Notifier.OnEvento -= AoEvento;
+        _timer?.Dispose();
+    }
+}

@@ -21,6 +21,11 @@ namespace EvolutCRM.Services
                                     -- 1) Responsável Offline e o cliente respondeu depois da última atividade dele
                                     (
                                         ISNULL(U.Online, 'N') = 'N'
+                                        -- Transferido para ele enquanto estava offline: fica com ele até ele entrar
+                                        AND NOT (
+                                            TicketChamadoC.DataHoraTransferencia IS NOT NULL
+                                            AND TicketChamadoC.DataHoraTransferencia > ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
+                                        )
                                         AND EXISTS (
                                             SELECT 1 FROM TicketChamadoD D
                                             WHERE D.CodTicketChamadoC = TicketChamadoC.Codigo
@@ -64,6 +69,15 @@ namespace EvolutCRM.Services
                                     -- 1) Responsável Offline e o cliente respondeu depois da última atividade dele
                                     (
                                         ISNULL(U.Online, 'N') = 'N'
+                                        -- Transferido para ele enquanto estava offline: fica com ele até ele entrar
+                                        AND NOT (
+                                            TicketChamadoC.DataHoraTransferencia IS NOT NULL
+                                            AND TicketChamadoC.DataHoraTransferencia > CASE
+                                                  WHEN ISNULL(U.UltimaAtividadeMobile, '2000-01-01') > ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
+                                                  THEN U.UltimaAtividadeMobile
+                                                  ELSE ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
+                                                END
+                                        )
                                         -- HELP Mobile aberto (atividade nos últimos 90s): o ticket continua com ele
                                         AND (U.UltimaAtividadeMobile IS NULL
                                              OR DATEDIFF(SECOND, U.UltimaAtividadeMobile, GETDATE()) > 90)

@@ -26,15 +26,18 @@ namespace EvolutCRM.Controllers
                     _config.GetConnectionString("Connection"));
                 await conn.OpenAsync();
 
+                // Só a empresa de quem fechou o HELP (o mesmo usuário pode existir em outra empresa)
                 using var cmd = new SqlCommand(@"
                     UPDATE Usuario
                     SET Online = 'N',
                         DataHoraUltimoPing = NULL
                     WHERE UPPER(LTRIM(RTRIM(Usuario)))
                         = UPPER(LTRIM(RTRIM(@Usuario)))
+                      AND (@CodEmp = 0 OR CodEmp = @CodEmp)
                       AND ISNULL(Inativo, 'N') = 'N'", conn);
 
                 cmd.Parameters.AddWithValue("@Usuario", dto.Usuario.Trim());
+                cmd.Parameters.AddWithValue("@CodEmp", dto.CodEmp);
                 await cmd.ExecuteNonQueryAsync();
             }
             catch { }
@@ -46,5 +49,6 @@ namespace EvolutCRM.Controllers
     public class MarcarOfflineDto
     {
         public string Usuario { get; set; } = "";
+        public int CodEmp { get; set; }
     }
 }

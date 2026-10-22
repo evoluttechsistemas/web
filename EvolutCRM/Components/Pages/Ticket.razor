@@ -6329,6 +6329,9 @@ private bool _finalizandoViaF2ComInsight = false;
             TicketAtual.CodCliente = cli.Codigo;
             NomeCliente = cli.Nome;
 
+            if (string.IsNullOrWhiteSpace(TicketAtual.ObservacaoCliente))
+                TicketAtual.ObservacaoCliente = await TicketService.BuscarObservacaoClienteAsync(cli.Codigo);
+
             // Persiste o vínculo imediatamente e propaga para o histórico do número
             await TicketService.SalvarCabecalhoTicketAsync(TicketAtual, UserState.CurrentUser ?? "");
             await TicketService.PropagarClientePorTelefoneAsync(TicketAtual.Codigo, cli.Codigo);

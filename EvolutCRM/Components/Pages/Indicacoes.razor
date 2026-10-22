@@ -1,0 +1,423 @@
+@page "/indicacoes"
+@inject IndicacaoService IndicacaoService
+@inject AdminService AdminService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<style>
+    .ig { min-height:100%; padding:24px clamp(16px, 3vw, 36px) 40px; background:#F4F7FB; color:#172033; font-family:inherit; }
+    .ig * { box-sizing:border-box; }
+    .ig-inner { max-width:1180px; margin:0 auto; }
+    .ig-topo { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:20px; }
+    .ig-topo h1 { margin:0; font-size:1.6rem; font-weight:700; }
+    .ig-topo p { margin:5px 0 0; color:#4A5A72; font-size:.9rem; max-width:62ch; }
+    .ig-btn { display:inline-flex; align-items:center; gap:8px; min-height:38px; padding:0 15px; border:1px solid transparent; border-radius:10px; font:inherit; font-size:.85rem; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .ig-btn:disabled { opacity:.55; cursor:not-allowed; }
+    .ig-btn--pri { background:#1768DF; color:#fff; }
+    .ig-btn--pri:hover:not(:disabled) { background:#0F55BF; }
+    .ig-btn--sec { background:#fff; color:#172033; border-color:#DCE5F1; }
+    .ig-btn--sec:hover:not(:disabled) { background:#F0F4FA; }
+    .ig-btn--icone { width:36px; padding:0; justify-content:center; }
+    .ig-btn:focus-visible, .ig-chip:focus-visible { outline:3px solid rgba(23,104,223,.4); outline-offset:2px; }
+
+    .ig-kpis { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:12px; margin-bottom:18px; }
+    .ig-kpi { background:#fff; border:1px solid #DCE5F1; border-radius:14px; padding:14px 16px; }
+    .ig-kpi span { display:block; color:#6B7A90; font-size:.78rem; }
+    .ig-kpi strong { display:block; margin-top:4px; font-size:1.45rem; font-weight:700; font-variant-numeric:tabular-nums; }
+    .ig-kpi.destaque { border-color:#B5E4E2; background:#F2FBFA; }
+    .ig-kpi.destaque strong { color:#03706E; }
+
+    .ig-filtros { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+    .ig-chip { min-height:34px; padding:0 13px; border:1px solid #DCE5F1; border-radius:999px; background:#fff; color:#4A5A72; font:inherit; font-size:.82rem; font-weight:600; cursor:pointer; }
+    .ig-chip.ativo { background:#172033; border-color:#172033; color:#fff; }
+    .ig-busca { margin-left:auto; position:relative; }
+    .ig-busca i { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:#7A8AA0; font-size:.8rem; }
+    .ig-busca input { width:280px; max-width:100%; height:36px; padding:0 12px 0 32px; border:1px solid #CAD7E8; border-radius:10px; font:inherit; font-size:.85rem; outline:none; }
+    .ig-busca input:focus { border-color:#1768DF; box-shadow:0 0 0 3px rgba(23,104,223,.15); }
+
+    .ig-tabela { background:#fff; border:1px solid #DCE5F1; border-radius:14px; overflow:hidden; }
+    .ig-linha { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.1fr) 150px 44px; gap:14px; align-items:center; padding:13px 16px; border-top:1px solid #EDF2F8; }
+    .ig-linha:first-child { border-top:0; }
+    .ig-linha.cab { background:#F8FAFD; color:#6B7A90; font-size:.76rem; font-weight:600; padding-top:10px; padding-bottom:10px; }
+    .ig-linha:not(.cab):hover { background:#FAFCFF; }
+    .ig-forte { margin:0; font-size:.9rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ig-sub { margin:2px 0 0; color:#7A8AA0; font-size:.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ig-whats { color:#128A46; text-decoration:none; font-weight:600; font-size:.86rem; }
+    .ig-whats:hover { text-decoration:underline; }
+    .ig-status { width:100%; height:34px; padding:0 8px; border:1px solid #CAD7E8; border-radius:9px; font:inherit; font-size:.82rem; font-weight:600; background:#fff; }
+    .ig-status.Recebida { color:#4B5675; }
+    .ig-status.EmContato { color:#2A24C2; border-color:#C9C7FF; background:#F5F4FF; }
+    .ig-status.Confirmada { color:#03605F; border-color:#B5E4E2; background:#F2FBFA; }
+    .ig-status.NaoFechou { color:#8A5A2B; border-color:#EBDCCB; background:#FCF8F4; }
+    .ig-obs { margin:4px 0 0; color:#4A5A72; font-size:.76rem; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ig-vazio { padding:40px 20px; text-align:center; color:#4A5A72; font-size:.9rem; }
+    .ig-erro { margin:0 0 14px; padding:10px 14px; border:1px solid #F6C9CB; border-radius:10px; background:#FFF4F4; color:#A2272C; font-size:.85rem; }
+    .ig-ok { margin:0 0 14px; padding:10px 14px; border:1px solid #B5E4E2; border-radius:10px; background:#F2FBFA; color:#03605F; font-size:.85rem; }
+
+    .ig-fundo { position:fixed; inset:0; z-index:2500; display:grid; place-items:center; padding:18px; background:rgba(10,22,42,.5); }
+    .ig-modal { width:min(560px,100%); max-height:90vh; overflow:auto; border-radius:16px; background:#fff; box-shadow:0 30px 80px -20px rgba(4,22,45,.45); }
+    .ig-modal header { display:flex; justify-content:space-between; gap:12px; padding:18px 20px 6px; }
+    .ig-modal h2 { margin:0; font-size:1.1rem; }
+    .ig-modal header p { margin:4px 0 0; color:#4A5A72; font-size:.84rem; }
+    .ig-modal-corpo { padding:12px 20px; }
+    .ig-modal footer { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px 18px; border-top:1px solid #EDF2F8; }
+    .ig-campo { display:grid; gap:6px; margin-bottom:12px; }
+    .ig-campo label { font-size:.8rem; font-weight:600; color:#4A5A72; }
+    .ig-campo input, .ig-campo select, .ig-campo textarea { padding:9px 12px; border:1px solid #CAD7E8; border-radius:10px; font:inherit; font-size:.88rem; outline:none; }
+    .ig-campo textarea { min-height:84px; resize:vertical; }
+    .ig-resultados { border:1px solid #DCE5F1; border-radius:10px; max-height:240px; overflow:auto; }
+    .ig-resultado { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border-top:1px solid #EEF2F8; font-size:.86rem; }
+    .ig-resultado:first-child { border-top:0; }
+    .ig-link { display:flex; gap:8px; margin-top:12px; }
+    .ig-link input { flex:1; min-width:0; height:38px; padding:0 10px; border:1px solid #CAD7E8; border-radius:10px; font:inherit; font-size:.8rem; background:#F8FAFD; }
+
+    @@media (max-width:980px) {
+        .ig-kpis { grid-template-columns:repeat(2, minmax(0,1fr)); }
+        .ig-linha { grid-template-columns:minmax(0,1fr) 150px 44px; }
+        .ig-linha .ig-col-whats, .ig-linha .ig-col-cliente { display:none; }
+        .ig-busca { margin-left:0; width:100%; }
+        .ig-busca input { width:100%; }
+    }
+</style>
+
+<div class="ig">
+    <div class="ig-inner">
+        @if (!PermissaoVerificada)
+        {
+            <div class="ig-vazio">Carregando...</div>
+        }
+        else if (!TemPermissao)
+        {
+            <div class="ig-vazio">Você não tem permissão para gerenciar as indicações. Peça a liberação de "Gerenciar indicações" em Admin › Permissões.</div>
+        }
+        else
+        {
+            <header class="ig-topo">
+                <div>
+                    <h1>Indicações</h1>
+                    <p>Empresas indicadas pelos clientes. Ao marcar "Virou cliente", o cliente que indicou ganha R$ 10 de desconto na mensalidade (só para clientes mensalistas).</p>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="ig-btn ig-btn--sec ig-btn--icone" title="Atualizar" @onclick="CarregarAsync"><i class="fa-solid fa-rotate-right"></i></button>
+                    <button type="button" class="ig-btn ig-btn--pri" @onclick="AbrirLink"><i class="fa-solid fa-link"></i> Link do cliente</button>
+                </div>
+            </header>
+
+            @if (!string.IsNullOrWhiteSpace(Erro))
+            {
+                <p class="ig-erro">@Erro</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(Mensagem))
+            {
+                <p class="ig-ok">@Mensagem</p>
+            }
+
+            <div class="ig-kpis">
+                <div class="ig-kpi"><span>Total</span><strong>@Resumo.Total</strong></div>
+                <div class="ig-kpi"><span>Novas (aguardando contato)</span><strong>@Resumo.Recebidas</strong></div>
+                <div class="ig-kpi"><span>Em contato</span><strong>@Resumo.EmContato</strong></div>
+                <div class="ig-kpi destaque"><span>Viraram cliente</span><strong>@Resumo.Confirmadas</strong></div>
+                <div class="ig-kpi" title="Só indicações de clientes mensalistas"><span>Descontos concedidos / mês</span><strong>@IndicacaoFormato.Moeda(Resumo.DescontoTotal)</strong></div>
+            </div>
+
+            <div class="ig-filtros">
+                <button type="button" class="ig-chip @(FiltroStatus == "" ? "ativo" : "")" @onclick="@(() => FiltrarAsync(""))">Todas</button>
+                @foreach (var s in IndicacaoStatus.Todos)
+                {
+                    <button type="button" class="ig-chip @(FiltroStatus == s ? "ativo" : "")" @onclick="() => FiltrarAsync(s)">@IndicacaoStatus.Rotulo(s)</button>
+                }
+                <div class="ig-busca">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input @bind="Busca" @bind:event="oninput" @bind:after="BuscarComAtrasoAsync" placeholder="Empresa, contato, WhatsApp ou cliente" />
+                </div>
+            </div>
+
+            <div class="ig-tabela">
+                <div class="ig-linha cab">
+                    <span>Empresa indicada</span>
+                    <span class="ig-col-whats">WhatsApp</span>
+                    <span class="ig-col-cliente">Indicada por</span>
+                    <span>Situação</span>
+                    <span></span>
+                </div>
+
+                @if (Carregando)
+                {
+                    <div class="ig-vazio">Carregando indicações...</div>
+                }
+                else if (Lista.Count == 0)
+                {
+                    <div class="ig-vazio">@(string.IsNullOrWhiteSpace(Busca) && FiltroStatus == "" ? "Nenhuma indicação ainda. Gere o link do cliente e envie para ele começar a indicar." : "Nenhuma indicação com esse filtro.")</div>
+                }
+                else
+                {
+                    @foreach (var i in Lista)
+                    {
+                        <div class="ig-linha" @key="i.Codigo">
+                            <div style="min-width:0;">
+                                <p class="ig-forte">@i.NomeFantasia</p>
+                                <p class="ig-sub">@i.NomeContato · @i.Segmento · @i.DataCriacao.ToString("dd/MM/yyyy HH:mm")</p>
+                                @if (!string.IsNullOrWhiteSpace(i.Observacao))
+                                {
+                                    <p class="ig-obs">@i.Observacao</p>
+                                }
+                            </div>
+                            <div class="ig-col-whats">
+                                <a class="ig-whats" href="https://wa.me/@i.WhatsApp" target="_blank" rel="noopener"><i class="fa-brands fa-whatsapp"></i> @i.WhatsAppFormatado</a>
+                            </div>
+                            <div class="ig-col-cliente" style="min-width:0;">
+                                <p class="ig-forte" style="font-weight:500;">@i.NomeCliente</p>
+                                <p class="ig-sub">Cód. @(i.CodCliente)@(i.ClienteMensalista ? "" : " · não mensalista (sem desconto)")@(i.DataStatus is null ? "" : $" · status por {i.UsuarioStatus} em {i.DataStatus:dd/MM}")</p>
+                            </div>
+                            <select class="ig-status @i.Status" value="@i.Status" @onchange="e => MudarStatusAsync(i, e.Value?.ToString())" aria-label="Situação da indicação">
+                                @foreach (var s in IndicacaoStatus.Todos)
+                                {
+                                    <option value="@s" selected="@(s == i.Status)">@IndicacaoStatus.Rotulo(s)</option>
+                                }
+                            </select>
+                            <button type="button" class="ig-btn ig-btn--sec ig-btn--icone" title="Anotação interna" @onclick="() => AbrirEdicao(i)"><i class="fa-regular fa-pen-to-square"></i></button>
+                        </div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@* ---------- Anotação / status ---------- *@
+@if (Editando is not null)
+{
+    <div class="ig-fundo" @onclick="() => Editando = null">
+        <section class="ig-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <header>
+                <div>
+                    <h2>@Editando.NomeFantasia</h2>
+                    <p>@Editando.NomeContato · @Editando.WhatsAppFormatado · indicada por @Editando.NomeCliente</p>
+                </div>
+                <button type="button" class="ig-btn ig-btn--sec ig-btn--icone" title="Fechar" @onclick="() => Editando = null"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="ig-modal-corpo">
+                <div class="ig-campo">
+                    <label for="ig-ed-status">Situação</label>
+                    <select id="ig-ed-status" @bind="EdStatus">
+                        @foreach (var s in IndicacaoStatus.Todos)
+                        {
+                            <option value="@s">@IndicacaoStatus.Rotulo(s)</option>
+                        }
+                    </select>
+                </div>
+                <div class="ig-campo">
+                    <label for="ig-ed-obs">Anotação interna (o cliente não vê)</label>
+                    <textarea id="ig-ed-obs" @bind="EdObservacao" maxlength="500" placeholder="Ex.: ligou dia 20, pediu proposta do PDV"></textarea>
+                </div>
+            </div>
+            <footer>
+                <button type="button" class="ig-btn ig-btn--sec" @onclick="() => Editando = null">Cancelar</button>
+                <button type="button" class="ig-btn ig-btn--pri" @onclick="SalvarEdicaoAsync">Salvar</button>
+            </footer>
+        </section>
+    </div>
+}
+
+@* ---------- Link do cliente ---------- *@
+@if (MostrarLink)
+{
+    <div class="ig-fundo" @onclick="() => MostrarLink = false">
+        <section class="ig-modal" role="dialog" aria-modal="true" @onclick:stopPropagation="true">
+            <header>
+                <div>
+                    <h2>Link de indicação do cliente</h2>
+                    <p>Cada cliente tem um link próprio. Ele abre sem senha e mostra só as indicações e a mensalidade dele.</p>
+                </div>
+                <button type="button" class="ig-btn ig-btn--sec ig-btn--icone" title="Fechar" @onclick="() => MostrarLink = false"><i class="fa-solid fa-xmark"></i></button>
+            </header>
+            <div class="ig-modal-corpo">
+                <div class="ig-campo">
+                    <label for="ig-cli">Buscar cliente</label>
+                    <input id="ig-cli" @bind="BuscaCliente" @bind:event="oninput" @bind:after="BuscarClientesAsync" placeholder="Nome, apelido, código ou CNPJ" autocomplete="off" />
+                </div>
+                @if (Clientes.Count > 0)
+                {
+                    <div class="ig-resultados">
+                        @foreach (var c in Clientes)
+                        {
+                            <div class="ig-resultado">
+                                <span>@c.Codigo · @(c.Exibicao)@(string.IsNullOrWhiteSpace(c.Documento) ? "" : $" · {c.DocumentoFormatado}")</span>
+                                <button type="button" class="ig-btn ig-btn--sec" @onclick="() => GerarLinkAsync(c)">Gerar link</button>
+                            </div>
+                        }
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(LinkGerado))
+                {
+                    <p class="ig-sub" style="margin-top:14px;">Link de <strong>@ClienteDoLink</strong>:</p>
+                    <div class="ig-link">
+                        <input readonly value="@LinkGerado" aria-label="Link do cliente" />
+                        <button type="button" class="ig-btn ig-btn--pri" @onclick="CopiarLinkAsync"><i class="fa-regular fa-copy"></i> @(Copiado ? "Copiado" : "Copiar")</button>
+                        <a class="ig-btn ig-btn--sec" href="@LinkGerado" target="_blank" rel="noopener">Abrir</a>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+}
+
+@code {
+    private bool PermissaoVerificada;
+    private bool TemPermissao;
+    private bool Carregando = true;
+    private List<IndicacaoModel> Lista = [];
+    private IndicacaoResumoModel Resumo = new();
+    private string FiltroStatus = "";
+    private string Busca = "";
+    private string Erro = "";
+    private string Mensagem = "";
+    private CancellationTokenSource? _buscaCts;
+
+    private IndicacaoModel? Editando;
+    private string EdStatus = IndicacaoStatus.Recebida;
+    private string EdObservacao = "";
+
+    private bool MostrarLink;
+    private string BuscaCliente = "";
+    private List<IndicacaoClienteBuscaModel> Clientes = [];
+    private string LinkGerado = "";
+    private string ClienteDoLink = "";
+    private bool Copiado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tentativas = 0;
+        while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
+        try
+        {
+            var perms = await AdminService.GetPermissoesUsuarioAsync((UserState.CurrentUser ?? "").Trim().ToUpperInvariant());
+            TemPermissao = perms.Contains("INDICACOES_GERENCIAR");
+        }
+        catch { TemPermissao = false; }
+        PermissaoVerificada = true;
+
+        if (TemPermissao) await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        Carregando = true;
+        Erro = "";
+        try
+        {
+            Lista = await IndicacaoService.ListarEmpresaAsync(FiltroStatus, Busca);
+            Resumo = await IndicacaoService.ResumoEmpresaAsync();
+        }
+        catch (Exception ex)
+        {
+            Erro = "Não foi possível carregar as indicações: " + ex.Message;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task FiltrarAsync(string status)
+    {
+        FiltroStatus = status;
+        await CarregarAsync();
+    }
+
+    // Espera a pessoa parar de digitar antes de consultar o banco
+    private async Task BuscarComAtrasoAsync()
+    {
+        _buscaCts?.Cancel();
+        var cts = _buscaCts = new CancellationTokenSource();
+        try { await Task.Delay(350, cts.Token); }
+        catch (TaskCanceledException) { return; }
+        await CarregarAsync();
+    }
+
+    private async Task MudarStatusAsync(IndicacaoModel i, string? novo)
+    {
+        if (string.IsNullOrWhiteSpace(novo) || novo == i.Status) return;
+        await SalvarAsync(i, novo, i.Observacao);
+    }
+
+    private void AbrirEdicao(IndicacaoModel i)
+    {
+        Editando = i;
+        EdStatus = i.Status;
+        EdObservacao = i.Observacao;
+    }
+
+    private async Task SalvarEdicaoAsync()
+    {
+        if (Editando is null) return;
+        var item = Editando;
+        Editando = null;
+        await SalvarAsync(item, EdStatus, EdObservacao);
+    }
+
+    private async Task SalvarAsync(IndicacaoModel i, string status, string? observacao)
+    {
+        Erro = "";
+        Mensagem = "";
+        try
+        {
+            var virouCliente = status == IndicacaoStatus.Confirmada && i.Status != IndicacaoStatus.Confirmada;
+            var desfez = i.Status == IndicacaoStatus.Confirmada && status != IndicacaoStatus.Confirmada;
+            await IndicacaoService.AtualizarAsync(i.Codigo, status, observacao);
+            Mensagem = virouCliente
+                ? (i.ClienteMensalista
+                    ? $"{i.NomeFantasia} virou cliente. {i.NomeCliente} ganhou R$ 10 de desconto na mensalidade."
+                    : $"{i.NomeFantasia} virou cliente. {i.NomeCliente} não é mensalista, então não gera desconto.")
+                : desfez
+                    ? $"{i.NomeFantasia} não conta mais como cliente. O desconto de {i.NomeCliente} foi retirado."
+                    : $"{i.NomeFantasia} atualizada para \"{IndicacaoStatus.Rotulo(status)}\".";
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+    }
+
+    private void AbrirLink()
+    {
+        MostrarLink = true;
+        BuscaCliente = "";
+        Clientes = [];
+        LinkGerado = "";
+        Copiado = false;
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        try { Clientes = await IndicacaoService.BuscarClientesAsync(BuscaCliente); }
+        catch (Exception ex) { Erro = ex.Message; }
+    }
+
+    private async Task GerarLinkAsync(IndicacaoClienteBuscaModel c)
+    {
+        try
+        {
+            var token = await IndicacaoService.ObterOuCriarTokenEmpresaAtualAsync(c.Codigo);
+            LinkGerado = $"{Nav.BaseUri.TrimEnd('/')}/indicacao/{token}";
+            ClienteDoLink = c.Exibicao;
+            Copiado = false;
+        }
+        catch (Exception ex)
+        {
+            Erro = ex.Message;
+        }
+    }
+
+    private async Task CopiarLinkAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", LinkGerado);
+            Copiado = true;
+        }
+        catch { }
+    }
+}

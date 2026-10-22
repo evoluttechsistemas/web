@@ -1,0 +1,53 @@
+﻿@page "/reunioes"
+@page "/reunioes/{Id:int}"
+@using EvolutCRM.Components.Reuniao
+@inject AdminService AdminService
+@inject UserState UserState
+
+@if (!PermissaoVerificada)
+{
+    <div class="rn-previa"><div class="rn-carregando">Carregando...</div></div>
+}
+else if (!TemPermissao)
+{
+    <div class="rn-fim">
+        <div>
+            <div class="rn-vazio-icone"><i class="fa-solid fa-lock"></i></div>
+            <h1>Reuniões não liberadas para você</h1>
+            <p>Peça para um administrador ativar a permissão "Acessar reuniões" em Admin › Permissões.</p>
+        </div>
+    </div>
+}
+else if (Id is > 0)
+{
+    <ReuniaoSala CodReuniao="Id.Value" />
+}
+else
+{
+    <ReuniaoLobby />
+}
+
+@code {
+    // A rota "reunioes/5" chega pelo sistema de abas como parâmetro "id"
+    [Parameter] public int? Id { get; set; }
+
+    private bool PermissaoVerificada;
+    private bool TemPermissao;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tentativas = 0;
+        while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
+
+        try
+        {
+            var perms = await AdminService.GetPermissoesUsuarioAsync((UserState.CurrentUser ?? "").Trim().ToUpperInvariant());
+            TemPermissao = perms.Contains("REUNIOES_ACESSAR");
+        }
+        catch
+        {
+            TemPermissao = false;
+        }
+        PermissaoVerificada = true;
+    }
+}

@@ -1344,7 +1344,15 @@ SELECT T.Codigo, T.Status, T.CodSetor, ISNULL(T.CodCategoria,0),
        T.CodCliente, T.Assunto, T.CodSituacao, T.Novo,
        ISNULL(T.Versao,''), ISNULL(T.CodTipo,1),
        ISNULL(T.Prioridade,2), ISNULL(T.TelefoneWhatsApp,''),
-       ISNULL(T.ObservacaoCliente,'') AS ObservacaoCliente,
+              COALESCE(NULLIF(LTRIM(RTRIM(T.ObservacaoCliente)), ''),
+                (SELECT TOP 1 X.ObservacaoCliente
+                 FROM TicketChamadoC X
+                 WHERE X.CodEmp = T.CodEmp
+                   AND X.CodCliente = T.CodCliente
+                   AND ISNULL(T.CodCliente, 0) > 0
+                   AND NULLIF(LTRIM(RTRIM(X.ObservacaoCliente)), '') IS NOT NULL
+                 ORDER BY X.DataHoraUltimaGravacao DESC, X.Codigo DESC),
+                '') AS ObservacaoCliente,
        ISNULL(T.AssuntoSugerido,'') AS AssuntoSugerido,
        ISNULL(T.SentimentoCliente,'') AS SentimentoCliente,
        ISNULL(T.SentimentoEmoji,'') AS SentimentoEmoji,
@@ -1803,6 +1811,9 @@ SET
     CodSetor = @CodSetor,
     CodTipo = @CodTipo,
     Prioridade = @Prioridade,
+    DataHoraTransferencia = CASE
+        WHEN UPPER(LTRIM(RTRIM(ISNULL(Usuario, '')))) <> UPPER(LTRIM(RTRIM(ISNULL(@Usuario, ''))))
+        THEN GETDATE() ELSE DataHoraTransferencia END,
     Usuario = @Usuario,
     Versao = @Versao,
     ObservacaoCliente = @ObservacaoCliente,
@@ -1840,6 +1851,7 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn))
                 AddCodEmp(cmdUpdate);
                 cmdUpdate.Parameters.AddWithValue("@ObservacaoCliente", ticket.ObservacaoCliente ?? "");
                 await cmdUpdate.ExecuteNonQueryAsync();
+                await PropagarObservacaoClienteAsync(ticket.CodCliente, ticket.ObservacaoCliente);
             }
 
             byte[]? imagemBytes = null;
@@ -3195,6 +3207,9 @@ SET
     CodSetor = @CodSetor,
     CodTipo = @CodTipo,
     Prioridade = @Prioridade,
+    DataHoraTransferencia = CASE
+        WHEN UPPER(LTRIM(RTRIM(ISNULL(Usuario, '')))) <> UPPER(LTRIM(RTRIM(ISNULL(@Usuario, ''))))
+        THEN GETDATE() ELSE DataHoraTransferencia END,
     Usuario = @Usuario,
     Versao = @Versao,
     UsuarioUltimaGravacao = @UsuarioQueSalvou,
@@ -3235,6 +3250,7 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn);
             cmdUpdate.Parameters.AddWithValue("@UsuarioAbertura", ticket.UsuarioAbertura ?? "");
 
             await cmdUpdate.ExecuteNonQueryAsync();
+            await PropagarObservacaoClienteAsync(ticket.CodCliente, ticket.ObservacaoCliente);
 
             return (true, "Ticket salvo com sucesso.");
         }
@@ -3890,6 +3906,36 @@ ORDER BY
                 l.Add(rd.IsDBNull(1) ? "" : rd.GetString(1));
             }
             return mapa;
+        }
+
+        public async Task PropagarObservacaoClienteAsync(int codCliente, string? observacao)
+        {
+            if (codCliente <= 0) return;
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(@"
+        UPDATE TicketChamadoC
+        SET ObservacaoCliente = @Obs
+        WHERE CodEmp = @CodEmp AND CodCliente = @CodCliente
+          AND ISNULL(ObservacaoCliente, '') <> ISNULL(@Obs, '')", conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+            cmd.Parameters.AddWithValue("@Obs", (observacao ?? "").Trim());
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public async Task<string> BuscarObservacaoClienteAsync(int codCliente)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(@"
+        SELECT TOP 1 ObservacaoCliente FROM TicketChamadoC
+        WHERE CodEmp = @CodEmp AND CodCliente = @CodCliente
+          AND NULLIF(LTRIM(RTRIM(ObservacaoCliente)), '') IS NOT NULL
+        ORDER BY DataHoraUltimaGravacao DESC, Codigo DESC", conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+            return (await cmd.ExecuteScalarAsync())?.ToString() ?? "";
         }
     }
 }

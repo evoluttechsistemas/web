@@ -1,0 +1,238 @@
+@* Chamada recebida: aparece em qualquer tela do HELP quando alguém convida você para uma reunião.
+   Fica no MainLayout. Tempo real pelo ReuniaoConviteNotifier + conferência no banco a cada 20 s
+   (pega convites feitos enquanto você estava deslogado ou se o servidor reiniciou). *@
+@inject ReuniaoService ReuniaoService
+@inject ReuniaoConviteNotifier Notifier
+@inject ReuniaoPresencaStore Presenca
+@inject UserState UserState
+@inject AbaService Abas
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@if (Chamadas.Count > 0)
+{
+    <div class="rn-chamadas" role="alert" aria-live="assertive">
+        @foreach (var c in Chamadas)
+        {
+            <div class="rn-chamada" @key="c.CodReuniao">
+                <button type="button" class="rn-chamada-depois" title="Responder depois" @onclick="() => DepoisAsync(c)">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div class="rn-chamada-topo">
+                    <span class="rn-sonar"><RnAvatar Usuario="@c.ConvidadoPor" Tamanho="lg" /></span>
+                    <div class="rn-chamada-texto">
+                        <p class="rn-chamada-quem"><strong style="color:#fff;">@ReuniaoVisual.Nome(c.ConvidadoPor)</strong> está chamando você</p>
+                        <p class="rn-chamada-titulo">@c.Titulo</p>
+                    </div>
+                </div>
+                <div class="rn-chamada-acoes">
+                    <button type="button" class="rn-btn rn-chamada-recusar" @onclick="() => RecusarAsync(c)">
+                        <i class="fa-solid fa-phone-slash"></i> Recusar
+                    </button>
+                    <button type="button" class="rn-btn rn-btn--verde" @onclick="() => EntrarAsync(c)">
+                        <i class="fa-solid fa-video"></i> Entrar
+                    </button>
+                </div>
+                <span class="rn-chamada-tempo" style="animation-duration:@(SegundosTocando)s"></span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Convite que tocou e ninguém respondeu (ou "responder depois"): vai para o painel de notificações.</summary>
+    [Parameter] public EventCallback<ReuniaoConviteModel> OnConvitePerdido { get; set; }
+
+    private const int SegundosTocando = 45;
+
+    private readonly List<ReuniaoConviteModel> Chamadas = [];
+    private readonly Dictionary<int, DateTime> UltimoAviso = new();
+    private readonly Dictionary<int, CancellationTokenSource> Expiracoes = new();
+    private IJSObjectReference? js;
+    private Timer? _timer;
+    private bool _iniciado;
+    private bool _descartado;
+    private int _conferindo;
+
+    private string UsuarioAtual => (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _iniciado) return;
+        _iniciado = true;
+
+        var tentativas = 0;
+        while (!UserState.IsReady && tentativas < 200 && !_descartado) { await Task.Delay(100); tentativas++; }
+        if (_descartado || !UserState.IsReady) return;
+
+        try { js = await JS.InvokeAsync<IJSObjectReference>("import", "./js/reunioes-convite.js?v=1"); }
+        catch { /* sem som, mas o cartão aparece */ }
+
+        Notifier.OnEvento += AoEvento;
+        await ConferirBancoAsync();
+        _timer = new Timer(_ => _ = InvokeAsync(ConferirBancoAsync), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+    }
+
+    private void AoEvento(ReuniaoEvento ev)
+    {
+        if (_descartado || ev.CodEmp != UserState.CurrentCompanyId) return;
+        var paraMim = ev.Destinatarios.Contains(UsuarioAtual, StringComparer.OrdinalIgnoreCase);
+
+        switch (ev.Tipo)
+        {
+            case "Convite" when paraMim:
+                _ = InvokeAsync(() => MostrarAsync(new ReuniaoConviteModel
+                {
+                    CodReuniao = ev.CodReuniao,
+                    Titulo = ev.Titulo,
+                    ConvidadoPor = ev.Remetente,
+                    DataConvite = DateTime.Now
+                }));
+                break;
+
+            case "Encerrada":
+                _ = InvokeAsync(() => RemoverAsync(ev.CodReuniao));
+                break;
+
+            case "Presenca" when Chamadas.Any(c => c.CodReuniao == ev.CodReuniao):
+                // Entrou na reunião por outra aba/janela: para de tocar
+                if (Presenca.UsuarioNaSala(ev.CodReuniao, UsuarioAtual))
+                    _ = InvokeAsync(() => RemoverAsync(ev.CodReuniao));
+                break;
+
+            case "Recusado" when paraMim:
+                var texto = $"{ReuniaoVisual.Nome(ev.Remetente)} recusou o convite para \"{ev.Titulo}\"";
+                _ = InvokeAsync(async () =>
+                {
+                    try { await JS.InvokeVoidAsync("crmToast", texto, "warning"); } catch { }
+                });
+                break;
+        }
+    }
+
+    private async Task ConferirBancoAsync()
+    {
+        if (_descartado || Interlocked.Exchange(ref _conferindo, 1) == 1) return;
+        try
+        {
+            var convites = await ReuniaoService.ListarConvitesRecentesAsync(3);
+            foreach (var c in convites)
+            {
+                // Já avisado por este convite (o relógio do banco pode diferir um pouco do servidor)
+                if (UltimoAviso.TryGetValue(c.CodReuniao, out var quando) && (c.DataConvite - quando).TotalMinutes < 2)
+                    continue;
+                await MostrarAsync(c);
+            }
+        }
+        catch { /* falha momentânea de banco: tenta de novo no próximo ciclo */ }
+        finally
+        {
+            Interlocked.Exchange(ref _conferindo, 0);
+        }
+    }
+
+    private async Task MostrarAsync(ReuniaoConviteModel convite)
+    {
+        if (_descartado) return;
+        if (Chamadas.Any(c => c.CodReuniao == convite.CodReuniao)) return;
+        if (Presenca.UsuarioNaSala(convite.CodReuniao, UsuarioAtual)) return;
+        if ((Abas.RotaAtiva ?? "") == $"reunioes/{convite.CodReuniao}") return;   // já está na tela da reunião
+
+        UltimoAviso[convite.CodReuniao] = DateTime.Now;
+        Chamadas.Add(convite);
+
+        var cts = new CancellationTokenSource();
+        Expiracoes[convite.CodReuniao] = cts;
+        _ = ExpirarAsync(convite, cts.Token);
+
+        StateHasChanged();
+
+        if (js is not null)
+        {
+            try
+            {
+                await js.InvokeVoidAsync("tocarToque");
+                await js.InvokeVoidAsync("notificar",
+                    $"📹 {ReuniaoVisual.Nome(convite.ConvidadoPor)} está chamando você",
+                    convite.Titulo);
+            }
+            catch { }
+        }
+    }
+
+    private async Task ExpirarAsync(ReuniaoConviteModel convite, CancellationToken token)
+    {
+        try { await Task.Delay(TimeSpan.FromSeconds(SegundosTocando), token); }
+        catch (TaskCanceledException) { return; }
+
+        if (_descartado) return;
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (!Chamadas.Any(c => c.CodReuniao == convite.CodReuniao)) return;
+                await RemoverAsync(convite.CodReuniao);
+                await OnConvitePerdido.InvokeAsync(convite);
+            });
+        }
+        catch { }
+    }
+
+    private async Task RemoverAsync(int codReuniao)
+    {
+        Chamadas.RemoveAll(c => c.CodReuniao == codReuniao);
+        if (Expiracoes.Remove(codReuniao, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+
+        if (Chamadas.Count == 0 && js is not null)
+        {
+            try { await js.InvokeVoidAsync("pararAvisos"); } catch { }
+        }
+        StateHasChanged();
+    }
+
+    private async Task EntrarAsync(ReuniaoConviteModel c)
+    {
+        await RemoverAsync(c.CodReuniao);
+        Nav.NavigateTo($"/reunioes/{c.CodReuniao}");
+    }
+
+    private async Task RecusarAsync(ReuniaoConviteModel c)
+    {
+        await RemoverAsync(c.CodReuniao);
+        try { await ReuniaoService.RecusarConviteAsync(c.CodReuniao); } catch { }
+    }
+
+    private async Task DepoisAsync(ReuniaoConviteModel c)
+    {
+        await RemoverAsync(c.CodReuniao);
+        await OnConvitePerdido.InvokeAsync(c);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _descartado = true;
+        Notifier.OnEvento -= AoEvento;
+        _timer?.Dispose();
+        foreach (var cts in Expiracoes.Values)
+        {
+            try { cts.Cancel(); cts.Dispose(); } catch { }
+        }
+        Expiracoes.Clear();
+
+        if (js is not null)
+        {
+            try
+            {
+                await js.InvokeVoidAsync("pararAvisos");
+                await js.DisposeAsync();
+            }
+            catch (JSDisconnectedException) { }
+            catch { }
+        }
+    }
+}

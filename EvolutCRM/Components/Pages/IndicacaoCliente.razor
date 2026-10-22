@@ -1,0 +1,639 @@
+@page "/indicacao/{Token}"
+@layout TutorialPublicLayout
+@attribute [AllowAnonymous]
+@using EvolutCRM.Components.Layout
+@using Microsoft.AspNetCore.Authorization
+@inject IndicacaoService IndicacaoService
+
+<PageTitle>Indique e ganhe · EvolutTech</PageTitle>
+<HeadContent>
+    <meta name="theme-color" content="#0A3A8F" />
+</HeadContent>
+
+<style>
+    /* ================================================================
+       Indique e ganhe — página pública do cliente (prefixo ix-)
+       Cores: azul #0A3A8F / #1768DF (o mesmo do HELP) · verde-água #009494
+       ================================================================ */
+    .ix {
+        --ix-indigo: #0A3A8F; --ix-indigo-2: #1768DF; --ix-indigo-3: #072A6B;
+        --ix-teal: #009494; --ix-teal-2: #00B3A6; --ix-teal-claro: #E0F5F3;
+        --ix-tinta: #11163A; --ix-texto: #4A5276; --ix-suave: #8A91B2;
+        --ix-borda: #E3E6F2; --ix-fundo: #F3F5FB; --ix-papel: #FFFFFF;
+        --ix-raio: 22px;
+        min-height: 100vh; background: var(--ix-fundo); color: var(--ix-tinta);
+        font-family: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    .ix *, .ix *::before, .ix *::after { box-sizing: border-box; }
+    .ix-wrap { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---------- Topo + hero ---------- */
+    .ix-hero {
+        position: relative; isolation: isolate; color: #fff; padding-bottom: 120px;
+        background:
+            radial-gradient(900px 420px at 85% -10%, rgba(0,179,166,.35), transparent 60%),
+            radial-gradient(700px 380px at -10% 120%, rgba(23,104,223,.55), transparent 60%),
+            var(--ix-indigo);
+    }
+    .ix-hero::after { /* trama de pontos discreta */
+        content: ""; position: absolute; inset: 0; z-index: -1; opacity: .18;
+        background-image: radial-gradient(rgba(255,255,255,.55) 1px, transparent 1.2px);
+        background-size: 22px 22px;
+        mask-image: linear-gradient(180deg, #000 0%, transparent 85%);
+    }
+    .ix-topo { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0; }
+    .ix-marca { display: inline-flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; }
+    .ix-marca img { height: 64px; width: auto; padding: 6px 10px; border-radius: 16px; background: #fff; box-shadow: 0 10px 24px -14px rgba(0,0,0,.5); }
+    .ix-marca span { font-weight: 600; font-size: 1.05rem; opacity: .95; }
+    .ix-doc { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); font-size: .8rem; color: #E1EBFF; white-space: nowrap; }
+
+    .ix-hero-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr); gap: 40px; align-items: center; padding-top: 28px; }
+    .ix-ola { margin: 0 0 6px; font-size: 1rem; color: #BFD6FF; font-weight: 500; }
+    .ix-titulo { margin: 0; font-size: clamp(2rem, 4.6vw, 3.25rem); line-height: 1.04; font-weight: 700; letter-spacing: -.025em; }
+    .ix-sub { margin: 18px 0 0; max-width: 46ch; color: #D3E2FF; font-size: 1.04rem; line-height: 1.55; }
+
+    /* Data de início — informação mais importante da página */
+    .ix-vigencia {
+        display: inline-flex; align-items: center; gap: 14px; margin-top: 26px; padding: 16px 22px;
+        border-radius: 18px; background: #FFC83D; color: #2A1E00;
+        box-shadow: 0 18px 36px -18px rgba(0,0,0,.6);
+    }
+    .ix-vigencia i { font-size: 1.9rem; }
+    .ix-vigencia p { margin: 0; font-size: clamp(1.2rem, 2.6vw, 1.6rem); font-weight: 600; line-height: 1.2; letter-spacing: -.01em; }
+    .ix-vigencia strong { font-weight: 800; white-space: nowrap; }
+
+    /* ---------- Cartão da mensalidade (o destaque da página) ---------- */
+    .ix-mens {
+        position: relative; padding: 26px; border-radius: 28px; color: var(--ix-tinta);
+        background: var(--ix-papel); box-shadow: 0 40px 80px -40px rgba(6,30,80,.75), 0 0 0 1px rgba(255,255,255,.6) inset;
+    }
+    .ix-mens-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+    .ix-mens-topo h2 { margin: 0; font-size: 1rem; font-weight: 700; }
+    .ix-selo { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: .74rem; font-weight: 700; background: var(--ix-teal-claro); color: #03706B; }
+    .ix-selo.off { background: #EEF0F8; color: var(--ix-texto); }
+
+    .ix-gauge-area { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: 22px; align-items: center; }
+    .ix-gauge { position: relative; width: 168px; aspect-ratio: 1; }
+    .ix-gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .ix-gauge .trilho { fill: none; stroke: #ECEEF7; stroke-width: 14; }
+    .ix-gauge .arco { fill: none; stroke: url(#ix-grad); stroke-width: 14; stroke-linecap: round; transition: stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1); }
+    .ix-gauge-centro { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .ix-gauge-centro strong { font-size: 2.2rem; font-weight: 700; line-height: 1; letter-spacing: -.02em; color: var(--ix-indigo); font-variant-numeric: tabular-nums; }
+    .ix-gauge-centro span { margin-top: 4px; font-size: .72rem; color: var(--ix-suave); }
+
+    .ix-paga span { display: block; color: var(--ix-texto); font-size: .86rem; }
+    .ix-paga strong { display: block; margin: 2px 0 6px; font-size: clamp(2rem, 5vw, 2.6rem); line-height: 1.05; font-weight: 700; letter-spacing: -.03em; color: var(--ix-indigo); font-variant-numeric: tabular-nums; }
+    .ix-paga s { color: var(--ix-suave); font-size: .95rem; }
+    .ix-paga small { display: block; margin-top: 4px; color: var(--ix-suave); font-size: .78rem; }
+
+    .ix-linhas { display: grid; gap: 10px; margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--ix-borda); }
+    .ix-linha { display: flex; justify-content: space-between; gap: 12px; font-size: .9rem; color: var(--ix-texto); }
+    .ix-linha b { color: var(--ix-tinta); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ix-linha b.verde { color: var(--ix-teal); }
+    .ix-meta { margin-top: 16px; padding: 12px 14px; border-radius: 14px; background: #F5F6FC; color: var(--ix-texto); font-size: .86rem; line-height: 1.4; }
+    .ix-meta b { color: var(--ix-indigo); }
+
+    /* ---------- Conteúdo ---------- */
+    .ix-corpo { position: relative; margin-top: -84px; padding-bottom: 48px; }
+    .ix-grade { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+    .ix-cartao { min-width: 0; padding: 28px; border-radius: var(--ix-raio); background: var(--ix-papel); border: 1px solid var(--ix-borda); box-shadow: 0 24px 48px -36px rgba(17,22,58,.45); }
+    .ix-cartao h2 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -.01em; }
+    .ix-cartao-sub { margin: 6px 0 22px; color: var(--ix-texto); font-size: .92rem; line-height: 1.5; }
+
+    /* Formulário */
+    .ix-campos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 16px; }
+    .ix-campo { display: grid; gap: 7px; min-width: 0; }
+    .ix-campo.inteiro { grid-column: 1 / -1; }
+    .ix-campo label, .ix-rotulo { font-size: .84rem; font-weight: 600; color: var(--ix-tinta); }
+    .ix-input { position: relative; }
+    .ix-input i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: var(--ix-suave); font-size: .95rem; pointer-events: none; transition: color .15s; }
+    .ix-input input {
+        width: 100%; height: 52px; padding: 0 14px 0 42px; border: 1.5px solid #D6DAEA; border-radius: 14px;
+        background: #FBFCFF; color: var(--ix-tinta); font: inherit; font-size: 16px; outline: none;
+        transition: border-color .15s, box-shadow .15s, background-color .15s;
+    }
+    .ix-input input::placeholder { color: #A3A9C4; }
+    .ix-input input:focus { border-color: var(--ix-indigo-2); background: #fff; box-shadow: 0 0 0 4px rgba(23,104,223,.14); }
+    .ix-input:focus-within i { color: var(--ix-indigo-2); }
+    .ix-campo.erro input { border-color: #E5484D; background: #FFF8F8; }
+    .ix-campo .ix-erro-txt { color: #C2272D; font-size: .78rem; }
+
+    /* Segmento como cartões tocáveis (melhor que select no celular) */
+    .ix-segmentos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .ix-seg {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+        min-height: 96px; padding: 12px 8px; border-radius: 16px; text-align: center; line-height: 1.25;
+        border: 1.5px solid #E0E3F0; background: #fff; color: var(--ix-texto); font: inherit; font-size: .84rem; font-weight: 500;
+        cursor: pointer; transition: border-color .15s, background-color .15s, color .15s, transform .1s;
+    }
+    .ix-seg i { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: 12px; background: #F1F2FA; color: var(--ix-indigo); font-size: 1.05rem; transition: background-color .15s, color .15s; }
+    .ix-seg:hover { border-color: #BFD3F2; }
+    .ix-seg:active { transform: scale(.98); }
+    .ix-seg.ativo { border-color: var(--ix-indigo-2); background: #EEF5FF; color: var(--ix-indigo); font-weight: 600; }
+    .ix-seg.ativo i { background: var(--ix-indigo); color: #fff; }
+    .ix-campo.erro .ix-segmentos .ix-seg { border-color: #F2C1C3; }
+
+    .ix-enviar {
+        width: 100%; min-height: 56px; margin-top: 22px; border: 0; border-radius: 16px; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+        background: linear-gradient(135deg, var(--ix-indigo) 0%, var(--ix-indigo-2) 100%); color: #fff;
+        font: inherit; font-size: 1.02rem; font-weight: 700; box-shadow: 0 16px 30px -16px rgba(10,58,143,.9);
+        transition: transform .12s, box-shadow .15s, opacity .15s;
+    }
+    .ix-enviar:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 20px 34px -16px rgba(10,58,143,.95); }
+    .ix-enviar:disabled { opacity: .65; cursor: progress; }
+    .ix-giro { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(255,255,255,.4); border-top-color: #fff; animation: ix-girar .8s linear infinite; }
+
+    .ix-alerta { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 18px; padding: 13px 15px; border-radius: 14px; font-size: .9rem; line-height: 1.45; }
+    .ix-alerta.erro { background: #FFF1F1; color: #A1262B; border: 1px solid #F7CACC; }
+    .ix-alerta.info { background: #F3F4FB; color: var(--ix-texto); border: 1px solid var(--ix-borda); }
+
+    /* Sucesso */
+    .ix-sucesso { text-align: center; padding: 20px 6px 6px; animation: ix-surgir .35s ease-out; }
+    .ix-check { width: 76px; height: 76px; margin: 0 auto 16px; display: grid; place-items: center; border-radius: 50%; background: var(--ix-teal-claro); color: var(--ix-teal); font-size: 2rem; animation: ix-pulo .5s cubic-bezier(.2,1.4,.4,1); }
+    .ix-sucesso h3 { margin: 0 0 8px; font-size: 1.25rem; }
+    .ix-sucesso p { margin: 0 auto 22px; max-width: 40ch; color: var(--ix-texto); line-height: 1.5; }
+    .ix-btn-sec { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 20px; border-radius: 14px; border: 1.5px solid var(--ix-borda); background: #fff; color: var(--ix-indigo); font: inherit; font-weight: 700; cursor: pointer; }
+    .ix-btn-sec:hover { border-color: #BFD3F2; background: #F3F8FF; }
+
+    /* Lista das indicações */
+    .ix-cartao-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .ix-cartao-topo span { color: var(--ix-suave); font-size: .86rem; white-space: nowrap; }
+    .ix-lista { display: grid; gap: 10px; }
+    .ix-ind { min-width: 0; padding: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--ix-borda); animation: ix-surgir .3s ease-out both; }
+    .ix-ind-topo { display: flex; align-items: flex-start; gap: 12px; }
+    .ix-ind-av { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 13px; background: #E8F1FF; color: var(--ix-indigo); font-size: 1rem; }
+    .ix-ind-txt { flex: 1; min-width: 0; }
+    .ix-ind-txt h3 { margin: 0; font-size: 1rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ix-ind-txt p { margin: 3px 0 0; color: var(--ix-suave); font-size: .82rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ix-pill { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
+    .ix-pill.Recebida { background: #EEF0F8; color: #4A5276; }
+    .ix-pill.EmContato { background: #E6F0FF; color: var(--ix-indigo-2); }
+    .ix-pill.Confirmada { background: var(--ix-teal-claro); color: #03706B; }
+    .ix-pill.NaoFechou { background: #F7F0EA; color: #8A5A2B; }
+
+    .ix-ind-ganho { margin-top: 10px; padding-left: 56px; display: flex; align-items: center; gap: 8px; color: #03706B; font-size: .82rem; font-weight: 600; }
+
+    .ix-vazio { padding: 30px 20px; border-radius: 20px; border: 1.5px dashed #CDD2EA; background: #fff; text-align: center; color: var(--ix-texto); }
+    .ix-vazio i { font-size: 1.6rem; color: var(--ix-indigo-2); }
+    .ix-vazio h3 { margin: 12px 0 6px; color: var(--ix-tinta); font-size: 1.05rem; }
+    .ix-vazio p { margin: 0 auto; max-width: 44ch; font-size: .9rem; line-height: 1.5; }
+
+    .ix-rodape { padding: 26px 0 40px; color: var(--ix-suave); font-size: .8rem; line-height: 1.5; }
+
+    /* Link inválido */
+    .ix-fora { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--ix-fundo); text-align: center; }
+    .ix-fora-box { max-width: 420px; padding: 34px 26px; border-radius: 24px; background: #fff; border: 1px solid var(--ix-borda); }
+    .ix-fora img { height: 84px; }
+    .ix-fora h1 { margin: 18px 0 8px; font-size: 1.35rem; }
+    .ix-fora p { margin: 0; color: var(--ix-texto); line-height: 1.5; }
+    .ix-carregando { min-height: 100vh; display: grid; place-items: center; background: var(--ix-indigo); }
+    .ix-carregando span { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; animation: ix-girar .8s linear infinite; }
+
+    .ix button:focus-visible, .ix a:focus-visible, .ix input:focus-visible { outline: 3px solid rgba(0,179,166,.55); outline-offset: 2px; }
+
+    @@keyframes ix-girar { to { transform: rotate(360deg); } }
+    @@keyframes ix-surgir { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @@keyframes ix-pulo { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+    /* ---------- Tablet ---------- */
+    @@media (max-width: 960px) {
+        .ix-hero-grid { grid-template-columns: 1fr; gap: 28px; }
+        .ix-hero { padding-bottom: 104px; }
+        .ix-grade { grid-template-columns: 1fr; }
+    }
+    @@media (max-width: 760px) and (min-width: 601px) {
+        .ix-segmentos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+
+    /* ---------- Celular ---------- */
+    @@media (max-width: 600px) {
+        .ix-wrap { padding: 0 16px; }
+        .ix-topo { padding: 14px 0; }
+        .ix-marca img { height: 50px; padding: 5px 8px; border-radius: 13px; }
+        .ix-marca span { display: none; }
+        .ix-doc { font-size: .72rem; padding: 6px 10px; }
+        .ix-hero-grid { padding-top: 10px; gap: 22px; }
+        .ix-titulo { font-size: 2rem; }
+        .ix-sub { font-size: .96rem; margin-top: 12px; }
+        .ix-vigencia { display: flex; margin-top: 20px; padding: 14px 16px; gap: 12px; }
+        .ix-vigencia i { font-size: 1.5rem; }
+        .ix-hero { padding-bottom: 96px; }
+        .ix-mens { padding: 20px; border-radius: 24px; }
+        .ix-gauge-area { grid-template-columns: 116px minmax(0, 1fr); gap: 16px; }
+        .ix-gauge { width: 116px; }
+        .ix-gauge-centro strong { font-size: 1.6rem; }
+        .ix-corpo { margin-top: -76px; }
+        .ix-cartao { padding: 20px; border-radius: 20px; }
+        .ix-campos { grid-template-columns: 1fr; gap: 14px; }
+        .ix-segmentos { grid-template-columns: 1fr 1fr; gap: 8px; }
+        .ix-seg { flex-direction: row; justify-content: flex-start; min-height: 56px; padding: 10px 12px; font-size: .86rem; text-align: left; }
+        .ix-seg i { width: 34px; height: 34px; flex-basis: 34px; font-size: .95rem; }
+        .ix-seg:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    }
+    @@media (max-width: 360px) {
+        .ix-segmentos { grid-template-columns: 1fr; }
+        .ix-gauge-area { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+    }
+    @@media (prefers-reduced-motion: reduce) {
+        .ix *, .ix *::before { animation: none !important; transition: none !important; }
+    }
+</style>
+
+@if (Carregando)
+{
+    <div class="ix"><div class="ix-carregando"><span aria-label="Carregando"></span></div></div>
+}
+else if (Acesso is null)
+{
+    <div class="ix">
+        <div class="ix-fora">
+            <div class="ix-fora-box">
+                <img src="images/logo-evoluttech-recorte.png" alt="EvolutTech" />
+                <h1>Link inválido ou expirado</h1>
+                <p>Abra de novo pelo botão "Indique e ganhe" do seu sistema. Se continuar assim, fale com o suporte da EvolutTech.</p>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="ix">
+        @* ===================== HERO ===================== *@
+        <section class="ix-hero">
+            <div class="ix-wrap">
+                <header class="ix-topo">
+                    <span class="ix-marca">
+                        <img src="images/logo-evoluttech-recorte.png" alt="EvolutTech" />
+                        <span>Indique e ganhe</span>
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(Acesso.Documento))
+                    {
+                        <span class="ix-doc"><i class="fa-regular fa-building"></i>@(Acesso.Documento.Length == 14 ? "CNPJ" : "CPF") @Acesso.DocumentoFormatado</span>
+                    }
+                </header>
+
+                <div class="ix-hero-grid">
+                    <div>
+                        <p class="ix-ola">Olá, @NomeBonito(Acesso.NomeCliente)</p>
+                        <h1 class="ix-titulo">Indique empresas e pague menos todo mês.</h1>
+                        <p class="ix-sub">Cada indicação que virar cliente vale <b>R$ 10 de desconto</b> na sua mensalidade.</p>
+                        <div class="ix-vigencia" role="note">
+                            <i class="fa-regular fa-calendar-check"></i>
+                            <p>Válido a partir do dia <strong>01/11/2026</strong></p>
+                        </div>
+                    </div>
+
+                    @* ---------- Mensalidade ---------- *@
+                    <div class="ix-mens" aria-labelledby="ix-mens-titulo">
+                        <div class="ix-mens-topo">
+                            <h2 id="ix-mens-titulo">Sua mensalidade</h2>
+                            @if (Mensalidade.Mensalista)
+                            {
+                                <span class="ix-selo"><i class="fa-solid fa-circle-check"></i>Desconto ativo</span>
+                            }
+                            else
+                            {
+                                <span class="ix-selo off">Sem desconto no plano</span>
+                            }
+                        </div>
+
+                        <div class="ix-gauge-area">
+                            <div class="ix-gauge" role="img" aria-label="@($"{Mensalidade.QtdConfirmadas} indicações aprovadas, {Mensalidade.PercentualCoberto}% da mensalidade coberta")">
+                                <svg viewBox="0 0 120 120" aria-hidden="true">
+                                    <defs>
+                                        <linearGradient id="ix-grad" x1="0" y1="0" x2="1" y2="1">
+                                            <stop offset="0%" stop-color="#1768DF" />
+                                            <stop offset="100%" stop-color="#00B3A6" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle class="trilho" cx="60" cy="60" r="52" />
+                                    <circle class="arco" cx="60" cy="60" r="52"
+                                            stroke-dasharray="@Circunferencia.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                            stroke-dashoffset="@OffsetGauge.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+                                </svg>
+                                <div class="ix-gauge-centro">
+                                    <strong>@Mensalidade.QtdConfirmadas</strong>
+                                    <span>@(Mensalidade.QtdConfirmadas == 1 ? "aprovada" : "aprovadas")</span>
+                                </div>
+                            </div>
+
+                            <div class="ix-paga">
+                                <span>@(Mensalidade.Mensalista ? "Você paga" : "Mensalidade")</span>
+                                <strong>@(Mensalidade.Valor is null ? "—" : IndicacaoFormato.Moeda(Mensalidade.ValorComDesconto))</strong>
+                                @if (Mensalidade.Mensalista && Mensalidade.Desconto > 0 && Mensalidade.Valor is not null)
+                                {
+                                    <s>@IndicacaoFormato.Moeda(Mensalidade.Valor)</s>
+                                }
+                                @if (Mensalidade.Vencimento is not null)
+                                {
+                                    <small>@(Mensalidade.EmAberto ? "Vence em" : "Último vencimento:") @Mensalidade.Vencimento.Value.ToString("dd/MM/yyyy")</small>
+                                }
+                            </div>
+                        </div>
+
+                        @if (Mensalidade.Mensalista && Mensalidade.Valor is not null)
+                        {
+                            <div class="ix-linhas">
+                                <div class="ix-linha"><span>Desconto das indicações</span><b class="verde">− @IndicacaoFormato.Moeda(Mensalidade.Desconto)</b></div>
+                            </div>
+                        }
+
+                        @if (Mensalidade.Mensalista)
+                        {
+                            <p class="ix-meta">O desconto vai até zerar a mensalidade. Depois disso, novas indicações não geram crédito nem pagamento em dinheiro.</p>
+                        }
+                        else if (!Mensalidade.Mensalista)
+                        {
+                            <p class="ix-meta">O desconto vale para clientes com plano mensal.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        @* ===================== CORPO ===================== *@
+        <main class="ix-corpo">
+            <div class="ix-wrap">
+                <div class="ix-grade">
+                    @* ---------- Formulário ---------- *@
+                    <section class="ix-cartao" id="indicar" aria-labelledby="ix-form-titulo">
+                        @if (Enviada is not null)
+                        {
+                            <div class="ix-sucesso" role="status">
+                                <div class="ix-check"><i class="fa-solid fa-check"></i></div>
+                                <h3>Indicação enviada!</h3>
+                                <p>Vamos falar com @PrimeiroNome(Enviada.NomeContato) da <strong>@Enviada.NomeFantasia</strong> pelo WhatsApp. Você acompanha o andamento aqui na página.</p>
+                                <button type="button" class="ix-btn-sec" @onclick="NovaIndicacao"><i class="fa-solid fa-plus"></i>Indicar outra empresa</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <h2 id="ix-form-titulo">Indicar uma empresa</h2>
+                            <p class="ix-cartao-sub">Nossa equipe entra em contato e você acompanha aqui.</p>
+
+                            @if (!string.IsNullOrWhiteSpace(Erro))
+                            {
+                                <p class="ix-alerta erro" role="alert"><i class="fa-solid fa-circle-exclamation"></i><span>@Erro</span></p>
+                            }
+
+                            <div class="ix-campos">
+                                <div class="ix-campo @(ErroCampo("contato") ? "erro" : "")">
+                                    <label for="ix-contato">Nome do contato</label>
+                                    <div class="ix-input">
+                                        <i class="fa-regular fa-user"></i>
+                                        <input id="ix-contato" @bind="Nova.NomeContato" @bind:event="oninput" maxlength="150" autocomplete="off" placeholder="Com quem vamos falar" />
+                                    </div>
+                                    @if (ErroCampo("contato")) { <span class="ix-erro-txt">Informe o nome do contato.</span> }
+                                </div>
+
+                                <div class="ix-campo @(ErroCampo("whats") ? "erro" : "")">
+                                    <label for="ix-whats">WhatsApp</label>
+                                    <div class="ix-input">
+                                        <i class="fa-brands fa-whatsapp"></i>
+                                        <input id="ix-whats" type="tel" inputmode="numeric" @bind="Nova.WhatsApp" @bind:event="oninput" @bind:after="FormatarWhats" maxlength="16" placeholder="(17) 99999-9999" autocomplete="off" />
+                                    </div>
+                                    @if (ErroCampo("whats")) { <span class="ix-erro-txt">Informe o WhatsApp com DDD.</span> }
+                                </div>
+
+                                <div class="ix-campo inteiro @(ErroCampo("fantasia") ? "erro" : "")">
+                                    <label for="ix-fantasia">Nome fantasia da empresa</label>
+                                    <div class="ix-input">
+                                        <i class="fa-solid fa-store"></i>
+                                        <input id="ix-fantasia" @bind="Nova.NomeFantasia" @bind:event="oninput" maxlength="150" autocomplete="off" placeholder="Como a empresa é conhecida" />
+                                    </div>
+                                    @if (ErroCampo("fantasia")) { <span class="ix-erro-txt">Informe o nome fantasia.</span> }
+                                </div>
+
+                                <div class="ix-campo inteiro @(ErroCampo("segmento") ? "erro" : "")" role="radiogroup" aria-labelledby="ix-seg-rotulo">
+                                    <span class="ix-rotulo" id="ix-seg-rotulo">Segmento da empresa</span>
+                                    <div class="ix-segmentos">
+                                        @foreach (var s in Segmentos)
+                                        {
+                                            var ativo = Nova.Segmento == s.Nome;
+                                            <button type="button" class="ix-seg @(ativo ? "ativo" : "")" role="radio" aria-checked="@(ativo ? "true" : "false")" @onclick="() => Nova.Segmento = s.Nome">
+                                                <i class="fa-solid @s.Icone"></i>@s.Nome
+                                            </button>
+                                        }
+                                    </div>
+                                    @if (ErroCampo("segmento")) { <span class="ix-erro-txt">Escolha o segmento.</span> }
+                                </div>
+                            </div>
+
+                            <button type="button" class="ix-enviar" disabled="@Enviando" @onclick="EnviarAsync">
+                                @if (Enviando)
+                                {
+                                    <span class="ix-giro"></span><span>Enviando...</span>
+                                }
+                                else
+                                {
+                                    <i class="fa-solid fa-paper-plane"></i><span>Enviar indicação</span>
+                                }
+                            </button>
+                        }
+                    </section>
+
+                    @* ---------- Minhas indicações ---------- *@
+                    <section class="ix-cartao" id="minhas" aria-labelledby="ix-lista-titulo">
+                        <div class="ix-cartao-topo">
+                            <h2 id="ix-lista-titulo">Suas indicações</h2>
+                            @if (Indicacoes.Count > 0)
+                            {
+                                <span>@Indicacoes.Count no total</span>
+                            }
+                        </div>
+
+                        @if (Indicacoes.Count == 0)
+                        {
+                            <div class="ix-vazio">
+                                <i class="fa-regular fa-lightbulb"></i>
+                                <h3>Nenhuma indicação ainda</h3>
+                                <p>A primeira que virar cliente já vale R$ 10.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ix-lista">
+                                @foreach (var i in Indicacoes)
+                                {
+                                    <article class="ix-ind @i.Status" @key="i.Codigo">
+                                        <div class="ix-ind-topo">
+                                            <span class="ix-ind-av"><i class="fa-solid @IconeSegmento(i.Segmento)"></i></span>
+                                            <div class="ix-ind-txt">
+                                                <h3>@i.NomeFantasia</h3>
+                                                <p>@i.NomeContato · @i.DataCriacao.ToString("dd/MM/yyyy")</p>
+                                            </div>
+                                            <span class="ix-pill @i.Status">@IndicacaoStatus.Rotulo(i.Status)</span>
+                                        </div>
+                                        @if (i.Status == IndicacaoStatus.Confirmada && Mensalidade.Mensalista)
+                                        {
+                                            <div class="ix-ind-ganho"><i class="fa-solid fa-circle-check"></i>R$ 10 de desconto</div>
+                                        }
+                                    </article>
+                                }
+                            </div>
+                        }
+                    </section>
+                </div>
+
+                <footer class="ix-rodape">
+                    Válido a partir de 01/11/2026 para clientes com plano mensal. Com a mensalidade zerada, novas indicações não geram crédito.
+                </footer>
+            </div>
+        </main>
+    </div>
+}
+
+@code {
+    [Parameter] public string Token { get; set; } = "";
+
+    private sealed record Segmento(string Nome, string Icone);
+
+    private static readonly Segmento[] Segmentos =
+    [
+        // Segmentos atendidos pela EvolutTech no varejo
+        new("Supermercados", "fa-cart-shopping"),
+        new("Padarias", "fa-bread-slice"),
+        new("Açougues", "fa-drumstick-bite"),
+        new("Hortifrutis", "fa-apple-whole"),
+        new("Depósitos de Bebidas", "fa-wine-bottle")
+    ];
+
+    private const double Circunferencia = 2 * Math.PI * 52;
+
+    private IndicacaoAcessoModel? Acesso;
+    private IndicacaoMensalidadeModel Mensalidade = new();
+    private List<IndicacaoModel> Indicacoes = [];
+    private IndicacaoNovaRequest Nova = new();
+    private IndicacaoNovaRequest? Enviada;
+    private readonly HashSet<string> CamposComErro = [];
+    private bool Carregando = true;
+    private bool Enviando;
+    private string Erro = "";
+    private string _tokenCarregado = "";
+
+    // ---------- Cálculos de tela ----------
+    private double OffsetGauge
+    {
+        get
+        {
+            // Mensalista: quanto da mensalidade está coberto. Senão: só mostra o anel vazio.
+            var pct = Mensalidade.Mensalista ? Math.Clamp(Mensalidade.PercentualCoberto, 0, 100) / 100.0 : 0;
+            return Circunferencia * (1 - pct);
+        }
+    }
+
+    private bool ErroCampo(string campo) => CamposComErro.Contains(campo);
+
+    // ---------- Ciclo de vida ----------
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_tokenCarregado == Token) return;
+        _tokenCarregado = Token;
+        Carregando = true;
+        try
+        {
+            Acesso = await IndicacaoService.ObterAcessoPorTokenAsync(Token);
+            if (Acesso is not null) await RecarregarAsync();
+        }
+        catch
+        {
+            Acesso = null;
+        }
+        finally
+        {
+            Carregando = false;
+        }
+    }
+
+    private async Task RecarregarAsync()
+    {
+        Mensalidade = await IndicacaoService.ObterMensalidadeAsync(Acesso!.CodEmp, Acesso.CodCliente);
+        Indicacoes = await IndicacaoService.ListarDoClienteAsync(Acesso.CodEmp, Acesso.CodCliente);
+    }
+
+    // ---------- Formulário ----------
+    private void FormatarWhats()
+    {
+        var n = IndicacaoFormato.SomenteNumeros(Nova.WhatsApp);
+        if (n.StartsWith("55") && n.Length > 11) n = n[2..];
+        if (n.Length > 11) n = n[..11];
+        Nova.WhatsApp = n.Length switch
+        {
+            0 => "",
+            <= 2 => $"({n}",
+            <= 6 => $"({n[..2]}) {n[2..]}",
+            <= 10 => $"({n[..2]}) {n.Substring(2, 4)}-{n[6..]}",
+            _ => $"({n[..2]}) {n.Substring(2, 5)}-{n[7..]}"
+        };
+        CamposComErro.Remove("whats");
+    }
+
+    private bool Validar()
+    {
+        CamposComErro.Clear();
+        if ((Nova.NomeContato ?? "").Trim().Length < 2) CamposComErro.Add("contato");
+        if ((Nova.NomeFantasia ?? "").Trim().Length < 2) CamposComErro.Add("fantasia");
+        if (IndicacaoFormato.NormalizarWhatsApp(Nova.WhatsApp).Length == 0) CamposComErro.Add("whats");
+        if (string.IsNullOrWhiteSpace(Nova.Segmento)) CamposComErro.Add("segmento");
+        return CamposComErro.Count == 0;
+    }
+
+    private async Task EnviarAsync()
+    {
+        if (Acesso is null || Enviando) return;
+        Erro = "";
+        if (!Validar())
+        {
+            Erro = "Confira os campos destacados.";
+            return;
+        }
+
+        Enviando = true;
+        try
+        {
+            await IndicacaoService.CriarAsync(Acesso.CodEmp, Acesso.CodCliente, Nova);
+            Enviada = Nova;
+            Nova = new IndicacaoNovaRequest();
+            await RecarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Erro = ex.Message;
+        }
+        catch
+        {
+            Erro = "Não foi possível enviar agora. Tente de novo em alguns minutos.";
+        }
+        finally
+        {
+            Enviando = false;
+        }
+    }
+
+    private void NovaIndicacao()
+    {
+        Enviada = null;
+        Erro = "";
+        CamposComErro.Clear();
+    }
+
+    // ---------- Auxiliares ----------
+    private static string IconeSegmento(string segmento)
+        => Segmentos.FirstOrDefault(s => s.Nome == segmento)?.Icone ?? "fa-store";
+
+    private static string PrimeiroNome(string? nome)
+    {
+        var p = (nome ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (p.Length == 0) return "";
+        var n = p[0].ToLowerInvariant();
+        return char.ToUpperInvariant(n[0]) + n[1..];
+    }
+
+    private static string NomeBonito(string? nome)
+    {
+        var p = (nome ?? "").Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', p.Select(x => x.Length <= 2 ? x : char.ToUpperInvariant(x[0]) + x[1..]));
+    }
+}

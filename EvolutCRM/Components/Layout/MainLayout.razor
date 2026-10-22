@@ -212,6 +212,7 @@
     </BodyContent>
 </MainMenu>
 <ChangelogModal @ref="_changelogModal" />
+<EvolutCRM.Components.Reuniao.ReuniaoConviteAlerta OnConvitePerdido="AoConviteReuniaoPerdido" />
 <div id="blazor-error-ui">
     An unhandled error has occurred.
     <a href="" class="reload">Reload</a>
@@ -263,28 +264,25 @@
 <script>
     window.crmLog = window.crmLog || function(msg) { console.log(msg); };
 
-    window.registrarOfflineAoFechar = (usuario) => {
+    // Marca offline só ao FECHAR/recarregar o HELP.
+    // (Antes também marcava ao minimizar/trocar de aba — visibilitychange — e a pessoa
+    //  "piscava" offline para a equipe; quem minimiza continua online pelo heartbeat de 5s.)
+    window.registrarOfflineAoFechar = (usuario, codEmp) => {
         if (!usuario) return;
 
-        if (window._offlineHandler) {
+        if (window._offlineHandler)
             window.removeEventListener('beforeunload', window._offlineHandler);
+        if (window._visibilityHandler) {
             window.removeEventListener('visibilitychange', window._visibilityHandler);
+            window._visibilityHandler = null;
         }
 
         window._offlineHandler = () => {
             navigator.sendBeacon('/api/usuario/marcar-offline',
-                new Blob([JSON.stringify({ usuario })], { type: 'application/json' }));
-        };
-
-        window._visibilityHandler = () => {
-            if (document.visibilityState === 'hidden') {
-                navigator.sendBeacon('/api/usuario/marcar-offline',
-                    new Blob([JSON.stringify({ usuario })], { type: 'application/json' }));
-            }
+                new Blob([JSON.stringify({ usuario, codEmp: Number(codEmp) || 0 })], { type: 'application/json' }));
         };
 
         window.addEventListener('beforeunload', window._offlineHandler);
-        window.addEventListener('visibilitychange', window._visibilityHandler);
     };
 
     let _dragDotNet  = null;
@@ -428,6 +426,22 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    // Convite de reunião que tocou e não foi atendido: fica no painel de notificações
+    private Task AoConviteReuniaoPerdido(ReuniaoConviteModel convite)
+        => AdicionarItemAoGrupo(
+            "GRUPO_REUNIAO",
+            "REUNIAO",
+            "📹 Convites de reunião",
+            "info",
+            "reunioes",
+            new NotificacaoItemModel
+            {
+                Codigo = convite.CodReuniao,
+                Descricao = $"{ReuniaoVisual.Nome(convite.ConvidadoPor)}: {convite.Titulo}",
+                Url = $"reunioes/{convite.CodReuniao}",
+                DataHora = DateTime.Now
+            });
+
     private string FormatarMensagemGrupo(List<NotificacaoItemModel> itens, string tipo)
     {
         // Exibe até 3 itens no card, com contagem total
@@ -503,7 +517,8 @@
             await AtualizarNotificacoesTicketsSemResponsavel(ticketsIniciais);
 
             await JS.InvokeVoidAsync("registrarOfflineAoFechar",
-                UserState.CurrentUser?.Trim() ?? "");
+                UserState.CurrentUser?.Trim() ?? "",
+                UserState.CurrentCompanyId);
 
             IniciarPolling();
         }
@@ -537,15 +552,22 @@
                         {
                             if (!_disposed)
                             {
+                                // Presença primeiro e isolada: se os tickets falharem ou demorarem,
+                                // o usuário continua aparecendo online para a equipe
+                                try { await AtualizarChatInterno(); }
+                                catch (Exception exPresenca) when (!_cts!.IsCancellationRequested)
+                                {
+                                    await SafeJs("crmLog", $"[Presenca] Erro: {exPresenca.Message}");
+                                }
+
                                 var tickets = await TicketService.ListarChamadosParaNotificacaoAsync();
                                 await AtualizarTickets(tickets);
-                                await AtualizarChatInterno();
                                 await AtualizarNotificacoesTicketsSemResponsavel(tickets);
                                 await AtualizarNotificacoesMensagensPresasAsync();
                             }
                         });
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    catch (Exception ex) when (!_cts!.IsCancellationRequested)
                     {
                         await InvokeAsync(() => SafeJs("crmLog", $"[TimerTickets] Erro ciclo: {ex.Message}"));
                     }
@@ -582,7 +604,7 @@
                                 await AtualizarNotificacoesCards();
                         });
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    catch (Exception ex) when (!_cts!.IsCancellationRequested)
                     {
                         await InvokeAsync(() => SafeJs("crmLog", $"[TimerCards] Erro ciclo: {ex.Message}"));
                     }
@@ -621,7 +643,7 @@
                             await AtualizarNotificacoesAgendasTicket();
                         });
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    catch (Exception ex) when (!_cts!.IsCancellationRequested)
                     {
                         await InvokeAsync(() => SafeJs("crmLog", $"[TimerOutros] Erro ciclo: {ex.Message}"));
                     }
@@ -1105,7 +1127,11 @@
                 if (!_cardsMensagensNotificadas.TryGetValue(card.Codigo, out var ultimaNotificada))
                 {
                     _cardsMensagensNotificadas[card.Codigo] = ultima.DataHora;
-                    continue;
+
+                    if (!_cardsConhecidos.Contains(card.Codigo))
+                        continue;
+
+                    ultimaNotificada = DateTime.MinValue;
                 }
 
                 if (ultima.DataHora <= ultimaNotificada)
@@ -1453,6 +1479,8 @@
         catch (JSDisconnectedException) { }
         catch (ObjectDisposedException) { }
         catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }   // navegador não respondeu a tempo (queda de conexão)
+        catch (JSException) { }             // erro no JS não pode derrubar os timers
     }
 
     private async Task<T?> SafeJsReturn<T>(string identifier, params object[] args)
@@ -1467,6 +1495,8 @@
         catch (JSDisconnectedException) { return default; }
         catch (ObjectDisposedException) { return default; }
         catch (InvalidOperationException) { return default; }
+        catch (TaskCanceledException) { return default; }
+        catch (JSException) { return default; }
     }
 
     // DEPOIS:
