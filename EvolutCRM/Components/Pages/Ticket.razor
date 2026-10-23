@@ -16,6 +16,7 @@
 @using SixLabors.ImageSharp.Formats.Jpeg
 @inject EvolutCRM.Services.CardService CardService
 @inject EvolutCRM.Services.AiAutoLearningService AiAuto
+@inject EvolutCRM.Services.AiService AiSvc
 @inject EvolutCRM.Services.AdminService AdminService
 @using Microsoft.AspNetCore.WebUtilities
 @inject EvolutCRM.Services.KHelpDeskApiService KHelpDeskApi
@@ -3257,9 +3258,53 @@ else
 
                         @if (!string.IsNullOrWhiteSpace(SugestaoIA))
                         {
-                            <div style="margin-bottom:6px; padding:8px 10px; background:#f0f7ff;
-                                border:1px solid #bfdbfe; border-radius:8px; font-size:10px; color:#1d4ed8;">
-                                ✅ Resposta da IA inserida abaixo. Revise antes de enviar.
+                            var confIA = ResultadoIA?.Confianca ?? "baixa";
+                            var (corFundoIA, corBordaIA, corTextoIA, rotuloIA) = confIA switch
+                            {
+                                "alta"  => ("#f0fdf4", "#bbf7d0", "#15803d", "🟢 Confiança alta"),
+                                "media" => ("#fffbeb", "#fde68a", "#b45309", "🟡 Confiança média — confira"),
+                                _       => ("#fef2f2", "#fecaca", "#b91c1c", "🔴 Confiança baixa — revise com atenção")
+                            };
+                            <div style="margin-bottom:6px; padding:8px 10px; background:@corFundoIA;
+                                border:1px solid @corBordaIA; border-radius:8px; font-size:10px; color:@corTextoIA;">
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <strong>@rotuloIA</strong>
+                                    <span>Resposta da IA inserida abaixo. Revise antes de enviar.</span>
+                                    @if (ResultadoIA?.CodLog > 0)
+                                    {
+                                        <span style="margin-left:auto; display:flex; gap:4px;">
+                                            <button type="button" title="Sugestão boa"
+                                                    style="border:1px solid @(FeedbackIA == 1 ? "#15803d" : "#d1d5db"); background:@(FeedbackIA == 1 ? "#dcfce7" : "#fff"); border-radius:6px; padding:1px 6px; cursor:pointer;"
+                                                    @onclick="() => DarFeedbackIA(1)">👍</button>
+                                            <button type="button" title="Sugestão ruim"
+                                                    style="border:1px solid @(FeedbackIA == -1 ? "#b91c1c" : "#d1d5db"); background:@(FeedbackIA == -1 ? "#fee2e2" : "#fff"); border-radius:6px; padding:1px 6px; cursor:pointer;"
+                                                    @onclick="() => DarFeedbackIA(-1)">👎</button>
+                                        </span>
+                                    }
+                                </div>
+                                @if (ResultadoIA?.Fontes?.Count > 0)
+                                {
+                                    <div style="margin-top:4px; color:#374151;">
+                                        Baseado em:
+                                        @foreach (var f in ResultadoIA.Fontes)
+                                        {
+                                            if (f.Tipo == "doc" && f.CodDoc > 0)
+                                            {
+                                                <a href="@($"/documentacoes/{f.CodDoc}")" target="_blank"
+                                                   style="margin-right:8px; color:#1d4ed8;">📄 @f.Titulo</a>
+                                            }
+                                            else if (f.CodTicket > 0)
+                                            {
+                                                <a href="@($"/ticket/{f.CodTicket}")" target="_blank" title="@f.Titulo"
+                                                   style="margin-right:8px; color:#1d4ed8;">🎫 Ticket #@f.CodTicket</a>
+                                            }
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div style="margin-top:4px; color:#374151;">Sem documentação ou caso parecido na base.</div>
+                                }
                             </div>
                         }
 
@@ -5251,6 +5296,15 @@ private bool _finalizandoViaF2ComInsight = false;
     private bool sucesso;
     bool CarregandoIA;
     string SugestaoIA = "";
+    AiSugestaoResultado? ResultadoIA;   // fontes, confiança e código do log da última sugestão
+    int FeedbackIA;                       // 1 = 👍, -1 = 👎
+
+    private async Task DarFeedbackIA(int valor)
+    {
+        if (ResultadoIA == null || ResultadoIA.CodLog <= 0) return;
+        FeedbackIA = valor;
+        await AiSvc.RegistrarFeedbackAsync(ResultadoIA.CodLog, valor);
+    }
 
 
     private void OnVersaoInput(ChangeEventArgs e)
@@ -5836,10 +5890,20 @@ private bool _finalizandoViaF2ComInsight = false;
                 await TicketService.ResolverAgendasDoTicketAsync(TicketAtual.Codigo);
             }
 
+            // Mede o aproveitamento: compara o que foi enviado com a sugestão da IA
+            if (ResultadoIA?.CodLog > 0 && !MensagemInterna && !string.IsNullOrWhiteSpace(textoEnviando))
+            {
+                var codLogIA = ResultadoIA.CodLog;
+                var enviadoIA = textoEnviando;
+                _ = Task.Run(() => AiSvc.RegistrarEnvioAsync(codLogIA, enviadoIA));
+            }
+
             Sucesso = true;
             MensagemRespondida = null;
             MensagemInterna = false;
             SugestaoIA = "";
+            ResultadoIA = null;
+            FeedbackIA = 0;
 
             ArquivoAnotacao = null;
             PreviewArquivoAnotacao = null;
@@ -6069,73 +6133,116 @@ private bool _finalizandoViaF2ComInsight = false;
 
         try
         {
-            var pergunta = UltimaMensagemCliente ?? NovaAnotacao;
+            var usuariosAuto = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "WHATSAPP", "CLIENTE", "IA", "EVOLUTTECH", "BOT", "SISTEMA", "NOVO"
+            };
 
-            if (string.IsNullOrWhiteSpace(pergunta))
+            var validas = (Historico ?? new())
+                .Where(x => x.MensagemExcluida != "S" &&
+                            x.StatusEnvioWhatsApp is not ("ia_processing" or "saudacao_auto" or "aguarde_auto"))
+                .OrderBy(x => x.DataHora).ThenBy(x => x.Codigo)
+                .ToList();
+
+            // Última resposta de um atendente de verdade (sem nota interna e sem mensagem automática)
+            var ultimaResposta = validas.LastOrDefault(x =>
+                x.EnvioCliente != "S" &&
+                x.Interno != "S" &&
+                !string.IsNullOrWhiteSpace(x.Anotacao) &&
+                !usuariosAuto.Contains((x.Usuario ?? "").Trim()));
+
+            // Tudo que o cliente mandou depois dela: no WhatsApp ele quebra a dúvida em várias mensagens
+            var posicao = ultimaResposta == null ? -1 : validas.IndexOf(ultimaResposta);
+            var pendentes = validas.Skip(posicao + 1).Where(x => x.EnvioCliente == "S").TakeLast(8).ToList();
+
+            // Atendente já respondeu tudo: usa a última mensagem do cliente
+            if (pendentes.Count == 0)
+                pendentes = validas.Where(x => x.EnvioCliente == "S").TakeLast(1).ToList();
+
+            static string TextoDe(TicketChamadoDModel x) =>
+                !string.IsNullOrWhiteSpace(x.Anotacao) ? x.Anotacao.Trim()
+                : !string.IsNullOrWhiteSpace(x.TranscricaoAudio) ? "[Áudio] " + x.TranscricaoAudio.Trim()
+                : "";
+
+            static bool EhImagemDoTicket(TicketChamadoDModel x)
+            {
+                if (string.IsNullOrWhiteSpace(x.CaminhoImagem) ||
+                    !x.CaminhoImagem.StartsWith("/api/tickets/anexo/", StringComparison.OrdinalIgnoreCase))
+                    return false;
+                var ext = System.IO.Path.GetExtension(x.NomeImagem ?? "").ToLowerInvariant();
+                return ext is "" or ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" or ".bmp";
+            }
+
+            var mensagensCliente = string.Join("\n", pendentes.Select(TextoDe).Where(t => t.Length > 0));
+            var codigosImagens = pendentes.Where(EhImagemDoTicket).Select(x => x.Codigo).TakeLast(2).ToList();
+
+            if (string.IsNullOrWhiteSpace(mensagensCliente) && codigosImagens.Count == 0)
+                mensagensCliente = (NovaAnotacao ?? "").Trim();
+
+            if (string.IsNullOrWhiteSpace(mensagensCliente) && codigosImagens.Count == 0)
             {
                 Mensagem = "Digite uma mensagem ou tenha uma mensagem do cliente no histórico para gerar a resposta.";
                 Sucesso = false;
                 return;
             }
 
-            // DEPOIS:
-            var mensagensRelevantes = Historico
-                .Where(x =>
-                    (!string.IsNullOrWhiteSpace(x.Anotacao) || !string.IsNullOrWhiteSpace(x.TranscricaoAudio)) &&
-                    x.MensagemExcluida != "S" &&
-                    x.StatusEnvioWhatsApp != "ia_processing")
-                .OrderBy(x => x.DataHora)
+            var mensagensRelevantes = validas
+                .Where(x => !string.IsNullOrWhiteSpace(x.Anotacao) || !string.IsNullOrWhiteSpace(x.TranscricaoAudio))
                 .TakeLast(25)
                 .ToList();
 
             var conversationContext = string.Join("\n",
                 mensagensRelevantes.Select(x =>
                 {
-                    var autor = x.EnvioCliente == "S" ? "Cliente" : "Atendente";
+                    var autor = x.EnvioCliente == "S" ? "Cliente"
+                              : x.Interno == "S" ? "Nota interna"
+                              : "Atendente";
 
                     // Prefere o texto da anotação; se for áudio, usa a transcrição
                     var texto = !string.IsNullOrWhiteSpace(x.Anotacao)
                         ? x.Anotacao.Trim()
-                        : !string.IsNullOrWhiteSpace(x.TranscricaoAudio)
-                            ? $"[Áudio transcrito] {x.TranscricaoAudio.Trim()}"
-                            : "";
-
-                    if (string.IsNullOrWhiteSpace(texto))
-                        return null;
+                        : $"[Áudio transcrito] {x.TranscricaoAudio.Trim()}";
 
                     if (texto.Length > 800)
                         texto = texto.Substring(0, 800) + "...";
 
                     return $"[{x.DataHora:dd/MM HH:mm}] {autor}: {texto}";
-                })
-                .Where(x => x != null));
+                }));
 
-            var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-
-            var resp = await http.PostAsJsonAsync("/api/help/suggest", new
+            // Chama o serviço direto (antes ia por HTTP para o próprio servidor)
+            var resultado = await AiSvc.SugerirAsync(new AiPedidoSugestao
             {
-                message = pergunta,
-                conversationContext = conversationContext
+                CodTicket = id,
+                CodEmp = UserState.CurrentCompanyId,
+                MensagensCliente = mensagensCliente,
+                Conversa = conversationContext,
+                Assunto = TicketAtual?.Assunto,
+                Versao = TicketAtual?.Versao,
+                Usuario = UserState.CurrentUser,
+                CodigosImagens = codigosImagens
             });
 
-            if (!resp.IsSuccessStatusCode)
+            ResultadoIA = resultado.Ok ? resultado : null;
+            FeedbackIA = 0;
+            SugestaoIA = (resultado.Resposta ?? "").Trim();
+
+            if (SugestaoIA.StartsWith("ERRO IA", StringComparison.OrdinalIgnoreCase) ||
+                SugestaoIA.StartsWith("Erro OpenAI", StringComparison.OrdinalIgnoreCase) ||
+                SugestaoIA == "API KEY não configurada." ||
+                SugestaoIA == "Pergunta vazia.")
             {
-                var txt = await resp.Content.ReadAsStringAsync();
-                Mensagem = $"Erro IA ({(int)resp.StatusCode}): {txt}";
+                Mensagem = SugestaoIA;
                 Sucesso = false;
                 HealthMonitor.Log(LogCategory.Tickets, LogSeverity.Warning,
-                    $"Ticket #{id} — IA retornou HTTP {(int)resp.StatusCode}",
-                    txt.Length > 150 ? txt[..150] : txt);
+                    $"Ticket #{id} — IA não gerou sugestão",
+                    SugestaoIA.Length > 150 ? SugestaoIA[..150] : SugestaoIA);
+                SugestaoIA = "";
                 return;
             }
 
-            var data = await resp.Content.ReadFromJsonAsync<AiChatResponse>();
-
-            SugestaoIA = data?.Reply?.Trim() ?? "";
-
             if (string.IsNullOrWhiteSpace(SugestaoIA))
             {
-                Mensagem = "A IA retornou vazio. Verifique o endpoint /api/help/suggest.";
+                Mensagem = "A IA retornou vazio.";
                 Sucesso = false;
                 return;
             }
@@ -6230,7 +6337,7 @@ private bool _finalizandoViaF2ComInsight = false;
 
         try
         {
-            _insights = await AiAuto.GenerateAndSaveManyAsync(CodTicketChamadoC: id, force: true);
+            _insights = await AiAuto.GenerateAndSaveManyAsync(CodTicketChamadoC: id, force: true, codEmp: UserState.CurrentCompanyId);
         }
         catch (Exception ex)
         {

@@ -2,6 +2,7 @@ using EvolutCRM.Models;
 using EvolutCRM.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using EvolutCRM.Helpers;
 
 namespace EvolutCRM.Mobile
 {
@@ -250,6 +251,104 @@ namespace EvolutCRM.Mobile
                 return Results.Ok(new MobileEnviarResponse { Sucesso = true, Mensagem = "Cliente vinculado: " + nome.Trim() });
             });
 
+            // ── Novo ticket (igual à "Criação rápida" do HELP) ─────────────────
+            // Busca por cliente, contato ou telefone
+            api.MapGet("/novo-ticket/clientes", async (string? busca, TicketService ts) =>
+            {
+                var termo = (busca ?? "").Trim();
+                var r = new MobileBuscaNovoTicketDto();
+                if (termo.Length < 2) return Results.Ok(r);
+
+                var ehTelefone = EhTelefone(termo);
+                if (ehTelefone)
+                {
+                    r.Telefone = TelefoneBR.Normalizar(SoDigitos(termo));
+                    r.TelefoneFormatado = MobileRepository.FormatarTelefone(r.Telefone);
+                }
+
+                foreach (var c in await ts.BuscarClientesComTelefoneAsync(termo))
+                {
+                    var batem = FiltrarContatos(await ts.BuscarTelefonesWhatsAppClienteAsync(c.Codigo), termo);
+                    r.Clientes.Add(new MobileClienteSugestaoDto
+                    {
+                        Codigo = c.Codigo,
+                        Nome = (c.Nome ?? "").Trim(),
+                        Contato = batem.Count == 0 ? "" : batem[0].Nome + (batem.Count > 1 ? $" (+{batem.Count - 1})" : "")
+                    });
+                }
+
+                r.OferecerNovoContato = ehTelefone && r.Clientes.Count == 0;
+                return Results.Ok(r);
+            });
+
+            // Contatos (WhatsApp) do cliente escolhido — mesma regra do HELP
+            api.MapGet("/novo-ticket/clientes/{codCliente:int}/contatos", async (int codCliente, string? busca, TicketService ts) =>
+            {
+                var termo = (busca ?? "").Trim();
+                var todos = await ts.BuscarTelefonesWhatsAppClienteAsync(codCliente);
+                var batem = FiltrarContatos(todos, termo);
+                var porTelefone = SoDigitos(termo).Length >= 8;
+
+                // Buscou por telefone: só os que batem. Por nome: os que batem ou, se nenhum, todos.
+                var lista = batem.Count > 0 || porTelefone ? batem : todos;
+
+                return Results.Ok(new MobileContatosDto
+                {
+                    Filtrado = batem.Count > 0,
+                    Contatos = lista.Select(x => new MobileContatoDto
+                    {
+                        Nome = x.Nome,
+                        Telefone = TelefoneBR.Normalizar(x.Telefone),
+                        TelefoneFormatado = MobileRepository.FormatarTelefone(x.Telefone)
+                    }).ToList()
+                });
+            });
+
+            // Criar o ticket — mesmo caminho do botão "Criar" da criação rápida do HELP
+            api.MapPost("/tickets", async (MobileNovoTicketRequest req, HttpContext http, TicketService ts, AdminService admin) =>
+            {
+                var u = Contexto(http);
+                if (!await admin.UsuarioTemPermissaoAsync(u.Usuario, "TICKETS_RESPONDER"))
+                    return Falha("Você não tem permissão para criar tickets.", 403);
+
+                var mensagem = (req.Mensagem ?? "").Trim();
+                if (mensagem.Length == 0) return Falha("Escreva a primeira mensagem.");
+
+                var telDigitos = SoDigitos(req.Telefone);
+                if (telDigitos.Length is > 0 and < 10) return Falha("Informe o WhatsApp com DDD.");
+
+                var codCliente = req.CodCliente;
+                if (codCliente <= 0 && !string.IsNullOrWhiteSpace(req.NovoClienteNome))
+                    codCliente = await ts.CriarClienteRapidoAsync(req.NovoClienteNome.Trim());
+
+                if (codCliente <= 0 && telDigitos.Length == 0)
+                    return Falha("Escolha o cliente ou informe o WhatsApp.");
+
+                // Contato novo: guarda o celular no cadastro do cliente (só se estiver vazio, igual ao HELP)
+                if (req.ContatoNovo && codCliente > 0 && telDigitos.Length >= 10)
+                    await ts.SalvarCelularClienteAsync(codCliente, telDigitos);
+
+                var telefone = telDigitos.Length >= 10 ? TelefoneBR.Normalizar(telDigitos) : null;
+                var nomeContato = string.IsNullOrWhiteSpace(req.NomeContato) ? null : req.NomeContato.Trim();
+
+                var id = await ts.CriarChamadoComAnexoAsync(
+                    assunto: mensagem.Length > 80 ? mensagem[..80] + "..." : mensagem,
+                    descricao: mensagem,
+                    codCliente: codCliente,
+                    codSetor: 1,
+                    codSituacao: 1,
+                    codTipo: telefone != null ? 5 : 1,
+                    prioridade: 2,
+                    usuarioResponsavel: u.Usuario,
+                    arquivo: null,
+                    usuarioAbertura: u.Usuario,
+                    telefoneWhatsApp: telefone,
+                    nomeWhatsApp: nomeContato);
+
+                Console.WriteLine($"[MOBILE] Ticket #{id} criado por {u.Usuario} (cliente {codCliente}, tel {telefone})");
+                return Results.Ok(new MobileNovoTicketResponse { Sucesso = true, Codigo = id, Mensagem = $"Ticket #{id} criado." });
+            });
+
             // Finalizar: mesmo caminho do F3 "Finalizar sem insight" da tela Ticket do HELP
             api.MapPost("/tickets/{id:int}/finalizar", async (
                 int id, HttpContext http, TicketService ts, AdminService admin) =>
@@ -461,6 +560,35 @@ namespace EvolutCRM.Mobile
 
         /// <summary>Quantas mensagens a conversa abre (as anteriores vêm ao rolar para cima).</summary>
         private const int LimitePadrao = 50;
+
+        private static string SoDigitos(string? s) => new string((s ?? "").Where(char.IsDigit).ToArray());
+
+        // Só dígitos e sinais de telefone, com 10+ dígitos
+        private static bool EhTelefone(string termo) =>
+            termo.All(ch => char.IsDigit(ch) || " ()+-./".Contains(ch)) && SoDigitos(termo).Length >= 10;
+
+        private static List<WhatsAppContatoDto> FiltrarContatos(List<WhatsAppContatoDto> contatos, string termo)
+        {
+            var dig = SoDigitos(termo);
+            if (dig.Length >= 8)
+                return contatos.Where(x => TelefoneBate(x.Telefone, dig)).ToList();
+            if (termo.Length < 2) return new();
+            return contatos.Where(x => (x.Nome ?? "").Contains(termo, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        private static bool TelefoneBate(string? telefone, string dig)
+        {
+            var tel = SoDigitos(telefone);
+            if (tel.Length < 8) return false;
+            if (dig.Length >= 10)
+            {
+                var a = TelefoneBR.GerarVariantes(tel);
+                var b = TelefoneBR.GerarVariantes(dig);
+                if (a.Count > 0 && b.Count > 0) return a.Intersect(b).Any();
+                return tel[^8..] == dig[^8..];
+            }
+            return tel.Contains(dig) || dig.Contains(tel);   // ainda digitando: busca por trecho
+        }
 
         private static IResult Falha(string mensagem, int status = 400) =>
             Results.Json(new MobileEnviarResponse { Sucesso = false, Mensagem = mensagem }, statusCode: status);

@@ -7,10 +7,39 @@ namespace EvolutCRM.Services;
 public class DocumentacaoService
 {
     private readonly IConfiguration _config;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly EmbeddingIndex _index;
 
-    public DocumentacaoService(IConfiguration config)
+    public DocumentacaoService(IConfiguration config, IServiceScopeFactory scopeFactory, EmbeddingIndex index)
     {
         _config = config;
+        _scopeFactory = scopeFactory;
+        _index = index;
+    }
+
+    /// <summary>
+    /// Atualiza a documentação no índice da IA em segundo plano (não deixa o salvar mais lento).
+    /// Despublicada, excluída ou do HELP: só sai do índice.
+    /// </summary>
+    private void AtualizarIndiceIA(int codigo)
+    {
+        if (codigo <= 0) return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var indexer = scope.ServiceProvider.GetRequiredService<EmbeddingIndexerService>();
+                var pedacos = await indexer.IndexarDocAsync(codigo);
+                await _index.AtualizarDocAsync(codigo);
+                LogHelper.Log($"[DOC IA] Documentação #{codigo}: {pedacos} pedaço(s) indexado(s)");
+            }
+            catch (Exception ex)
+            {
+                // a rotina da madrugada tenta de novo
+                LogHelper.Log($"[DOC IA] Documentação #{codigo}: erro ao indexar: {ex.Message}");
+            }
+        });
     }
 
     private SqlConnection CriarConexao()
@@ -213,6 +242,7 @@ public class DocumentacaoService
             }
 
             await tran.CommitAsync();
+            AtualizarIndiceIA(tutorial.Codigo);
             return tutorial.Codigo;
         }
         catch
@@ -257,6 +287,7 @@ public class DocumentacaoService
             }
 
             await tran.CommitAsync();
+            AtualizarIndiceIA(codigo);
         }
         catch
         {

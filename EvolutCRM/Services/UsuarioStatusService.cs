@@ -197,8 +197,16 @@ SELECT
     S.Descricao,
     S.Cor,
     ISNULL(S.Disponivel, 'S') AS Disponivel,
-    CASE WHEN U.DataHoraStatus IS NULL THEN NULL
-         ELSE DATEDIFF(MINUTE, U.DataHoraStatus, GETDATE()) END AS Minutos
+        CASE WHEN U.DataHoraStatus IS NULL THEN NULL
+         ELSE DATEDIFF(MINUTE, U.DataHoraStatus, GETDATE()) END AS Minutos,
+    (SELECT COUNT(1)
+     FROM TicketChamadoC T
+     WHERE T.CodEmp = U.CodEmp
+       AND UPPER(LTRIM(RTRIM(ISNULL(T.Usuario, '')))) = UPPER(LTRIM(RTRIM(U.Usuario)))
+       AND ISNULL(T.CodSetor, 1) = 1
+       AND ISNULL(T.CodSituacao, 1) = 1 
+       AND ISNULL(T.ChatInterno, 'N') <> 'S'
+    ) AS Atendimentos
 FROM Usuario U
 LEFT JOIN UsuarioStatus S
        ON S.CodEmp = U.CodEmp
@@ -222,7 +230,8 @@ ORDER BY U.Usuario", conn);
                 StatusDescricao = rd.IsDBNull(3) ? null : rd.GetString(3),
                 StatusCor = rd.IsDBNull(4) ? null : NormalizarCor(rd.GetString(4)),
                 StatusContaDisponivel = SimNao(rd.GetString(5)),
-                MinutosNoStatus = rd.IsDBNull(6) ? null : rd.GetInt32(6)
+                MinutosNoStatus = rd.IsDBNull(6) ? null : rd.GetInt32(6),
+                Atendimentos = rd.IsDBNull(7) ? 0 : rd.GetInt32(7)
             });
         }
 

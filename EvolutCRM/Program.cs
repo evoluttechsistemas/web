@@ -67,6 +67,9 @@ builder.Services.AddScoped<AiAutoLearningService>();
 builder.Services.AddScoped<OpenAiClient>();
 builder.Services.AddScoped<EmbeddingIndexerService>();
 builder.Services.AddSingleton<EmbeddingIndex>();
+builder.Services.AddHostedService<IndiceIaManutencaoService>(); // completa o índice da IA todo dia às 03:00
+builder.Services.AddSingleton<AvaliacaoIaJob>();                 // prova automática da IA (/api/ia/avaliar)
+builder.Services.AddSingleton<RegerarInsightsJob>();             // regera os insights sem solução (/api/ia/regerar-insights)
 builder.Services.Configure<OpenAiSettings>(
     builder.Configuration.GetSection("OpenAI"));
 builder.Services.AddScoped<ChatInternoService>();
@@ -386,13 +389,69 @@ app.MapGet("/api/test-busca", async (string q, EmbeddingIndex idx, OpenAiClient 
 });
 
 // reindexar volta ao normal
-app.MapGet("/api/reindexar", async (string? key, EmbeddingIndexerService indexer, EmbeddingIndex idx) =>
+// /api/reindexar?key=...                -> só o que está faltando (rápido)
+// /api/reindexar?key=...&completo=true  -> apaga e refaz todas as documentações
+app.MapGet("/api/reindexar", async (string? key, bool? completo, EmbeddingIndexerService indexer, EmbeddingIndex idx) =>
 {
-    if (key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
-    await indexer.IndexarDocsAsync();
-    await indexer.IndexarInsightsAsync();
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+
+    string resumo;
+    if (completo == true)
+    {
+        await indexer.IndexarDocsAsync();
+        var insights = await indexer.IndexarInsightsAsync();
+        resumo = $"Completo: todas as documentações refeitas | insights novos: {insights}";
+    }
+    else
+    {
+        var (removidas, indexadas, insights) = await indexer.IndexarPendentesAsync();
+        resumo = $"Pendentes: docs removidas {removidas} | docs indexadas {indexadas} | insights novos {insights}";
+    }
+
     await idx.ReloadAsync();
-    return Results.Text("Reindexado e recarregado.");
+    return Results.Text("Reindexado e recarregado. " + resumo);
+});
+
+// Regera em segundo plano os insights dos tickets que ficaram sem solução
+// /api/ia/regerar-insights?key=...&limite=500   e   /api/ia/regerar-insights/status?key=...
+app.MapGet("/api/ia/regerar-insights", (string? key, int? limite, RegerarInsightsJob job) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    var iniciou = job.Iniciar(Math.Clamp(limite ?? 500, 1, 2000));
+    return Results.Text(iniciou
+        ? "Regeneração iniciada em segundo plano. Acompanhe em /api/ia/regerar-insights/status?key=..."
+        : "Já está rodando.\n" + job.Status());
+});
+
+app.MapGet("/api/ia/regerar-insights/status", (string? key, RegerarInsightsJob job) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    return Results.Text(job.Status());
+});
+
+// Prova automática: faz as perguntas dos casos confirmados e mede a % de acerto
+// /api/ia/avaliar?key=...&limite=50   e   /api/ia/avaliar/status?key=...
+app.MapGet("/api/ia/avaliar", (string? key, int? limite, AvaliacaoIaJob job) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    var iniciou = job.Iniciar(Math.Clamp(limite ?? 50, 1, 500));
+    return Results.Text(iniciou
+        ? "Avaliação iniciada em segundo plano. Acompanhe em /api/ia/avaliar/status?key=..."
+        : "Já está rodando.\n" + job.Status());
+});
+
+app.MapGet("/api/ia/avaliar/status", (string? key, AvaliacaoIaJob job) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    return Results.Text(job.Status());
+});
+
+// Uso real no dia a dia: quanto os atendentes aproveitam a sugestão
+// /api/ia/relatorio?key=...&dias=30&emp=0
+app.MapGet("/api/ia/relatorio", async (string? key, int? dias, int? emp, AiService ai) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    return Results.Json(await ai.RelatorioAsync(dias ?? 30, emp ?? 0));
 });
 
 // carrega o índice em segundo plano, sem travar o start do app

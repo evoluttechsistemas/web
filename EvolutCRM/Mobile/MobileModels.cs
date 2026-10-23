@@ -174,4 +174,50 @@ namespace EvolutCRM.Mobile
     {
         public int CodCliente { get; set; }
     }
+
+    // ── Novo ticket ──
+    public class MobileClienteSugestaoDto
+    {
+        public int Codigo { get; set; }
+        public string Nome { get; set; } = "";
+        public string Contato { get; set; } = "";   // contato que bateu com a busca (ex.: "Gabriel (+1)")
+    }
+
+    public class MobileBuscaNovoTicketDto
+    {
+        public List<MobileClienteSugestaoDto> Clientes { get; set; } = new();
+        public string Telefone { get; set; } = "";            // preenchido quando o que foi digitado é um telefone
+        public string TelefoneFormatado { get; set; } = "";
+        public bool OferecerNovoContato { get; set; }         // telefone que não existe → cadastrar contato
+    }
+
+    public class MobileContatoDto
+    {
+        public string Nome { get; set; } = "";
+        public string Telefone { get; set; } = "";
+        public string TelefoneFormatado { get; set; } = "";
+    }
+
+    public class MobileContatosDto
+    {
+        public List<MobileContatoDto> Contatos { get; set; } = new();
+        public bool Filtrado { get; set; }                    // true = a lista só tem os que bateram com a busca
+    }
+
+    public class MobileNovoTicketRequest
+    {
+        public int CodCliente { get; set; }
+        public string NovoClienteNome { get; set; } = "";
+        public string Telefone { get; set; } = "";
+        public string NomeContato { get; set; } = "";
+        public bool ContatoNovo { get; set; }
+        public string Mensagem { get; set; } = "";
+    }
+
+    public class MobileNovoTicketResponse
+    {
+        public bool Sucesso { get; set; }
+        public int Codigo { get; set; }
+        public string Mensagem { get; set; } = "";
+    }
 }

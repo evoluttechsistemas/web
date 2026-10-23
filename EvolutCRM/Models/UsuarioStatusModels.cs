@@ -36,6 +36,7 @@ public class EquipeMembroModel
     public string? StatusCor { get; set; }
     public bool StatusContaDisponivel { get; set; } = true;
     public int? MinutosNoStatus { get; set; }
+    public int Atendimentos { get; set; }
 
     /// <summary>Online e (sem status ou num status marcado como disponível).</summary>
     public bool Disponivel => Online && (!CodStatus.HasValue || StatusContaDisponivel);

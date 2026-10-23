@@ -65,3 +65,9 @@ web.config
 !EvolutCRM/KHelpDeskIntegraV3.dll
 !HelpDesktop/KHelpDeskIntegraV3.dll
 !HelpDesktop/libeay32.dll
+
+# ==========================================
+# SCRIPTS DE PUBLICACAO (tem senha do FTP e do SQL)
+# ==========================================
+publicar.ps1
+publicar-rapido.ps1

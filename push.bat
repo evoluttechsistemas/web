@@ -19,6 +19,9 @@ if errorlevel 1 (
 git status
 echo.
 
+rem Scripts com senha nunca vao para o git (so tira do git, NAO apaga o arquivo da pasta)
+git rm --cached --ignore-unmatch -q publicar.ps1 publicar-rapido.ps1 >nul 2>&1
+
 git add .
 git diff --cached --quiet
 

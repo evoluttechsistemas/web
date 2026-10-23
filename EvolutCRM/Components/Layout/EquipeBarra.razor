@@ -20,17 +20,21 @@
             {
                 var membro = m;
                 var naoLidas = NaoLidasDe(membro.Usuario);
-                <button type="button"
-                        class="eq-av eq-av-btn @(membro.Online ? "" : "eq-av-off") @(naoLidas > 0 ? "eq-av-pulsa" : "") @(EhEu(membro) ? "eq-av-eu" : "")"
-                        style="background:@CorAvatar(membro.Usuario); box-shadow:0 0 0 2px #e9edf2, 0 0 0 4px @membro.StatusCorFinal;"
-                        title="@DicaAvatar(membro, naoLidas)"
-                        @onclick="() => ClicarAvatarAsync(membro)">
-                    @Iniciais(membro.Usuario)
-                    @if (naoLidas > 0)
-                    {
-                        <span class="eq-badge">@(naoLidas > 9 ? "9+" : naoLidas.ToString())</span>
-                    }
-                </button>
+                <span class="eq-membro">
+                    <button type="button"
+                            class="eq-av eq-av-btn @(membro.Online ? "" : "eq-av-off") @(naoLidas > 0 ? "eq-av-pulsa" : "") @(EhEu(membro) ? "eq-av-eu" : "")"
+                            style="background:@CorAvatar(membro.Usuario); box-shadow:0 0 0 2px #e9edf2, 0 0 0 4px @membro.StatusCorFinal;"
+                            title="@DicaAvatar(membro, naoLidas)"
+                            @onclick="() => ClicarAvatarAsync(membro)">
+                        @Iniciais(membro.Usuario)
+                        @if (naoLidas > 0)
+                        {
+                            <span class="eq-badge">@(naoLidas > 9 ? "9+" : naoLidas.ToString())</span>
+                        }
+                    </button>
+                    <span class="eq-qtd @(membro.Atendimentos == 0 ? "zero" : "")"
+                          title="@membro.Atendimentos atendimento(s) em andamento">@membro.Atendimentos</span>
+                </span>
             }
             @if (AvataresExcedentes > 0)
             {
@@ -75,6 +79,9 @@
                         @Iniciais(membro.Usuario)
                     </span>
                     <span class="eq-nome">@NomeExibicao(membro)</span>
+
+                    <span class="eq-qtd @(membro.Atendimentos == 0 ? "zero" : "")"
+                          title="Atendimentos em andamento">@membro.Atendimentos</span>
                     @if (naoLidas > 0)
                     {
                         <span class="eq-badge-linha">@naoLidas</span>
@@ -350,7 +357,7 @@
     }
 
     @@media (max-width: 600px) {
-        .eq-avatares .eq-av:nth-child(n+5):not(.eq-mais) {
+        .eq-avatares > .eq-membro:nth-child(n+5) {
             display: none;
         }
 
@@ -505,6 +512,32 @@
         button.eq-off-nome:hover {
             background: #e2e8f0;
             color: #0f172a;
+        }
+
+    .eq-membro {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .eq-qtd {
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #1e3a8a;
+        color: #fff;
+        font-size: 9.5px;
+        font-weight: 800;
+        line-height: 1;
+    }
+
+        .eq-qtd.zero {
+            background: #e2e8f0;
+            color: #64748b;
         }
 </style>
 
@@ -671,7 +704,7 @@
 
     private string DicaAvatar(EquipeMembroModel m, int naoLidas)
     {
-        var dica = Dica(m);
+        var dica = Dica(m) + $"\n{m.Atendimentos} atendimento(s) em andamento";
         if (EhEu(m)) return dica + " (você)";
         if (naoLidas > 0) return $"{dica}\n{naoLidas} mensagem(ns) nova(s) — clique para abrir";
         return dica + "\nClique para conversar";

@@ -15,24 +15,32 @@ public sealed class OpenAiClient
         _config = config;
     }
 
-    public async Task<List<TicketInsight>> GenerateInsightsAsync(string ticketBaseText)
+    public async Task<List<TicketInsight>> GenerateInsightsAsync(string ticketBaseText, List<string>? imagens = null)
     {
         var model = _config["OpenAI:Model"] ?? "gpt-4o-mini";
+        imagens ??= new List<string>();
 
         var system = @"
-Você é um especialista em análise de tickets ERP/CRM.
+Você é um especialista em análise de tickets de suporte do sistema Evolut (ERP/CRM: PDV, fiscal, financeiro, estoque, etiquetas, balança, impressoras).
 
 Sua função:
 - identificar problemas técnicos reais;
 - separar assuntos diferentes;
 - identificar causa provável;
-- identificar solução aplicada;
+- identificar a solução aplicada;
 - gerar conhecimento reutilizável para suporte futuro.
+
+COMO LER O TICKET:
+- Cliente = quem pediu ajuda. Atendente = suporte EvolutTech. Nota interna = anotação do suporte que o cliente não vê
+  (muitas vezes é ali que está o que foi feito de verdade).
+- [imagem N anexada] = print enviado no ticket; a imagem N vem junto. Use o que aparece nela
+  (mensagem de erro, código de rejeição, tela, campo) no resumo, na causa e na solução.
+- [áudio] = transcrição de um áudio.
 
 IMPORTANTE:
 - Não invente solução.
-- Só considere solução quando ela realmente estiver confirmada no histórico.
-- Se o atendente apenas sugeriu algo, mas o cliente não confirmou, deixe solucao vazio.
+- Só considere solução quando ela realmente estiver no histórico (mensagem do atendente, nota interna ou print).
+- Se o atendente apenas sugeriu algo e não há confirmação de que resolveu, preencha a solução mas marque solucaoConfirmada = false.
 - Tags devem ser curtas, técnicas e úteis para busca futura.
 - Evite tags genéricas.
 - Priorize módulo, erro, ação, funcionalidade, rotina, tela e integração.
@@ -40,18 +48,18 @@ IMPORTANTE:
 ";
         var user = $@"
 Analise o ticket abaixo e identifique os assuntos/problemas tratados.
-Retorne um JSON como LISTA (array) e gere 1 item por assunto.
+Gere 1 item por assunto, dentro da lista ""itens"".
 
 Regras:
 - Não misture assuntos diferentes no mesmo item.
 - Identifique a causa provável quando estiver clara.
-- Marque solucaoConfirmada como true somente quando houver confirmação real no histórico.
+- solucaoConfirmada = true somente quando o cliente confirmou que resolveu (ex.: ""deu certo"", ""funcionou"")
+  ou o atendente registrou que resolveu e o ticket foi finalizado sem o cliente reclamar de novo.
 - Use confianca de 0 a 100 conforme a segurança da análise.
 - Tags devem ser minúsculas, sem acentos, sem espaços e úteis para busca futura.
 - Nunca use tags genéricas como erro, sistema, problema, ajuda.
 - topicoIndex começa em 1 (1,2,3...).
-- Se não houver solução confirmada, deixe ""solucao"": """".
-- Responda SOMENTE com JSON, sem ```.
+- Se não houver solução no histórico, deixe ""solucao"": """" e ""solucaoConfirmada"": false.
 
 categoria: escolha EXATAMENTE uma desta lista (não invente outra):
 pdv, fiscal_nfe, fiscal_nfce, financeiro_pagar, financeiro_receber, estoque,
@@ -62,40 +70,54 @@ gravidade: escolha uma: baixa, media, alta
 confianca: número de 0 a 100 (quão seguro você está da análise)
 
 REGRA DA SOLUÇÃO (importante):
-- Só preencha ""solucao"" se houver o PASSO concreto no histórico (caminho de tela, tecla, código, ação).
+- Só preencha ""solucao"" se houver o PASSO concreto no histórico (caminho de tela, tecla, código, ação, configuração alterada).
 - Se o problema foi resolvido por acesso remoto SEM o passo escrito, deixe ""solucao"": """".
 - ""solucao"" nunca deve ser ""resolvido"", ""deu certo"" ou ""ajuste feito"".
 
 Formato exato:
 
-[
-  {{{{
-    ""topicoIndex"": 1,
-    ""topicoTitulo"": """",
-    ""perguntaCliente"": """",
-    ""resumo"": """",
-    ""categoria"": """",
-    ""intencao"": """",
-    ""gravidade"": """",
-    ""tags"": ["""",""""],
-    ""causaProvavel"": """",
-    ""solucao"": """",
-    ""confianca"": 0
-  }}}}
-]
+{{
+  ""itens"": [
+    {{
+      ""topicoIndex"": 1,
+      ""topicoTitulo"": """",
+      ""perguntaCliente"": """",
+      ""resumo"": """",
+      ""categoria"": """",
+      ""intencao"": """",
+      ""gravidade"": """",
+      ""tags"": ["""",""""],
+      ""causaProvavel"": """",
+      ""solucao"": """",
+      ""solucaoConfirmada"": false,
+      ""confianca"": 0
+    }}
+  ]
+}}
 
 TICKET:
 {ticketBaseText}
 ";
 
+        // Texto + prints do ticket
+        object conteudoUsuario = user;
+        if (imagens.Count > 0)
+        {
+            var partes = new List<object> { new { type = "text", text = user } };
+            foreach (var img in imagens)
+                partes.Add(new { type = "image_url", image_url = new { url = img, detail = "high" } });
+            conteudoUsuario = partes;
+        }
+
         var body = new
         {
             model = model,
             temperature = 0.2,
+            response_format = new { type = "json_object" },
             messages = new object[]
             {
                 new { role = "system", content = system },
-                new { role = "user", content = user }
+                new { role = "user", content = conteudoUsuario }
             }
         };
 
@@ -120,14 +142,22 @@ TICKET:
         if (string.IsNullOrWhiteSpace(content))
             throw new Exception("OpenAI retornou content vazio.");
 
-        content = CleanJson(content);
-
         try
         {
             var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-            // ✅ Agora desserializa LISTA
-            var insights = JsonSerializer.Deserialize<List<TicketInsight>>(content, opts);
+            // Formato novo: { "itens": [ ... ] }. Aceita também a lista pura (formato antigo).
+            List<TicketInsight>? insights;
+            using (var j = JsonDocument.Parse(content.Trim()))
+            {
+                var raiz = j.RootElement;
+                if (raiz.ValueKind == JsonValueKind.Object && raiz.TryGetProperty("itens", out var itens))
+                    insights = JsonSerializer.Deserialize<List<TicketInsight>>(itens.GetRawText(), opts);
+                else if (raiz.ValueKind == JsonValueKind.Array)
+                    insights = JsonSerializer.Deserialize<List<TicketInsight>>(raiz.GetRawText(), opts);
+                else
+                    insights = new List<TicketInsight> { JsonSerializer.Deserialize<TicketInsight>(raiz.GetRawText(), opts)! };
+            }
 
             if (insights == null || insights.Count == 0)
                 throw new Exception("Deserialize retornou lista vazia.");
