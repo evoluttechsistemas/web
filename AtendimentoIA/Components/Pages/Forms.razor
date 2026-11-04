@@ -1,0 +1,39 @@
+@page "/forms"
+@implements IDisposable
+@inject IndexingService Indexer
+<PageTitle>Explorar Forms · EvolutTech IA</PageTitle>
+@if (!Indexer.IsReady) { <div class="notice" role="status">Recuperando o índice anterior. A lista será atualizada quando o carregamento terminar.</div> }
+@if (Indexer.InitializationWarning is { } warning) { <div class="notice warning-notice">@warning</div> }
+<div class="page-heading"><div><div class="eyebrow">EXPLORAR O CÓDIGO</div><h1>Telas e suas referências.</h1><p>Encontre Forms e veja as associações de eventos identificadas no código.</p></div></div>
+<section class="card"><div class="search-row"><label for="form-search">Buscar Form</label><input id="form-search" @bind="search" @bind:event="oninput" placeholder="Nome da classe ou arquivo…" /><span class="subtle">@Matches.Count resultado(s)</span></div>
+@if (Indexer.Result is null) { <div class="empty"><span>▤</span><h3>Ainda não há código indexado</h3><p>Inicie uma indexação na visão geral para explorar os Forms.</p><a href="/">Ir para visão geral →</a></div> }
+else if (Matches.Count == 0) { <div class="empty"><h3>Nenhum Form encontrado</h3><p>Tente outro termo ou consulte os diagnósticos da indexação.</p></div> }
+else {
+    @foreach (var form in Matches.Skip(page * PageSize).Take(PageSize))
+    { <details class="form-item"><summary><span class="form-glyph">▤</span><span><strong>@form.Name.Replace("global::", "")</strong><small>@Relative(form.Sources.First().File)</small></span><span class="badge @(form.FormEvidence == "syntax-candidate" ? "warning" : "")">@(form.FormEvidence == "syntax-candidate" ? "Candidato" : "Confirmado")</span><span class="subtle">@form.Events.Count evento(s)</span></summary>
+      <div class="form-detail"><h3>Arquivos de origem</h3>@foreach (var source in form.Sources) { <p class="source-path">@Relative(source.File):@source.Line</p> }
+      <h3>Associações encontradas</h3>@if (form.Events.Count == 0) { <p class="subtle">Nenhuma associação identificável nesta classe.</p> }
+      else { <div class="table-scroll"><table><thead><tr><th>Evento / alvo</th><th>Método associado</th><th>Evidência</th></tr></thead><tbody>@foreach (var ev in form.Events) { <tr><td><code>@ev.Target</code></td><td><code>@ev.Handler</code><small>@Relative(ev.Source.File):@ev.Source.Line</small></td><td>@(ev.Evidence == "semantic-event" ? "Resolvida pelo Roslyn" : "Candidata sintática")</td></tr> }</tbody></table></div> }</div></details> }
+    <div class="pagination"><button class="secondary" disabled="@(page == 0)" @onclick="Previous">← Anterior</button><span>Página @(page + 1) de @Math.Max(1, (int)Math.Ceiling(Matches.Count / (double)PageSize))</span><button class="secondary" disabled="@((page + 1) * PageSize >= Matches.Count)" @onclick="Next">Próxima →</button></div>
+}
+</section>
+@if (Indexer.Result is { } result && result.Issues.Count > 0)
+{ <section class="card history"><div class="section-heading"><div><h2>Diagnósticos da análise</h2><p>Referências ausentes podem limitar a análise semântica. O inventário sintático continua disponível.</p></div><span class="badge warning">@result.Issues.Count.ToString("N0")</span></div><div class="table-scroll"><table><thead><tr><th>Código</th><th>Categoria</th><th>Arquivo / linha</th></tr></thead><tbody>@foreach (var issue in result.Issues.Take(50)) { <tr><td><code>@issue.Code</code></td><td>@issue.Kind</td><td>@(string.IsNullOrEmpty(issue.File) ? "Escopo de compilação" : Relative(issue.File)):@issue.Line</td></tr> }</tbody></table></div><p class="subtle footnote">Exibindo até 50 diagnósticos. O relatório completo fica no armazenamento administrativo do servidor.</p></section> }
+@code {
+    private string text = "";
+    private int page;
+    private const int PageSize = 20;
+    private string search { get => text; set { text = value; page = 0; } }
+    private List<ClassInfoResult> Matches => Indexer.Result?.Forms.Where(f => f.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || f.Sources.Any(s => s.File.Contains(search, StringComparison.OrdinalIgnoreCase))).OrderBy(f => f.Name).ToList() ?? [];
+    private string Relative(string path) => Indexer.Result is { } result ? System.IO.Path.GetRelativePath(result.Root, path) : System.IO.Path.GetFileName(path);
+    private readonly CancellationTokenSource disposal = new();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || Indexer.IsReady) return;
+        try { await Indexer.Ready.WaitAsync(disposal.Token); await InvokeAsync(StateHasChanged); }
+        catch (OperationCanceledException) { }
+    }
+    public void Dispose() { disposal.Cancel(); disposal.Dispose(); }
+    private void Previous() => page--;
+    private void Next() => page++;
+}

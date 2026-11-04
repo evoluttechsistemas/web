@@ -1,0 +1,562 @@
+﻿@page "/usuarios"
+@using EvolutTur.Models
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Security.Cryptography
+@using System.Text
+@inject UsuarioService usuarioService
+@inject AuthenticationStateProvider AuthProvider
+
+<style>
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+        color: #333;
+    }
+
+    .layout {
+        display: flex;
+        align-items: flex-start;
+        min-height: 100vh;
+    }
+
+    .page-container {
+        max-width: 100%;
+        width: 100%;
+        padding: 20px;
+    }
+
+    h4 {
+        color: #2c3e50;
+        font-weight: 600;
+        margin-bottom: 0;
+    }
+
+    .btn {
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-primary-custom {
+        background-color: #3498db;
+        color: white;
+    }
+
+        .btn-primary-custom:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(41, 128, 185, 0.2);
+        }
+
+        .btn-primary-custom:active {
+            transform: translateY(0);
+        }
+
+    .btn-danger {
+        background-color: #e74c3c;
+        color: white;
+    }
+
+        .btn-danger:hover {
+            background-color: #c0392b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(192, 57, 43, 0.2);
+        }
+
+    .btn-secondary {
+        background-color: #95a5a6;
+        color: white;
+    }
+
+        .btn-secondary:hover {
+            background-color: #7f8c8d;
+        }
+
+    .btn-sm {
+        padding: 5px 10px;
+        font-size: 0.875rem;
+    }
+
+    .form-control {
+        border-radius: 6px;
+        border: 1px solid #ddd;
+        padding: 10px 15px;
+        transition: all 0.3s ease;
+    }
+
+        .form-control:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+            outline: none;
+        }
+
+    .form-label {
+        font-weight: 500;
+        margin-bottom: 5px;
+        display: block;
+        color: #2c3e50;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background-color: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+        .table th {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ecf0f1;
+            vertical-align: middle;
+        }
+
+        .table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .table tr:hover td {
+            background-color: #f8fafb;
+        }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+    }
+
+    .modal-dialog {
+        max-width: 500px;
+        width: 100%;
+    }
+
+
+
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0,0,0,0.5); /* Fundo escuro semi-transparente */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 2000;
+    }
+
+    .modal-content {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        max-width: 500px;
+        width: 100%;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        position: relative;
+    }
+
+    .modal-header-custom {
+        background-color: #3498db;
+        padding: 15px 20px;
+    }
+
+    .modal-title {
+        font-weight: 600;
+    }
+
+    .btn-close-white {
+        filter: invert(1);
+        opacity: 0.8;
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .mt-4 {
+        margin-top: 1.5rem;
+    }
+
+    .mb-3 {
+        margin-bottom: 1rem;
+    }
+
+    .ms-2 {
+        margin-left: 0.5rem;
+    }
+
+    .d-flex {
+        display: flex;
+    }
+
+    .justify-content-between {
+        justify-content: space-between;
+    }
+
+    .align-items-center {
+        align-items: center;
+    }
+
+    .gap-1 {
+        gap: 0.25rem;
+    }
+
+    .validation-message {
+        color: #e74c3c;
+        font-size: 0.875rem;
+        margin-top: 5px;
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus {
+        border-color: #3498db;
+        box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+    }
+
+    @@media (max-width: 768px) {
+        .page-container {
+            margin-left: 0;
+            padding: 15px;
+        }
+
+        .d-flex {
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .modal-dialog {
+            margin: 0 15px;
+        }
+    }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .modal-content {
+        animation: fadeIn 0.3s ease-out;
+    }
+
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn:active {
+        transform: translateY(0);
+    }
+</style>
+
+
+<div class="layout">
+    <Menu />
+
+    <div class="page-container">
+        <div class="container mt-4">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Cadastro de Usuários</h4>
+                <button class="btn btn-primary-custom" @onclick="AbrirModalCadastro">Cadastrar Usuário</button>
+            </div>
+
+            <div class="mb-3">
+                <input class="form-control" placeholder="Buscar usuário pelo nome..." @oninput="BuscarComFiltro" />
+            </div>
+
+            @if (usuarios.Count == 0)
+            {
+                <p>Nenhum usuário cadastrado.</p>
+            }
+            else
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Email</th>
+                            <th style="width:180px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var v in usuarios)
+                        {
+                            <tr>
+                                <td>@v.Nome</td>
+                                <td>@v.Usuario</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-primary-custom btn-sm" @onclick="() => AbrirModalEdicao(v.Codigo)">Editar</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => ExcluirVendedor(v.Codigo)">Excluir</button>
+                                        <button class="btn btn-secondary btn-sm" @onclick="() => AbrirModalAlterarSenha(v.Codigo)">Alterar Senha</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+
+            <!-- Modal Cadastro/Edição -->
+            @if (modalAberto)
+            {
+                <div class="modal-overlay">
+                    <div class="modal-content" @onclick:stopPropagation>
+                        <EditForm Model="usuarioSelecionado" OnValidSubmit="SalvarUsuario">
+                            <DataAnnotationsValidator />
+                            <ValidationSummary />
+
+                            <div class="mb-3">
+                                <label class="form-label">Nome</label>
+                                <InputText class="form-control" @bind-Value="usuarioSelecionado.Nome" />
+                                <ValidationMessage For="@(() => usuarioSelecionado.Nome)" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">E-mail</label>
+                                <InputText class="form-control" @bind-Value="usuarioSelecionado.Usuario" />
+                                <ValidationMessage For="@(() => usuarioSelecionado.Usuario)" />
+                            </div>
+
+                            @if (usuarioSelecionado.Codigo == 0)
+                            {
+                                <div class="mb-3">
+                                    <label class="form-label">Senha</label>
+                                    <InputText class="form-control" @bind-Value="usuarioSelecionado.Senha" type="password" />
+                                    <ValidationMessage For="@(() => usuarioSelecionado.Senha)" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Confirmar Senha</label>
+                                    <InputText class="form-control" @bind-Value="usuarioSelecionado.ConfirmarSenha" type="password" />
+                                    <ValidationMessage For="@(() => usuarioSelecionado.ConfirmarSenha)" />
+                                </div>
+                            }
+
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="Master" @bind="usuarioSelecionado.usuarioMasterBool" />
+                                <label class="form-label" for="Master">Usuário Master</label>
+                            </div>
+
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="permInserir" @bind="usuarioSelecionado.PermInserirBool" />
+                                <label class="form-label" for="permInserir">Permissão: Incluir</label>
+                            </div>
+
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="permAlterar" @bind="usuarioSelecionado.PermAlterarBool" />
+                                <label class="form-label" for="permAlterar">Permissão: Alterar</label>
+                            </div>
+
+                            <div class="mb-3 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="permExcluir" @bind="usuarioSelecionado.PermExcluirBool" />
+                                <label class="form-label" for="permExcluir">Permissão: Excluir</label>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary-custom">
+                                @((usuarioSelecionado.Codigo == 0) ? "Incluir" : "Alterar")
+                            </button>
+                            <button type="button" class="btn btn-secondary ms-2" @onclick="FecharModal">Cancelar</button>
+                        </EditForm>
+                    </div>
+                </div>
+            }
+
+            <!-- Modal Alterar Senha -->
+            @if (modalAlterarSenhaAberto)
+            {
+                <div class="modal-overlay">
+                    <div class="modal-content" @onclick:stopPropagation>
+                        <h5>Alterar Senha</h5>
+                        @if (!string.IsNullOrEmpty(mensagemErroSenha))
+                        {
+                            <div class="validation-message">@mensagemErroSenha</div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">Nova Senha</label>
+                            <InputText class="form-control" @bind-Value="novaSenha" type="password" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Confirmar Nova Senha</label>
+                            <InputText class="form-control" @bind-Value="confirmarNovaSenha" type="password" />
+                        </div>
+                        <button class="btn btn-primary-custom" @onclick="SalvarNovaSenha">Salvar</button>
+                        <button class="btn btn-secondary ms-2" @onclick="FecharModalAlterarSenha">Cancelar</button>
+                    </div>
+                </div>
+            }
+
+        </div>
+    </div>
+</div>
+
+@code {
+    List<Models.UsuarioMaster> usuarios = new();
+    Models.UsuarioMaster usuarioSelecionado = new();
+    bool modalAberto = false;
+    string filtroNome = "";
+
+    // Controle do modal de alteração de senha
+    bool modalAlterarSenhaAberto = false;
+    string novaSenha = "";
+    string confirmarNovaSenha = "";
+    int usuarioParaAlterarSenha = 0;
+    string mensagemErroSenha = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await BuscarUsuarios("");
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var codEmpClaim = user.FindFirst("CodEmp")?.Value;
+            if (!string.IsNullOrEmpty(codEmpClaim) && int.TryParse(codEmpClaim, out int codEmp))
+            {
+                return codEmp;
+            }
+            // Aqui você pode logar ou tratar o caso de claim ausente ou inválida
+        }
+
+        return 0;
+    }
+
+    private async Task BuscarUsuarios(string nome)
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        usuarios = await usuarioService.BuscarUsuarios(CodEmp, nome);
+    }
+
+    private async Task BuscarComFiltro(ChangeEventArgs e)
+    {
+        filtroNome = e.Value?.ToString() ?? "";
+        await BuscarUsuarios(filtroNome);
+    }
+
+    void AbrirModalCadastro()
+    {
+        usuarioSelecionado = new Models.UsuarioMaster();
+        modalAberto = true;
+    }
+
+    void AbrirModalEdicao(int codigo)
+    {
+        var v = usuarios.Find(x => x.Codigo == codigo);
+        if (v != null)
+        {
+            usuarioSelecionado = new Models.UsuarioMaster
+            {
+                Codigo = v.Codigo,
+                Usuario = v.Usuario,
+                Senha = v.Senha,
+                PermAlterar = v.PermAlterar,
+                PermExcluir = v.PermExcluir,
+                PermInserir = v.PermInserir,
+                Master = v.Master,
+                Nome = v.Nome
+            };
+            modalAberto = true;
+        }
+    }
+
+    void FecharModal() => modalAberto = false;
+
+    // Modal de alteração de senha
+    void AbrirModalAlterarSenha(int codigo)
+    {
+        usuarioParaAlterarSenha = codigo;
+        novaSenha = "";
+        confirmarNovaSenha = "";
+        mensagemErroSenha = "";
+        modalAlterarSenhaAberto = true;
+    }
+
+    void FecharModalAlterarSenha() => modalAlterarSenhaAberto = false;
+
+    private async Task SalvarUsuario()
+    {
+        usuarioSelecionado.Senha = HashSenha(usuarioSelecionado.Senha);
+
+        int CodEmp = await CarregarCodEmpAsync();
+        if (usuarioSelecionado.Codigo == 0)
+            await usuarioService.AdicionarUsuario(usuarioSelecionado, CodEmp);
+        else
+            await usuarioService.AtualizarUsuario(usuarioSelecionado, CodEmp);
+
+        await BuscarUsuarios("");
+        FecharModal();
+    }
+
+    private async Task SalvarNovaSenha()
+    {
+        if (string.IsNullOrWhiteSpace(novaSenha) || novaSenha.Length < 6)
+        {
+            mensagemErroSenha = "A senha deve ter pelo menos 6 caracteres.";
+            return;
+        }
+        if (novaSenha != confirmarNovaSenha)
+        {
+            mensagemErroSenha = "As senhas não coincidem.";
+            return;
+        }
+
+        var usuario = usuarios.Find(x => x.Codigo == usuarioParaAlterarSenha);
+        if (usuario != null)
+        {
+            usuario.Senha = HashSenha(novaSenha);
+            int CodEmp = await CarregarCodEmpAsync();
+            await usuarioService.AtualizarUsuario(usuario, CodEmp);
+            await BuscarUsuarios("");
+            FecharModalAlterarSenha();
+        }
+    }
+
+    private async Task ExcluirVendedor(int codigo)
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        await usuarioService.ExcluirUsuario(codigo, CodEmp);
+        await BuscarUsuarios("");
+    }
+
+    private string HashSenha(string senha)
+    {
+        // Exemplo simples de hash SHA256 (não recomendado para produção, prefira bcrypt, Argon2, etc)
+        using var sha = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(senha);
+        var hash = sha.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
+    }
+}

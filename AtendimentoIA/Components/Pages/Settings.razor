@@ -1,0 +1,77 @@
+@page "/configuracoes"
+@inject PanelStore Store
+@inject SecretStore Secrets
+@inject SimulationService Simulation
+@inject IConfiguration Configuration
+@inject SupportContextService Support
+<PageTitle>Configurações · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">CONEXÕES E INTELIGÊNCIA</div><h1>Todas as configurações, em um lugar.</h1><p>Gerencie as fontes do ERP e a geração de respostas. Os dados já cadastrados são preservados.</p></div><a class="secondary" href="/simulador">Abrir simulador →</a></div>
+<div class="settings-layout"><aside class="card settings-index"><h2>Configurações</h2><a href="/configuracoes#github"><span>01</span> GitHub do ERP</a><a href="/configuracoes#banco"><span>02</span> Banco SQL Server</a><a href="/configuracoes#ia"><span>03</span> OpenAI</a><a href="/configuracoes#telas"><span>04</span> Telas de referência</a><a href="/configuracoes#videos"><span>05</span> Vídeos do YouTube</a><div class="mapping"><p>Credenciais ficam protegidas no servidor. Campos de senha vazios mantêm os valores já salvos.</p></div></aside>
+<div class="settings-sections">
+<section id="github" class="card settings-section"><div class="section-heading"><div><div class="eyebrow">01 · FONTE DO CÓDIGO</div><h2>Repositório GitHub</h2><p>O código é obtido do repositório e analisado sem executar o ERP.</p></div><span class="badge @(HasGitHub?"":"warning")">@(HasGitHub?"TOKEN CONFIGURADO":"TOKEN PENDENTE")</span></div>
+@if(githubNotice is not null) { <div class="notice" role="status">@githubNotice</div> }
+<EditForm Model="github" FormName="settings-github" OnValidSubmit="SaveGitHub"><DataAnnotationsValidator /><ValidationSummary /><div class="field-row"><div><label for="settings-repo">Organização / repositório</label><InputText id="settings-repo" @bind-Value="github.Repository" placeholder="evoluttechsistemas/sistema" /></div><div><label for="settings-branch">Branch, tag ou commit</label><InputText id="settings-branch" @bind-Value="github.Reference" placeholder="Em branco: referência padrão" /></div></div><label for="settings-pdv-project">Pasta do projeto de origem do PDV</label><InputText id="settings-pdv-project" @bind-Value="github.PdvProject" placeholder="Ex.: Principal ou PDV; vazio permite todos" /><p class="field-help">Selecione a implementação realmente utilizada pelos clientes quando o repositório contém mais de um PDV.</p><label for="settings-github-token">Token de leitura do GitHub</label><InputText id="settings-github-token" type="password" autocomplete="new-password" @bind-Value="github.Token" placeholder="Em branco: manter o token atual" /><p class="field-help">Para repositórios privados, use acesso Contents: Read-only ao repositório selecionado.</p><button class="primary" type="submit" disabled="@savingGitHub">@(savingGitHub?"Salvando…":"Salvar GitHub")</button></EditForm>
+</section>
+<section id="banco" class="card settings-section"><div class="section-heading"><div><div class="eyebrow">02 · ERP E EVOLUTHELP</div><h2>Banco SQL Server</h2><p>Estrutura, documentação e contexto de atendimento na base indicada pela EvolutTech.</p></div><span class="badge @(Secrets.HasSql?"":"warning")">@(Secrets.HasSql?"CONEXÃO CONFIGURADA":"CONEXÃO PENDENTE")</span></div>
+@if(sqlNotice is not null) { <div class="notice" role="status">@sqlNotice</div> }
+<EditForm Model="sql" FormName="settings-sql" OnValidSubmit="SaveSql"><DataAnnotationsValidator /><ValidationSummary /><label for="settings-sql-connection">Conexão SQL Server</label><InputText id="settings-sql-connection" type="password" autocomplete="new-password" @bind-Value="sql.Connection" placeholder="Em branco: manter a conexão atual" /><p class="field-help">A conexão salva não é exibida. As consultas do aplicativo usam SELECT e não alteram o banco de origem.</p><div class="setting-fact"><span>Empresa usada nas consultas</span><strong>@Support.CompanyId</strong><small>Definida na configuração do servidor para manter o escopo dos atendimentos.</small></div><div class="settings-actions"><button class="primary" type="submit" disabled="@savingSql">@(savingSql?"Salvando…":"Salvar banco")</button><a class="secondary" href="/banco">Consultar estrutura ↗</a></div></EditForm>
+</section>
+<section id="ia" class="card settings-section"><div class="section-heading"><div><div class="eyebrow">03 · RESPOSTAS DO SIMULADOR</div><h2>OpenAI</h2><p>Configure a chave que será usada para gerar as respostas de suporte e comercial.</p></div><span class="badge @(Simulation.IsConfigured?"":"warning")">@(Simulation.IsConfigured?"CHAVE CONFIGURADA":"CHAVE PENDENTE")</span></div>
+@if(aiNotice is not null) { <div class="notice" role="status">@aiNotice</div> }
+<EditForm Model="ai" FormName="settings-ai" OnValidSubmit="SaveAi"><DataAnnotationsValidator /><ValidationSummary /><label for="settings-openai-key">Chave da API OpenAI</label><InputText id="settings-openai-key" type="password" autocomplete="new-password" @bind-Value="ai.Key" placeholder="Em branco: manter a chave atual" /><p class="field-help">Esta chave é diferente do token do GitHub e fica salva com proteção do Windows.</p><label for="settings-ai-model">Modelo</label><InputText id="settings-ai-model" @bind-Value="ai.Model" placeholder="gpt-4.1-mini" /><p class="field-help">Use um modelo disponível no projeto da sua chave, compatível com Responses API, respostas estruturadas e entrada de imagem para conferir as telas reconstruídas.</p><div class="settings-actions"><button class="primary" type="submit" disabled="@savingAi">@(savingAi?"Salvando…":"Salvar OpenAI")</button><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Gerenciar chaves ↗</a></div></EditForm>
+<div class="notice neutral-note">O simulador envia a pergunta, contexto mínimo e trechos relevantes filtrados à OpenAI. Não envia todo o código nem grava mensagens no SQL Server. A geração depende do acesso e dos limites do projeto da sua chave.</div>
+</section>
+<ScreenReferenceSettings />
+<YouTubeSettingsPanel />
+</div></div>
+@code {
+    private GitHubInput github=new(); private SqlInput sql=new(); private AiInput ai=new();
+    private bool savingGitHub,savingSql,savingAi;
+    private string? githubNotice,sqlNotice,aiNotice;
+    private bool HasGitHub=>Secrets.HasGitHub||!string.IsNullOrWhiteSpace(Configuration["GitHub:Token"]);
+    protected override async Task OnInitializedAsync()
+    { var source=await Store.GetSourceAsync(Configuration); github.Repository=source.Repository;github.Reference=source.Reference;ai.Model=(await Simulation.GetSettingsAsync()).Model;
+      github.PdvProject=(await Store.ReadAsync<KnowledgeSettings>("knowledge-settings.json"))?.ModuleProjects.GetValueOrDefault("PDV","")??""; }
+    private async Task SaveGitHub()
+    {
+        savingGitHub=true;
+        try { GitHubSource.Validate(new(github.Repository.Trim(),github.Reference.Trim()));
+            if(github.PdvProject.Trim() is "." or ".." || github.PdvProject.IndexOfAny(System.IO.Path.GetInvalidFileNameChars())>=0) throw new ArgumentException("Pasta de projeto inválida.");
+            if(!string.IsNullOrWhiteSpace(github.Token)) await Secrets.SaveGitHubAsync(github.Token.Trim());
+            await Store.SaveSourceAsync(new(github.Repository.Trim(),github.Reference.Trim()));
+            var modules=(await Store.ReadAsync<KnowledgeSettings>("knowledge-settings.json"))?.ModuleProjects??new Dictionary<string,string>();
+            modules["PDV"]=github.PdvProject.Trim();await Store.WriteAsync("knowledge-settings.json",new KnowledgeSettings(modules));
+            githubNotice="GitHub e origem dos módulos salvos. A seleção de projeto vale para as próximas perguntas, sem refazer o índice."; }
+        catch(Exception ex) when(IsConfigurationError(ex)) { githubNotice="Não foi possível salvar. Confira repositório, referência, token e armazenamento."; }
+        finally { github.Token="";savingGitHub=false; }
+    }
+    private async Task SaveSql()
+    {
+        savingSql=true;
+        try { if(!string.IsNullOrWhiteSpace(sql.Connection)) { await Secrets.SaveSqlAsync(sql.Connection.Trim());sqlNotice="Conexão SQL salva com proteção do Windows."; }
+            else sqlNotice=Secrets.HasSql?"A conexão já cadastrada foi mantida.":"Informe a conexão SQL Server para cadastrá-la."; }
+        catch(Exception ex) when(IsConfigurationError(ex)) { sqlNotice="Não foi possível salvar a conexão. Confira o formato e o armazenamento protegido."; }
+        finally { sql.Connection="";savingSql=false; }
+    }
+    private async Task SaveAi()
+    {
+        savingAi=true;
+        try { await Simulation.SaveSettingsAsync(new(ai.Model.Trim()));
+            if(!string.IsNullOrWhiteSpace(ai.Key)) await Secrets.SaveOpenAiAsync(ai.Key.Trim());
+            aiNotice=Simulation.IsConfigured?"OpenAI salva. Abra o simulador para testar as respostas.":"Modelo salvo. Cadastre uma chave OpenAI para gerar respostas."; }
+        catch(Exception ex) when(IsConfigurationError(ex)) { aiNotice="Não foi possível salvar. Confira o modelo, a chave e o armazenamento protegido."; }
+        finally { ai.Key="";savingAi=false; }
+    }
+    private static bool IsConfigurationError(Exception ex)=>ex is ArgumentException or IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException;
+    private sealed class GitHubInput {
+        [Required,StringLength(200)] public string Repository {get;set;}="evoluttechsistemas/sistema";
+        [StringLength(200)] public string Reference {get;set;}="";
+        [StringLength(1000)] public string Token {get;set;}="";
+        [StringLength(120)] public string PdvProject {get;set;}="";
+    }
+    private sealed class SqlInput { [StringLength(4000)] public string Connection {get;set;}=""; }
+    private sealed class AiInput {
+        [Required,StringLength(120)] public string Model {get;set;}="gpt-4.1-mini";
+        [StringLength(1000)] public string Key {get;set;}="";
+    }
+}

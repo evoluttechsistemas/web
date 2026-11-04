@@ -1,0 +1,244 @@
+﻿@page "/dashboard"
+@using Blazorise.Charts
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IJSRuntime JS
+@inject VendaService vendaService
+@inject AuthenticationStateProvider AuthProvider
+@inject UsuarioService usuarioService
+
+
+<style>
+    /* Desktop padrão */
+    .dashboard {
+        padding: 0;
+    }
+
+    body {
+        margin: 0; /* para evitar espaços */
+        height: 100vh;
+    }
+
+    .page-container {
+        display: flex;
+        height: 100vh;
+        flex-direction: row;
+        /* Coloca a imagem aqui */
+        background-image: url('/imagens/aviao.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        /* deixa transparente para a imagem aparecer */
+        background-color: transparent;
+    }
+
+        .page-container > *:first-child {
+            width: 250px;
+            background-color: #fff;
+            border-right: 1px solid #ddd;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+    .content {
+        flex: 1;
+        padding: 20px 30px;
+        overflow-y: auto;
+        background-color: rgba(255, 255, 255, 0.5);
+        border-radius: 12px;
+        backdrop-filter: blur(6px);
+    }
+
+    h2.mb-4 {
+        margin-bottom: 1.5rem;
+    }
+
+    .card {
+        border-radius: 8px;
+    }
+
+    .display-5 {
+        font-size: 2.5rem;
+        font-weight: 700;
+    }
+
+    /* Mobile */
+    @@media (max-width: 768px) {
+        .page-container {
+            flex-direction: column;
+            height: auto;
+        }
+
+            .page-container > *:first-child {
+                width: 100%;
+                height: auto;
+                background-color: #fff;
+                border-right: none;
+                border-bottom: 1px solid #ddd;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                position: relative;
+            }
+
+        .content {
+            margin-top: 0;
+            padding: 15px 20px;
+        }
+    }
+</style>
+
+
+<div class="page-container">
+    <Menu />
+
+    <div class="content">
+        <h2 class="mb-4">Dashboard</h2>
+
+        <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card border-primary shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Clientes embarcando em breve</h5>
+                        <p class="display-5">@ClientesEmbarque</p>
+                        <small class="text-muted">Próximos 7 dias</small>
+                    </div>
+                </div>
+            </div>
+
+            @if (exibirVendas)
+            {
+                <div class="col-md-4">
+                    <div class="card border-success shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Total de vendas (mês atual)</h5>
+                            <p class="display-5">R$ @TotalVendas.ToString("N2")</p>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (exibirComissao)
+            {
+                <div class="col-md-4">
+                    <div class="card border-warning shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Total de comissão (mês atual)</h5>
+                            <p class="display-5">R$ @TotalComissao.ToString("N2")</p>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>        
+
+        <div class="row g-4 mt-4">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title">Clientes embarcando nos próximos 7 dias</h5>
+
+                        @if (listEmbarque?.Any() == true)
+                        {
+                            <ul class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+                                @foreach (var cliente in listEmbarque.OrderBy(e => e.DataVoo))
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="fas fa-user text-primary me-2"></i>
+                                            @cliente.Nome
+                                        </div>
+                                        <div>
+                                            <i class="fas fa-phone text-primary me-2"></i>
+                                            Telefone: @cliente.Telefone
+                                        </div>
+                                        <span class="badge bg-info text-dark">
+                                            @cliente.DataVoo.ToString("dd/MM/yyyy")
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-muted mb-0">Nenhum cliente programado para embarque nos próximos 7 dias.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@code {
+    int ClientesEmbarque = 0;
+    decimal TotalVendas = 0;
+    decimal TotalComissao = 0;
+    List<Models.ClienteEmbarque> listEmbarque = new List<Models.ClienteEmbarque>();
+    string usuarioMaster = "N";
+    bool exibirVendas = false;
+    bool exibirComissao = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        usuarioMaster = await CarregarUsuarioMaster();
+
+        if (usuarioMaster == "S")
+        {
+            exibirComissao = true;
+            exibirVendas = true;
+
+            TotalVendas = await vendaService.BuscaVendaMes(CodEmp);
+            TotalComissao = await vendaService.BuscaComissaoFornecedorMes(CodEmp);
+        }
+        listEmbarque = await vendaService.BuscaEmbarquestUltimos7Dias(CodEmp);
+        ClientesEmbarque = listEmbarque.Count;
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value ?? "0");
+        }
+
+        return 0;
+    }
+
+    private async Task<string> CarregarUsuarioMaster()
+    {
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var usuarioMaster = user.FindFirst("UsuarioMaster")?.Value ?? "N";
+            return usuarioMaster;
+        }
+
+        return "N";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // await SetupBarChart();
+            // await SetupPieChart();
+        }
+    }
+
+
+
+}
+
+
+

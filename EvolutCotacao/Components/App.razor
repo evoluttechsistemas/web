@@ -1,0 +1,33 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="EvolutCotacao.styles.css" />
+    <HeadOutlet />
+</head>
+
+<body>
+    <Routes />
+
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script>
+        Blazor.start({
+            circuit: {
+                configureSignalR: builder => {
+                    builder.withServerTimeout(120000)
+                           .withKeepAliveInterval(15000);
+                },
+                reconnectionOptions: {
+                    maxRetries: 30,
+                    retryIntervalMilliseconds: 2000
+                }
+            }
+        }).catch(error => console.error("Falha ao iniciar Blazor:", error));
+    </script>
+</body>
+
+</html>

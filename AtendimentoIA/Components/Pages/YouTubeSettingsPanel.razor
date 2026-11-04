@@ -1,0 +1,22 @@
+@inject VideoCatalogService Videos
+<section id="videos" class="card settings-section"><div class="section-heading"><div><div class="eyebrow">05 · MATERIAL COMPLEMENTAR</div><h2>Vídeos do YouTube</h2><p>Ofereça vídeos do canal da EvolutTech relacionados à dúvida do cliente.</p></div></div>
+@if(notice is not null) { <div class="notice" role="status">@notice</div> }
+<label class="checkbox"><input type="checkbox" @bind="enabled" /> Sugerir vídeos relevantes nas respostas</label>
+<label for="youtube-channel">Endereço do canal</label><input id="youtube-channel" @bind="url" />
+<label for="youtube-id">ID do canal</label><input id="youtube-id" @bind="channelId" /><p class="field-help">O canal informado já está configurado. A atualização importa os vídeos retornados pelo feed público.</p>
+<button class="primary" type="button" disabled="@busy" @onclick="Refresh">@(busy?"Atualizando…":"Salvar e atualizar vídeos")</button>
+<p class="field-help">São sugestões por título e assunto. O aplicativo não assistiu aos vídeos nem importou transcrições automaticamente; eles não comprovam sozinhos um procedimento.</p>
+@if(catalog is { } data) {<p>@data.Videos.Count vídeo(s) no catálogo · atualizado em @data.UpdatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</p>@foreach(var video in data.Videos) {<p><a href="@video.Url" target="_blank" rel="noopener noreferrer">@video.Title ↗</a></p>} }
+</section>
+@code {
+    private bool enabled=true,busy;
+    private string url="https://www.youtube.com/@evoluttech7275",channelId="UCJ95JKodmws25c07LItAN2g";
+    private string? notice;private VideoCatalog? catalog;
+    protected override async Task OnInitializedAsync() {var settings=await Videos.ReadSettingsAsync()??new();enabled=settings.Enabled;url=settings.ChannelUrl;channelId=settings.ChannelId;catalog=await Videos.GetAsync();}
+    private async Task Refresh()
+    {
+        busy=true;try {await Videos.SaveSettingsAsync(new(enabled,url.Trim(),channelId.Trim()));catalog=await Videos.RefreshAsync();notice="Catálogo atualizado. Vídeos relevantes serão oferecidos nas próximas respostas.";}
+        catch(Exception ex) when(ex is HttpRequestException or IOException or ArgumentException or System.Xml.XmlException or TaskCanceledException) {notice="Não foi possível atualizar o canal. Confira o endereço, ID e acesso ao YouTube. O catálogo anterior foi preservado.";}
+        finally {busy=false;}
+    }
+}

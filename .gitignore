@@ -8,13 +8,16 @@
 # ==========================================
 appsettings.json
 appsettings.*.json
+.env
+.env.*
+!.env.example
 EnvioWhatsAppBackgroundService.cs
 *.pfx
 *.p12
 secrets.json
 
 # Scripts de publicacao (tem senha do FTP e do SQL)
-publicar*.ps1
+*publicar*.ps1
 
 # ==========================================
 # PUBLICACOES GERADAS
@@ -64,7 +67,15 @@ embedding_cache.json
 # EvolutCRM (o que antes ficava na raiz do repositorio)
 # ==========================================
 /EvolutCRM/web.config
-/EvolutCRM/wwwroot/
+/EvolutCRM/wwwroot/*
+!/EvolutCRM/wwwroot/app.css
+!/EvolutCRM/wwwroot/css/
+/EvolutCRM/wwwroot/css/*
+!/EvolutCRM/wwwroot/css/menucrm.css
+!/EvolutCRM/wwwroot/images/
+/EvolutCRM/wwwroot/images/*
+!/EvolutCRM/wwwroot/images/favicon.ico
+!/EvolutCRM/wwwroot/images/logo-evoluttech.png
 /EvolutCRM/nultype
 
 # Excecoes - DLLs externas necessarias
@@ -73,3 +84,7 @@ embedding_cache.json
 !EvolutCRM/EvolutCRM/KHelpDeskIntegraV3.dll
 !EvolutCRM/HelpDesktop/KHelpDeskIntegraV3.dll
 !EvolutCRM/HelpDesktop/libeay32.dll
+
+# Backups locais e publicacao por FTP
+/EvolutCRM/_backup_pagebuilder/
+/HelpMobile/publicar-mobile.bat

@@ -1,0 +1,97 @@
+﻿@page "/clima-ranking"
+@using EvolutTur.Models
+@using EvolutTur.Services
+@inject WeatherService WeatherService
+
+<h3>Ranking de Temperaturas</h3>
+
+<div class="btn-group mb-3">
+    <button class="btn btn-success" @onclick="() => CarregarRanking(Filtro.ClimaMaisQuente)">Mais Quentes 🔥</button>
+    <button class="btn btn-info" @onclick="() => CarregarRanking(Filtro.ClimaMaisFrio)">Mais Frios ❄️</button>
+    <button class="btn btn-primary" @onclick="() => CarregarRanking(Filtro.MaiorUmidade)">Maior Umidade 💧</button>
+    <button class="btn btn-warning" @onclick="() => CarregarRanking(Filtro.MenorUmidade)">Menor Umidade 🌵</button>
+    <button class="btn btn-dark" @onclick="() => CarregarRanking(Filtro.SensacaoMaisAlta)">Sensação Mais Alta 🌡️</button>
+    <button class="btn btn-secondary" @onclick="() => CarregarRanking(Filtro.SensacaoMaisBaixa)">Sensação Mais Baixa ❄️</button>
+</div>
+
+@if (ranking != null)
+{
+    <div class="mt-3">
+        <h4>@tituloRanking</h4>
+
+        @foreach (var cidade in ranking.Skip((paginaAtual - 1) * itensPorPagina).Take(itensPorPagina))
+        {
+            <div class="card mt-2 p-3 shadow-sm">
+                <h5>@cidade.Name</h5>
+                <p><strong>Temperatura:</strong> @cidade.Main.Temp °C</p>
+                <p><strong>Sensação:</strong> @cidade.Main.Feels_Like °C</p>
+                <p><strong>Umidade:</strong> @cidade.Main.Humidity %</p>
+                <p><strong>Condição:</strong> @cidade.Weather[0].Description</p>
+            </div>
+        }
+
+        <div class="mt-3">
+            <button class="btn btn-outline-secondary me-2" @onclick="PaginaAnterior" disabled="@(paginaAtual == 1)">⬅️ Anterior</button>
+            <button class="btn btn-outline-secondary" @onclick="ProximaPagina" disabled="@(paginaAtual * itensPorPagina >= ranking.Count)">Próximo ➡️</button>
+        </div>
+    </div>
+}
+
+@code {
+    private List<WeatherResponse> ranking;
+    private string tituloRanking;
+    private int paginaAtual = 1;
+    private int itensPorPagina = 5;
+
+    private enum Filtro
+    {
+        ClimaMaisQuente,
+        ClimaMaisFrio,
+        MaiorUmidade,
+        MenorUmidade,
+        SensacaoMaisAlta,
+        SensacaoMaisBaixa
+    }
+
+    private async Task CarregarRanking(Filtro filtro)
+    {
+        paginaAtual = 1;
+        var climas = await WeatherService.GetWeatherForCitiesAsync(Cities.Lista);
+
+        switch (filtro)
+        {
+            case Filtro.ClimaMaisQuente:
+                ranking = climas.OrderByDescending(c => c.Main.Temp).ToList();
+                tituloRanking = "Cidades Mais Quentes 🔥";
+                break;
+
+            case Filtro.ClimaMaisFrio:
+                ranking = climas.OrderBy(c => c.Main.Temp).ToList();
+                tituloRanking = "Cidades Mais Frias ❄️";
+                break;
+
+            case Filtro.MaiorUmidade:
+                ranking = climas.OrderByDescending(c => c.Main.Humidity).ToList();
+                tituloRanking = "Cidades com Maior Umidade 💧";
+                break;
+
+            case Filtro.MenorUmidade:
+                ranking = climas.OrderBy(c => c.Main.Humidity).ToList();
+                tituloRanking = "Cidades com Menor Umidade 🌵";
+                break;
+
+            case Filtro.SensacaoMaisAlta:
+                ranking = climas.OrderByDescending(c => c.Main.Feels_Like).ToList();
+                tituloRanking = "Cidades com Maior Sensação Térmica 🌡️";
+                break;
+
+            case Filtro.SensacaoMaisBaixa:
+                ranking = climas.OrderBy(c => c.Main.Feels_Like).ToList();
+                tituloRanking = "Cidades com Menor Sensação Térmica ❄️";
+                break;
+        }
+    }
+
+    private void ProximaPagina() => paginaAtual++;
+    private void PaginaAnterior() => paginaAtual--;
+}

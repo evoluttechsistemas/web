@@ -1,0 +1,58 @@
+@inject PanelStore Store
+<section id="telas" class="card settings-section">
+<div class="section-heading"><div><div class="eyebrow">04 · REFERÊNCIAS VISUAIS</div><h2>Telas para orientar o cliente</h2><p>Cadastre uma captura real e marque o campo que deve receber destaque. A imagem original é preservada.</p></div></div>
+@if(notice is not null) { <div class="notice" role="status">@notice</div> }
+<label for="screen-module">Módulo</label><select id="screen-module" @bind="module"><option>PDV</option><option>Consumer</option><option>Vendas</option></select>
+<label for="screen-keywords">Palavras da dúvida, separadas por vírgula</label><input id="screen-keywords" @bind="keywords" maxlength="160" placeholder="Ex.: quantidade" /><p class="field-help">A imagem será usada quando a dúvida tiver todas essas palavras e pertencer ao módulo selecionado.</p>
+<label for="screen-version">Versão da tela (opcional)</label><input id="screen-version" @bind="version" maxlength="40" placeholder="Ex.: 26.10.06" /><p class="field-help">Quando preenchida, a tela só será usada para a mesma versão identificada do cliente. Em branco: referência geral, com aviso para confirmar a correspondência.</p>
+<label for="screen-caption">Orientação destacada na imagem</label><input id="screen-caption" @bind="caption" maxlength="180" placeholder="Ex.: Digite a quantidade aqui, pressione * e passe o produto." />
+<label for="screen-upload">Captura da tela</label><InputFile id="screen-upload" OnChange="Upload" accept="image/png" /><p class="field-help">PNG de até 4 MB. Use uma tela de demonstração, sem dados de clientes.</p>
+@if(image.Length>0)
+{
+<p>Posicione o contorno sobre o campo. Os valores representam porcentagens da largura e altura da captura.</p>
+<div class="field-row"><div><label for="screen-x">Esquerda (%)</label><input id="screen-x" type="number" min="0" max="99" step="0.5" @bind="x" /></div><div><label for="screen-y">Topo (%)</label><input id="screen-y" type="number" min="0" max="99" step="0.5" @bind="y" /></div></div>
+<div class="field-row"><div><label for="screen-width">Largura (%)</label><input id="screen-width" type="number" min="0.5" max="100" step="0.5" @bind="width" /></div><div><label for="screen-height">Altura (%)</label><input id="screen-height" type="number" min="0.5" max="100" step="0.5" @bind="height" /></div></div>
+@if(Preview() is { } preview) { <figure class="explanation-image"><img src="@preview" alt="Prévia da captura com o campo destacado. Confira se a seta aponta para o campo correto." /><figcaption>Confira a posição do destaque antes de salvar.</figcaption></figure> }
+<button class="primary" type="button" disabled="@saving" @onclick="Save">Salvar referência visual</button>
+}
+@foreach(var screen in screens)
+{ <div class="mapping"><strong>@screen.Module · @screen.Keywords</strong><p>@screen.Caption</p><small>Versão: @(screen.Version.Length==0?"referência geral":screen.Version)</small><button class="text-button" type="button" disabled="@saving" @onclick="() => Remove(screen.Id)">Remover referência</button></div> }
+</section>
+@code {
+    private List<ScreenReference> screens=[];
+    private string module="PDV",keywords="quantidade",version="",caption="Digite a quantidade aqui, pressione * e passe o produto.",image="";
+    private string? notice;
+    private double x=5,y=10,width=40,height=8;
+    private bool saving;
+    protected override async Task OnInitializedAsync()=>screens=await Store.ReadAsync<List<ScreenReference>>("screen-references.json")??[];
+    private ScreenReference Draft()=>new(Guid.NewGuid(),module,keywords.Trim(),version.Trim(),caption.Trim(),image,x,y,width,height);
+    private string? Preview() { try {return ScreenIllustration.Render(Draft());} catch(Exception ex) when(ex is ArgumentException or FormatException) {return null;} }
+    private async Task Upload(InputFileChangeEventArgs args)
+    {
+        try {
+            using var buffer=new MemoryStream();await args.File.OpenReadStream(ScreenIllustration.MaxBytes).CopyToAsync(buffer);
+            var bytes=buffer.ToArray();ScreenIllustration.Dimensions(bytes);
+            image="data:image/png;base64,"+Convert.ToBase64String(bytes);notice="Imagem carregada. Posicione o destaque e confira a prévia.";
+        } catch(Exception ex) when(ex is IOException or ArgumentException) {image="";notice="Não foi possível carregar. Use uma captura PNG válida de até 4 MB.";}
+    }
+    private async Task Save()
+    {
+        saving=true;
+        try {
+            var screen=Draft();ScreenIllustration.Validate(screen);
+            // Reload before updating so this form preserves unrelated references.
+            screens=await Store.ReadAsync<List<ScreenReference>>("screen-references.json")??[];
+            screens.RemoveAll(s=>s.Module==screen.Module&&s.Keywords.Equals(screen.Keywords,StringComparison.OrdinalIgnoreCase)&&s.Version==screen.Version);
+            screens.Add(screen);await Store.WriteAsync("screen-references.json",screens);
+            image="";notice="Referência salva no servidor. Já pode testar a etapa de imagem no simulador, sem reindexar.";
+        } catch(Exception ex) when(ex is ArgumentException or FormatException or IOException or UnauthorizedAccessException) {notice="Não foi possível salvar. Confira a imagem, a área destacada e os campos preenchidos.";}
+        finally {saving=false;}
+    }
+    private async Task Remove(Guid id)
+    {
+        saving=true;
+        try {screens=await Store.ReadAsync<List<ScreenReference>>("screen-references.json")??[];screens.RemoveAll(s=>s.Id==id);await Store.WriteAsync("screen-references.json",screens);notice="Referência removida.";}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException) {notice="Não foi possível remover a referência.";}
+        finally {saving=false;}
+    }
+}

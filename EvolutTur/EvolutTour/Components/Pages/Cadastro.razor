@@ -1,0 +1,561 @@
+﻿@page "/cadastro"
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@using System.ComponentModel.DataAnnotations
+@using System.Linq
+@using EvolutTur.Data
+@using EvolutTur.Services
+@using EvolutTur.Validations
+@using System.Security.Cryptography
+@using System.Text
+@inject MasterDbContext contexto
+@using Microsoft.EntityFrameworkCore
+@inject ParametrosService parametrosService
+
+<style>
+    :root {
+    --primary-color: #1a3a8f;
+    --primary-light: #2a4ba0;
+    --primary-dark: #0d2b6b;
+    --secondary-color: #4d90fe;
+    --text-color: #333;
+    --light-gray: #f5f7fa;
+    --medium-gray: #e1e5eb;
+    --dark-gray: #6c757d;
+    --error-color: #dc3545;
+    --success-color: #28a745;
+    }
+
+    html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    }
+
+    .cadastro-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2rem;
+    background-image: url('/imagens/aviao.jpg');
+    background-color: rgba(173, 216, 230, 0.7);
+    background-blend-mode: overlay;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    }
+
+    .cadastro-card {
+    background-color: rgba(255, 255, 255, 0.60); /* mais transparente */
+    backdrop-filter: blur(10px) saturate(180%); /* vidro fosco com mais suavidade e cor */
+    border: 1px solid rgba(255, 255, 255, 0.3); /* borda translúcida sutil */
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); /* sombra mais suave */
+    width: 100%;
+    max-width: 500px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    }
+
+    .cadastro-header {
+    padding: 20px 20px 0 20px;
+    text-align: center;
+    color: white;
+    }
+
+    .cadastro-header .logo {
+    max-width: 40%;
+    object-fit: contain;
+    }
+
+    .cadastro-header h2 {
+    margin: 0.5rem 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: black;
+    }
+
+    .cadastro-header p {
+    margin: 10px;
+    opacity: 0.9;
+    font-size: 0.95rem;
+    color: black;
+    }
+
+    .cadastro-form {
+    padding: 0 20px 20px 20px;
+    }
+
+    .form-group {
+    margin-bottom: 1.5rem;
+    position: relative;
+    }
+
+    .form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-color);
+    }
+
+    .form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--medium-gray);
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    background-color: #f9fafc;
+    }
+
+    .form-control:focus {
+    outline: none;
+    border-color: var(--secondary-color);
+    box-shadow: 0 0 0 3px rgba(77, 144, 254, 0.2);
+    }
+
+    .password-container {
+    position: relative;
+    }
+
+    .password-toggle {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--dark-gray);
+    transition: color 0.2s ease;
+    }
+
+    .password-toggle:hover {
+    color: var(--primary-color);
+    }
+
+    .password-forca {
+    margin-top: 0.5rem;
+    height: 6px;
+    display: flex;
+    align-items: center;
+    }
+
+    .forca-bar {
+    height: 4px;
+    border-radius: 2px;
+    flex-grow: 1;
+    margin-right: 0.5rem;
+    transition: all 0.3s ease;
+    }
+
+    .forca-0 {
+    background: #ddd;
+    width: 20%;
+    }
+
+    .forca-1 {
+    background: #ff6b6b;
+    width: 40%;
+    }
+
+    .forca-2 {
+    background: #ffb347;
+    width: 60%;
+    }
+
+    .forca-3 {
+    background: #4d90fe;
+    width: 80%;
+    }
+
+    .forca-4, .forca-5 {
+    background: var(--success-color);
+    width: 100%;
+    }
+
+    .forca-text {
+    font-size: 0.75rem;
+    color: var(--dark-gray);
+    }
+
+    .btn-cadastrar {
+    width: 100%;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+    color: white;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    }
+
+    .btn-cadastrar:hover {
+    background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-color) 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(26, 58, 143, 0.3);
+    }
+
+    .btn-cadastrar:active {
+    transform: translateY(0);
+    }
+
+    .btn-cadastrar:disabled {
+    background: var(--medium-gray);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    }
+
+    .btn-cadastrar .btn-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: inherit;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    }
+
+    .btn-cadastrar:disabled .btn-text {
+    opacity: 0;
+    }
+
+    .btn-cadastrar:disabled .btn-loading {
+    opacity: 1;
+    }
+
+    .form-footer {
+    margin-top: 2rem;
+    }
+
+    .login-link {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+    }
+
+    .login-link a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+    }
+
+    .login-link a:hover {
+    text-decoration: underline;
+    }
+
+    .validation-summary {
+    color: var(--error-color);
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+    }
+
+    .validation-message {
+    color: var(--error-color);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    display: block;
+    }
+
+    @@keyframes fadeIn {
+    from {
+    opacity: 0;
+    transform: translateY(10px);
+    }
+
+    to {
+    opacity: 1;
+    transform: translateY(0);
+    }
+    }
+
+    .cadastro-card {
+    animation: fadeIn 0.5s ease-out;
+    }
+
+    @@media (max-width: 576px) {
+    .cadastro-container {
+    padding: 1rem;
+    }
+
+    .cadastro-card {
+    border-radius: 0;
+    }
+
+    .cadastro-header, .cadastro-form {
+    padding: 1.5rem;
+    }
+    }
+</style>
+
+<div class="cadastro-container">
+    <div class="cadastro-card">
+        <div class="cadastro-header">
+            <img src="/imagens/logo.png" alt="Logo" class="logo" />
+            <h2>Criar sua conta</h2>
+            <p>Preencha os campos abaixo para cadastrar sua empresa</p>
+        </div>
+
+        <EditForm Model="@cadastro" OnValidSubmit="@EnviarFormulario" class="cadastro-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-summary" />
+
+            <div class="form-group">
+                <label for="razaoSocial">Razão Social*</label>
+                <InputText id="razaoSocial" @bind-Value="cadastro.RazaoSocial" class="form-control" />
+                <ValidationMessage For="@(() => cadastro.RazaoSocial)" />
+            </div>
+
+            <div class="form-group">
+                <label for="nomeFantasia">Nome Fantasia*</label>
+                <InputText id="nomeFantasia" @bind-Value="cadastro.NomeFantasia" class="form-control" />
+                <ValidationMessage For="@(() => cadastro.NomeFantasia)" />
+            </div>
+
+            <div class="form-group">
+                <label for="cnpj">CNPJ*</label>
+                <InputText id="cnpj" @bind-Value="cadastro.CNPJ" class="form-control"
+                @oninput="FormatarCNPJ" maxlength="18" />
+                <ValidationMessage For="@(() => cadastro.CNPJ)" />
+            </div>
+
+            <div class="form-group">
+                <label for="email">E-mail*</label>
+                <InputText id="email" @bind-Value="cadastro.Email" class="form-control" />
+                <ValidationMessage For="@(() => cadastro.Email)" />
+            </div>
+
+            <div class="form-group">
+                <label for="senha">Senha*</label>
+                <div class="password-container">
+                    <InputText id="senha" @bind-Value="cadastro.Senha" type="@(mostrarSenha ? "text" : "password")"
+                    class="form-control" />
+                    <span class="password-toggle" @onclick="AlternarMostrarSenha">
+                        <i class="@(mostrarSenha ? "fas fa-eye-slash" : "fas fa-eye")"></i>
+                    </span>
+                </div>
+                <ValidationMessage For="@(() => cadastro.Senha)" />
+                <div class="password-forca">
+                    <div class="forca-bar @ForcaClasse()"></div>
+                    <span class="forca-text">@ForcaTexto()</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirmarSenha">Confirmar Senha*</label>
+                <InputText id="confirmarSenha" @bind-Value="cadastro.ConfirmarSenha"
+                type="@(mostrarSenha ? "text" : "password")" class="form-control" />
+                <ValidationMessage For="@(() => cadastro.ConfirmarSenha)" />
+            </div>
+
+            <div class="form-footer">
+                <button type="submit" class="btn-cadastrar" disabled="@enviando">
+                    <span class="btn-text">Cadastrar</span>
+                    <span class="btn-loading">
+                        <i class="fas fa-spinner fa-spin"></i>
+                    </span>
+                </button>
+
+                <div class="login-link">
+                    Já tem uma conta? <a href="/login">Faça login</a>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private CadastroModel cadastro = new CadastroModel();
+    private bool mostrarSenha = false;
+    private bool formularioValido = false;
+    private bool enviando = false;
+
+
+    private class CadastroModel
+    {
+        [Required(ErrorMessage = "Razão Social é obrigatória")]
+        [StringLength(100, ErrorMessage = "Máximo de 100 caracteres")]
+        public string RazaoSocial { get; set; }
+
+        [Required(ErrorMessage = "Nome Fantasia é obrigatório")]
+        [StringLength(100, ErrorMessage = "Máximo de 100 caracteres")]
+        public string NomeFantasia { get; set; }
+
+        [Required(ErrorMessage = "CNPJ é obrigatório")]
+        [ValidaCnpj(ErrorMessage = "CNPJ inválido")]
+        public string CNPJ { get; set; }
+
+        [Required(ErrorMessage = "E-mail é obrigatório")]
+        [EmailAddress(ErrorMessage = "E-mail inválido")]
+        public string Email { get; set; }
+
+        [Required(ErrorMessage = "Senha é obrigatória")]
+        [MinLength(8, ErrorMessage = "Mínimo de 8 caracteres")]
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$", 
+            ErrorMessage = "Senha deve conter letras maiúsculas, minúsculas, números e símbolos")]
+        public string Senha { get; set; }
+
+        [Required(ErrorMessage = "Confirmação de senha é obrigatória")]
+        [Compare(nameof(Senha), ErrorMessage = "Senhas não coincidem")]
+        public string ConfirmarSenha { get; set; }
+    }
+
+    private void AlternarMostrarSenha()
+    {
+        mostrarSenha = !mostrarSenha;
+    }
+
+    private async Task FormatarCNPJ(ChangeEventArgs e)
+    {
+        var cnpj = e.Value?.ToString() ?? string.Empty;
+        cnpj = new string(cnpj.Where(char.IsDigit).ToArray());
+
+        if (cnpj.Length > 14)
+        {
+            cnpj = cnpj.Substring(0, 14);
+        }
+
+        if (cnpj.Length > 12)
+        {
+            cadastro.CNPJ = $"{cnpj.Substring(0, 2)}.{cnpj.Substring(2, 3)}.{cnpj.Substring(5, 3)}/{cnpj.Substring(8, 4)}-{cnpj.Substring(12)}";
+        }
+        else if (cnpj.Length > 8)
+        {
+            cadastro.CNPJ = $"{cnpj.Substring(0, 2)}.{cnpj.Substring(2, 3)}.{cnpj.Substring(5, 3)}/{cnpj.Substring(8)}";
+        }
+        else if (cnpj.Length > 5)
+        {
+            cadastro.CNPJ = $"{cnpj.Substring(0, 2)}.{cnpj.Substring(2, 3)}.{cnpj.Substring(5)}";
+        }
+        else if (cnpj.Length > 2)
+        {
+            cadastro.CNPJ = $"{cnpj.Substring(0, 2)}.{cnpj.Substring(2)}";
+        }
+        else
+        {
+            cadastro.CNPJ = cnpj;
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private string ForcaClasse()
+    {
+        if (string.IsNullOrEmpty(cadastro.Senha)) return "forca-0";
+
+        var forca = 0;
+
+        if (cadastro.Senha.Length >= 8) forca++;
+        if (cadastro.Senha.Length >= 12) forca++;
+
+        if (cadastro.Senha.Any(char.IsUpper)) forca++;
+        if (cadastro.Senha.Any(char.IsLower)) forca++;
+        if (cadastro.Senha.Any(char.IsDigit)) forca++;
+        if (cadastro.Senha.Any(c => !char.IsLetterOrDigit(c))) forca++;
+
+        return $"forca-{Math.Min(forca, 5)}";
+    }
+
+    private string ForcaTexto()
+    {
+        var forca = ForcaClasse().Split('-').Last();
+        return forca switch
+        {
+            "0" => "Muito fraca",
+            "1" => "Fraca",
+            "2" => "Moderada",
+            "3" => "Forte",
+            "4" => "Muito forte",
+            "5" => "Excelente",
+            _ => ""
+        };
+    }
+
+    private async Task EnviarFormulario()
+    {
+        enviando = true;
+
+        try
+        {
+            // Verifica se já existe empresa com o mesmo CNPJ ou Razão Social
+            bool empresaExiste = await contexto.Empresas
+                .AnyAsync(e => e.CNPJ == cadastro.CNPJ || e.Razao == cadastro.RazaoSocial);
+
+            if (empresaExiste)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Já existe uma empresa cadastrada com esse CNPJ ou Razão Social.");
+                return;
+            }
+
+            // Verifica se já existe usuário com o mesmo e-mail
+            bool usuarioExiste = await contexto.Usuarios
+                .AnyAsync(u => u.Usuario == cadastro.Email);
+
+            if (usuarioExiste)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Já existe um usuário cadastrado com esse e-mail.");
+                return;
+            }
+
+            // Cria nova empresa
+            var empresa = new EmpresaMaster
+                {
+                    Razao = cadastro.RazaoSocial,
+                    Fantasia = cadastro.NomeFantasia,
+                    CNPJ = cadastro.CNPJ
+                };
+
+            contexto.Empresas.Add(empresa);
+            await contexto.SaveChangesAsync(); // gera o Código (ID) da empresa
+
+            // Cria usuário associado à empresa
+            var usuario = new UsuarioMaster
+                {
+                    Usuario = cadastro.Email,
+                    Senha = HashSenha(cadastro.Senha),
+                    CodEmpresaMaster = empresa.Codigo,
+                    NomeBanco = "EvolutTur_" + new string(empresa.CNPJ.Where(char.IsDigit).ToArray())
+                };
+
+            contexto.Usuarios.Add(usuario);
+            await contexto.SaveChangesAsync();
+
+            //insere parametros
+            await parametrosService.InsereParametros(empresa.Fantasia,empresa.Codigo, empresa.CNPJ);
+
+            await JSRuntime.InvokeVoidAsync("alert", "Cadastro realizado com sucesso!");
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Erro ao cadastrar: {ex.Message}");
+        }
+        finally
+        {
+            enviando = false;
+        }
+    }
+
+    private string HashSenha(string senha)
+    {
+        // Exemplo simples de hash SHA256 (não recomendado para produção, prefira bcrypt, Argon2, etc)
+        using var sha = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(senha);
+        var hash = sha.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
+    }
+
+}

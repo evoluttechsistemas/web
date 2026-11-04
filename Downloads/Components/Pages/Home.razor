@@ -1,0 +1,602 @@
+﻿@page "/"
+@using System.IO
+@using Microsoft.AspNetCore.Components
+
+<PageTitle>Central de Downloads</PageTitle>
+
+<main class="downloads-shell">
+    <section class="downloads-hero">
+        <div>
+            <span class="eyebrow">Arquivos corporativos</span>
+            <h1>Central de Downloads</h1>
+            <p>Encontre pastas, consulte detalhes dos arquivos e baixe documentos com mais estabilidade.</p>
+        </div>
+
+        <div class="hero-stat">
+            <strong>@arquivos.Count</strong>
+            <span>@(arquivos.Count == 1 ? "arquivo" : "arquivos") nesta pasta</span>
+        </div>
+    </section>
+
+    <section class="downloads-toolbar">
+        <div class="breadcrumb">
+            <a href="/">Downloads</a>
+            @foreach (var item in breadcrumb)
+            {
+                <span>/</span>
+                <a href="@GetFolderUrl(item.Caminho)">@item.Nome</a>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Pasta))
+        {
+            <a class="ghost-button" href="@GetFolderUrl(GetParentPath(Pasta))">Voltar</a>
+        }
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(erro))
+    {
+        <section class="empty-state error-state">
+            <h2>Não foi possível abrir esta pasta</h2>
+            <p>@erro</p>
+        </section>
+    }
+    else if (!pastas.Any() && !arquivos.Any())
+    {
+        <section class="empty-state">
+            <h2>Nenhum item encontrado</h2>
+            <p>Esta pasta ainda não possui arquivos ou subpastas disponíveis para download.</p>
+        </section>
+    }
+    else
+    {
+        @if (pastas.Any())
+        {
+            <section class="folder-grid" aria-label="Pastas">
+                @foreach (var pasta in pastas)
+                {
+                    <a class="folder-card" href="@GetFolderUrl(pasta.CaminhoRelativo)">
+                        <span class="folder-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4.2l2 2H18.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" />
+                            </svg>
+                        </span>
+                        <span>
+                            <strong>@pasta.Nome</strong>
+                            <small>Pasta</small>
+                        </span>
+                    </a>
+                }
+            </section>
+        }
+
+        @if (arquivos.Any())
+        {
+            <section class="downloads-panel">
+                <div class="panel-header">
+                    <h2>Arquivos disponíveis</h2>
+                    <span>@arquivos.Count item(ns)</span>
+                </div>
+
+                <div class="downloads-list">
+                    @foreach (var arq in arquivos)
+                    {
+                        <article class="download-row">
+                            <div class="file-mark" aria-hidden="true">@GetExtension(arq.Nome)</div>
+
+                            <div class="file-main">
+                                <strong title="@arq.Nome">@arq.Nome</strong>
+                                <span>Modificado em @arq.DataModificacao.ToString("dd/MM/yyyy HH:mm")</span>
+                            </div>
+
+                            <div class="file-size">@FormatSize(arq.Tamanho)</div>
+
+                            <a class="download-button" href="@GetDownloadUrl(arq.CaminhoRelativo)" download>
+                                Baixar
+                            </a>
+                        </article>
+                    }
+                </div>
+            </section>
+        }
+    }
+</main>
+
+<style>
+    :root {
+        color-scheme: light;
+    }
+
+    .downloads-shell {
+        width: min(1180px, calc(100% - 32px));
+        margin: 32px auto 64px;
+        color: #172033;
+        font-family: Inter, Segoe UI, Arial, sans-serif;
+    }
+
+    .downloads-hero {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        min-height: 220px;
+        padding: 34px;
+        border-radius: 8px;
+        background: linear-gradient(135deg, rgba(0, 86, 179, .93), rgba(0, 135, 146, .86)), radial-gradient(circle at 85% 15%, rgba(255, 255, 255, .45), transparent 28%);
+        color: #fff;
+        box-shadow: 0 22px 50px rgba(18, 38, 63, .18);
+    }
+
+    .eyebrow {
+        display: block;
+        margin-bottom: 12px;
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        opacity: .86;
+    }
+
+    .downloads-hero h1 {
+        margin: 0;
+        font-size: clamp(2rem, 5vw, 4.2rem);
+        line-height: 1;
+        letter-spacing: 0;
+    }
+
+    .downloads-hero p {
+        max-width: 620px;
+        margin: 16px 0 0;
+        font-size: 1.08rem;
+        line-height: 1.55;
+        opacity: .9;
+    }
+
+    .hero-stat {
+        min-width: 150px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, .32);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, .13);
+        backdrop-filter: blur(12px);
+    }
+
+        .hero-stat strong {
+            display: block;
+            font-size: 2.6rem;
+            line-height: 1;
+        }
+
+        .hero-stat span {
+            display: block;
+            margin-top: 6px;
+            font-size: .92rem;
+            opacity: .88;
+        }
+
+    .downloads-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 22px 0;
+        padding: 12px 0;
+        border-bottom: 1px solid #dce3ee;
+    }
+
+    .breadcrumb {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        color: #6d7789;
+        font-size: .95rem;
+    }
+
+        .breadcrumb a,
+        .ghost-button {
+            color: #0056b3;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+    .ghost-button {
+        padding: 8px 12px;
+        border: 1px solid #bfd1e8;
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    .folder-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+    }
+
+    .folder-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 18px;
+        border: 1px solid #dce3ee;
+        border-radius: 8px;
+        background: #fff;
+        color: inherit;
+        text-decoration: none;
+        box-shadow: 0 10px 30px rgba(18, 38, 63, .07);
+        transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }
+
+        .folder-card:hover {
+            transform: translateY(-2px);
+            border-color: #7eb6ff;
+            box-shadow: 0 18px 40px rgba(18, 38, 63, .13);
+        }
+
+    .folder-icon {
+        display: grid;
+        place-items: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        background: #eaf4ff;
+        color: #0056b3;
+        flex: 0 0 auto;
+    }
+
+        .folder-icon svg {
+            width: 26px;
+            height: 26px;
+            fill: currentColor;
+        }
+
+    .folder-card strong,
+    .folder-card small {
+        display: block;
+    }
+
+    .folder-card small {
+        margin-top: 4px;
+        color: #6d7789;
+    }
+
+    .downloads-panel {
+        border: 1px solid #dce3ee;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+        box-shadow: 0 16px 42px rgba(18, 38, 63, .09);
+    }
+
+    .panel-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 20px;
+        border-bottom: 1px solid #dce3ee;
+        background: #f7f9fc;
+    }
+
+        .panel-header h2 {
+            margin: 0;
+            font-size: 1rem;
+        }
+
+        .panel-header span {
+            color: #6d7789;
+            font-size: .92rem;
+        }
+
+    .downloads-list {
+        display: grid;
+    }
+
+    .download-row {
+        display: grid;
+        grid-template-columns: 52px minmax(0, 1fr) 120px 104px;
+        align-items: center;
+        gap: 14px;
+        padding: 16px 20px;
+        border-bottom: 1px solid #eef2f7;
+    }
+
+        .download-row:last-child {
+            border-bottom: 0;
+        }
+
+        .download-row:hover {
+            background: #fbfdff;
+        }
+
+    .file-mark {
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        background: #eef7f5;
+        color: #007b73;
+        font-size: .72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .file-main {
+        min-width: 0;
+    }
+
+        .file-main strong,
+        .file-main span {
+            display: block;
+        }
+
+        .file-main strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-main span,
+        .file-size {
+            color: #6d7789;
+            font-size: .9rem;
+        }
+
+    .download-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 16px;
+        border-radius: 6px;
+        background: #0056b3;
+        color: #fff;
+        font-weight: 800;
+        text-decoration: none;
+        transition: background .18s ease, transform .18s ease;
+    }
+
+        .download-button:hover {
+            background: #00418a;
+            transform: translateY(-1px);
+        }
+
+    .empty-state {
+        padding: 42px 24px;
+        border: 1px dashed #b8c6d9;
+        border-radius: 8px;
+        background: #f8fbff;
+        text-align: center;
+    }
+
+        .empty-state h2 {
+            margin: 0 0 8px;
+            font-size: 1.2rem;
+        }
+
+        .empty-state p {
+            margin: 0;
+            color: #6d7789;
+        }
+
+    .error-state {
+        border-color: #ef9f9f;
+        background: #fff8f8;
+    }
+
+    @@media (max-width: 760px) {
+        .downloads-shell
+
+    {
+        width: min(100% - 20px, 1180px);
+        margin-top: 16px;
+    }
+
+    .downloads-hero,
+    .downloads-toolbar,
+    .panel-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .downloads-hero {
+        padding: 24px;
+    }
+
+    .hero-stat {
+        min-width: 0;
+    }
+
+    .download-row {
+        grid-template-columns: 44px minmax(0, 1fr);
+        grid-template-areas:
+            "icon main"
+            "icon size"
+            "button button";
+    }
+
+    .file-mark {
+        grid-area: icon;
+    }
+
+    .file-main {
+        grid-area: main;
+    }
+
+    .file-size {
+        grid-area: size;
+    }
+
+    .download-button {
+        grid-area: button;
+        width: 100%;
+    }
+
+    }</style>
+
+@code {
+    private const string DownloadsRoot = "C:/FTP/Downloads";
+
+    [SupplyParameterFromQuery(Name = "p")]
+    public string? Pasta { get; set; }
+
+    private readonly List<ItemPasta> pastas = new();
+    private readonly List<ItemArquivo> arquivos = new();
+    private readonly List<ItemPasta> breadcrumb = new();
+    private string? erro;
+
+    protected override void OnParametersSet()
+    {
+        pastas.Clear();
+        arquivos.Clear();
+        breadcrumb.Clear();
+        erro = null;
+
+        var root = Path.GetFullPath(DownloadsRoot);
+        var pastaRelativa = NormalizeRelativePath(Pasta);
+        var pastaAtual = Path.GetFullPath(Path.Combine(root, pastaRelativa));
+
+        if (!IsInsideRoot(root, pastaAtual))
+        {
+            erro = "O caminho solicitado não é permitido.";
+            return;
+        }
+
+        if (!Directory.Exists(pastaAtual))
+        {
+            erro = "A pasta solicitada não existe.";
+            return;
+        }
+
+        BuildBreadcrumb(pastaRelativa);
+
+        pastas.AddRange(
+            Directory.GetDirectories(pastaAtual)
+                .Select(dir => new DirectoryInfo(dir))
+                .OrderBy(dir => dir.Name)
+                .Select(dir => new ItemPasta
+                {
+                    Nome = dir.Name,
+                    CaminhoRelativo = ToRelativePath(root, dir.FullName)
+                }));
+
+        arquivos.AddRange(
+            Directory.GetFiles(pastaAtual)
+                .Select(file => new FileInfo(file))
+                .OrderByDescending(file => file.LastWriteTime)
+                .Select(file => new ItemArquivo
+                {
+                    Nome = file.Name,
+                    CaminhoRelativo = ToRelativePath(root, file.FullName),
+                    DataModificacao = file.LastWriteTime,
+                    Tamanho = file.Length
+                }));
+    }
+
+    private void BuildBreadcrumb(string pastaRelativa)
+    {
+        if (string.IsNullOrWhiteSpace(pastaRelativa))
+        {
+            return;
+        }
+
+        var acumulado = "";
+        foreach (var parte in pastaRelativa.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            acumulado = string.IsNullOrWhiteSpace(acumulado)
+                ? parte
+                : Path.Combine(acumulado, parte);
+
+            breadcrumb.Add(new ItemPasta
+            {
+                Nome = parte,
+                Caminho = acumulado,
+                CaminhoRelativo = acumulado
+            });
+        }
+    }
+
+    private static string NormalizeRelativePath(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "";
+        }
+
+        return Uri.UnescapeDataString(value)
+            .Replace('/', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+    }
+
+    private static bool IsInsideRoot(string root, string path)
+    {
+        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var normalizedPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+
+        return normalizedPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ToRelativePath(string root, string fullPath)
+    {
+        return Path.GetRelativePath(root, fullPath).Replace('\\', '/');
+    }
+
+    private static string GetParentPath(string? path)
+    {
+        var normalized = NormalizeRelativePath(path);
+        var parent = Path.GetDirectoryName(normalized);
+        return parent?.Replace('\\', '/') ?? "";
+    }
+
+    private string GetFolderUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        return $"/?p={Uri.EscapeDataString(path.Replace('\\', '/'))}";
+    }
+
+    private static string GetDownloadUrl(string path)
+    {
+        return $"/api/downloads?path={Uri.EscapeDataString(path.Replace('\\', '/'))}";
+    }
+
+    private static string GetExtension(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).Trim('.').ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(extension) ? "FILE" : extension[..Math.Min(extension.Length, 4)];
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        double size = bytes;
+        var unit = 0;
+
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return $"{size:0.##} {units[unit]}";
+    }
+
+    private sealed class ItemPasta
+    {
+        public string Nome { get; set; } = "";
+        public string Caminho { get; set; } = "";
+        public string CaminhoRelativo { get; set; } = "";
+    }
+
+    private sealed class ItemArquivo
+    {
+        public string Nome { get; set; } = "";
+        public string CaminhoRelativo { get; set; } = "";
+        public DateTime DataModificacao { get; set; }
+        public long Tamanho { get; set; }
+    }
+}

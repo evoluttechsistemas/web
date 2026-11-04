@@ -1,0 +1,91 @@
+@page "/simulador"
+@implements IDisposable
+@inject SimulationService Simulation
+<PageTitle>Simulador de atendimento · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">PERGUNTE À BASE DO ERP</div><h1>Teste antes de atender.</h1><p>Simule uma conversa de suporte ou comercial, com contexto e fontes verificáveis.</p></div><a class="secondary" href="/configuracoes#ia">Configurações ↗</a></div>
+@if(!Simulation.IsConfigured) { <div class="notice">Cadastre a chave da OpenAI em <a href="/configuracoes#ia"><strong>Configurações → OpenAI</strong></a> para gerar respostas. A chave é diferente do token do GitHub.</div> }
+<div class="simulation-grid">
+<aside class="card simulation-context"><div class="section-heading"><h2>Contexto do teste</h2><span class="badge">SIMULAÇÃO</span></div>
+<label for="simulation-mode">Tipo de atendimento</label><select id="simulation-mode" @bind="mode" disabled="@busy"><option value="@SimulationMode.CustomerSupport">Cliente · suporte</option><option value="@SimulationMode.Technician">Técnico · análise interna</option><option value="@SimulationMode.Commercial">Cliente · comercial</option></select>
+@if(mode==SimulationMode.Commercial)
+{ <label for="simulation-crm">Código do card comercial (opcional)</label><input id="simulation-crm" type="number" min="1" @bind="crmId" disabled="@busy" /><p class="field-help">Vínculo entre CRMC e CRMAnotacao, restrito ao card e à empresa configurada.</p> }
+else
+{ <label for="simulation-ticket">Código do chamado (opcional)</label><input id="simulation-ticket" type="number" min="1" @bind="ticketId" disabled="@busy" /><p class="field-help">Busca o segmento e a maior versão das máquinas do cliente. Deixe vazio para perguntas gerais.</p> }
+<label for="simulation-segment">Segmento para teste geral</label><input id="simulation-segment" @bind="segment" maxlength="100" disabled="@busy" placeholder="Ex.: supermercado ou vestuário" /><p class="field-help">O segmento do cadastro tem prioridade quando o atendimento está vinculado a um cliente.</p>
+<label class="checkbox"><input type="checkbox" @bind="includeHistory" disabled="@busy" /> Incluir trechos do histórico relacionado</label><p class="field-help">Desmarcado por padrão. No suporte, o histórico interno aparece apenas no modo Técnico. No comercial, usa somente o card selecionado. Trechos filtrados serão enviados à OpenAI.</p>
+<div class="mapping"><strong>Sem envio ao cliente real</strong><p>Este teste não cria mensagens, não grava no SQL Server e não aciona o WhatsApp.</p></div><button class="secondary full-width" disabled="@busy" @onclick="Clear">Nova conversa</button>
+</aside>
+<section class="card simulation-chat"><div class="section-heading"><div><h2>Conversa de teste</h2><p>@ModeLabel(mode)</p></div><span class="badge neutral">RASCUNHO</span></div>
+<div class="chat-messages" aria-live="polite">
+@if(messages.Count==0)
+{ <div class="empty simulator-empty"><span>✦</span><h3>Qual pergunta seu cliente faria?</h3><p>A resposta será gerada a partir dos trechos encontrados na base. Se não houver evidência, a IA deverá reconhecer a limitação.</p><div class="example-questions"><button @onclick="() => Example(0)">O sistema tem controle de estoque?</button><button @onclick="() => Example(1)">Como registrar uma venda?</button><button @onclick="() => Example(2)">Existe um parâmetro para essa opção?</button></div></div> }
+@foreach(var message in messages)
+{
+<article class="chat-question"><small>Pergunta simulada</small><p>@message.Question</p></article>
+@if(message.Answer is { } answer)
+{
+<article class="chat-answer"><div class="section-heading"><strong>EvolutTech IA</strong><span class="badge @(answer.SufficientEvidence?"":"warning")">@(answer.SufficientEvidence?"Com referências":"Evidência insuficiente")</span></div><p class="preserve-lines">@answer.Answer</p>
+@if(answer.Format==ExplanationFormat.Flow&&answer.Steps is {Length:>0} flow)
+{ <div class="explanation-flow" aria-label="Fluxo passo a passo">@for(var i=0;i<flow.Length;i++) { <div class="explanation-step"><strong>@(i+1)</strong><p>@flow[i]</p></div>@if(i<flow.Length-1) { <span class="explanation-arrow" aria-hidden="true">↓</span> } }</div> }
+@if(answer.Format==ExplanationFormat.Image)
+{ @if(answer.ScreenImage is { } screenImage) { <figure class="explanation-image"><img src="@screenImage" alt="Tela de referência da aplicação correspondente à orientação." /><figcaption>@answer.ScreenNotice</figcaption></figure> }
+  else { <div class="notice">@answer.ScreenNotice</div> }
+  @if(answer.Steps is {Length:>0} illustrated) { <details><summary>Ler as orientações em texto</summary><ol>@foreach(var step in illustrated) { <li>@step</li> }</ol></details> } }
+@if(!string.IsNullOrWhiteSpace(answer.FollowUp)) { <p class="follow-up">@answer.FollowUp</p> }
+@if(answer.Videos is {Count:>0} videos) { <div class="mapping"><strong>Vídeos complementares · EvolutTech</strong>@foreach(var video in videos) {<p><a href="@video.Url" target="_blank" rel="noopener noreferrer">▶ @video.Title</a></p>}<small>Material complementar relacionado ao assunto; a orientação acima usa as fontes consultadas.</small></div> }
+<div class="answer-context"><span>Segmento: @(string.IsNullOrWhiteSpace(answer.Segment)?"não informado":answer.Segment)</span><span>Maior versão: @(string.IsNullOrWhiteSpace(answer.Version)?"não identificada":answer.Version)</span></div>
+@if(!string.IsNullOrWhiteSpace(answer.TechnicalNotes)) { <details class="answer-details"><summary>Análise interna do técnico</summary><p class="preserve-lines">@answer.TechnicalNotes</p></details> }
+@if(answer.InterfaceReview is { } review) { <details class="answer-details"><summary>Conferência da aplicação · @(review.Checked?"interface consultada":"interface não localizada")</summary><p>@review.Summary</p><small>@review.InterfaceSources fonte(s) de interface · imagem na análise: @(review.LayoutAvailable?"sim":"não")</small></details> }
+@if(answer.Checks is {Count:>0} checks) { <details class="answer-details"><summary>Cruzamento das fontes · visualização interna</summary>@foreach(var check in checks) { <article class="evidence"><strong>@check.Source · @check.State</strong><small>@check.Matches correspondência(s) encontrada(s)</small><p>@check.Detail</p></article> }</details> }
+@if(answer.Sources.Count>0) { <details class="answer-details"><summary>@answer.Sources.Count fonte(s) utilizada(s) · visualização interna</summary>@foreach(var source in answer.Sources) { <article class="evidence"><div class="tags"><span class="badge neutral">@source.Id · @SourceLabel(source.Kind) @(string.IsNullOrWhiteSpace(source.Module) ? "" : " · " + source.Module)</span></div><strong>@source.Title</strong><small>@source.Locator @(!string.IsNullOrWhiteSpace(source.Version)?$"· commit {source.Version[..Math.Min(8,source.Version.Length)]}":"")</small><p class="preserve-lines">@source.Text</p></article> }</details> }
+@if(answer.Warnings.Count>0) { <details class="answer-details"><summary>Limitações desta consulta</summary>@foreach(var warning in answer.Warnings) { <p>@warning</p> }</details> }
+<small class="generation-info">@answer.Model · @answer.InputTokens entrada / @answer.OutputTokens saída</small></article>
+}
+@if(message.Error is { } error) { <div class="notice warning-notice" role="alert">@error</div> }
+}
+@if(busy) { <div class="answer-loading" role="status"><span class="status-dot"></span> Consultando fontes e preparando a resposta… <button class="text-button" @onclick="Cancel">Cancelar</button></div> }
+</div>
+@if(messages.LastOrDefault()?.Answer is { } latest&&!busy)
+{ <div class="explanation-controls"><small>Explicação: @(latest.Format==ExplanationFormat.Text?"texto":latest.Format==ExplanationFormat.Flow?"fluxo":"imagem")</small><button type="button" class="secondary" @onclick="Clarify">@(latest.Format==ExplanationFormat.Image?"Ainda tenho dúvida":"Não entendi")</button></div> }
+<EditForm Model="question" OnValidSubmit="Send" FormName="simulation-question"><DataAnnotationsValidator /><ValidationSummary /><label for="simulation-question">Sua pergunta</label><InputTextArea id="simulation-question" @bind-Value="question.Text" rows="3" maxlength="2000" disabled="@busy" placeholder="Digite como se fosse o cliente ou interessado no sistema…" /><div class="composer-footer"><small>As respostas são rascunhos para revisão. Nenhuma mensagem é enviada ao cliente.</small><button class="primary" type="submit" disabled="@(busy||!Simulation.IsConfigured)">@(busy?"Consultando…":"Gerar resposta →")</button></div></EditForm>
+</section></div>
+@code {
+    private SimulationMode mode=SimulationMode.CustomerSupport;
+    private int? ticketId,crmId;
+    private string segment="";
+    private bool includeHistory,busy;
+    private string contextKey="";
+    private QuestionInput question=new();
+    private readonly List<ChatMessage> messages=[];
+    private readonly List<SimulationTurn> turns=[];
+    private CancellationTokenSource? cancellation;
+    private async Task Send()
+    {
+        if(busy) return;
+        var key=$"{mode}|{ticketId}|{crmId}|{segment}|{includeHistory}";
+        if(contextKey!=key) { messages.Clear(); turns.Clear(); contextKey=key; }
+        var text=question.Text.Trim(); var message=new ChatMessage(text); messages.Add(message); busy=true;
+        cancellation=new CancellationTokenSource(TimeSpan.FromMinutes(3));
+        try
+        {
+            var request=new SimulationRequest(text,mode,mode==SimulationMode.Commercial?null:ticketId,
+                mode==SimulationMode.Commercial?crmId:null,segment,turns.TakeLast(4).ToArray(),includeHistory);
+            message.Answer=await Simulation.AskAsync(request,cancellation.Token);
+            turns.Add(new(text,message.Answer.Answer+"\n"+message.Answer.FollowUp,message.Answer.Format,ExplanationPolicy.Topic(request))); question=new();
+        }
+        catch(OperationCanceledException) { message.Error="Consulta cancelada ou tempo limite atingido. Nenhuma mensagem foi enviada."; }
+        catch(SimulationException ex) { message.Error=ex.Message; }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        { message.Error="Não foi possível carregar a configuração protegida. Confira o usuário do aplicativo e as permissões de armazenamento."; }
+        finally { cancellation.Dispose(); cancellation=null; busy=false; }
+    }
+    private void Clear() { messages.Clear(); turns.Clear(); contextKey=""; question=new(); }
+    private void Cancel()=>cancellation?.Cancel();
+    private async Task Clarify() { question.Text="Ainda não entendi.";await Send(); }
+    private void Example(int index)=>question.Text=new[] {"O sistema tem controle de estoque?","Como registrar uma venda?","Existe um parâmetro para essa opção?"}[index];
+    private static string ModeLabel(SimulationMode value)=>value switch { SimulationMode.Commercial=>"Comercial · funcionalidades e condições",SimulationMode.Technician=>"Técnico · conhecimento interno e hipóteses",_=>"Suporte · resposta em linguagem do cliente" };
+    private static string SourceLabel(string kind)=>kind switch { "code"=>"Código","interface"=>"Interface e atalhos","resolved-case"=>"Solução revisada de atendimento finalizado","parameter"=>"Parâmetro","guidance"=>"Orientação","documentation"=>"Documentação","crm-history"=>"Histórico comercial","history"=>"Histórico do suporte",_=>"Histórico de IA" };
+    public void Dispose()=>cancellation?.Cancel();
+    private sealed class QuestionInput { [Required(ErrorMessage="Digite uma pergunta."),StringLength(2000)] public string Text {get;set;}=""; }
+    private sealed class ChatMessage(string text) { public string Question {get;}=text; public SimulationAnswer? Answer {get;set;} public string? Error {get;set;} }
+}

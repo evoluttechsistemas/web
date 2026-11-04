@@ -1,0 +1,842 @@
+﻿@page "/fornecedor"
+@using System.ComponentModel.DataAnnotations
+@using EvolutTur.Models
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject FornecedorService fornecedorService
+@inject AuthenticationStateProvider AuthProvider
+
+<style>
+    /* Estilos Gerais */
+    body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background-color: #f5f7fa;
+    color: #2c3e50;
+    }
+
+    .layout {
+    display: flex;
+    min-height: 100vh;
+    }
+
+    .layout > Menu {
+    width: 250px; /* ou ajuste como quiser */
+    background-color: #2c5282; /* cor do fundo do menu */
+    color: white;
+    padding: 20px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .page-container {
+    flex: 1;
+    padding: 20px;
+    background-color: #f5f7fa;
+    }
+
+    /* Cabeçalho e Botões */
+    h4 {
+    color: #1a365d;
+    font-weight: 600;
+    margin: 0;
+    }
+
+    .btn-primary-custom {
+    background-color: #3182ce;
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(49, 130, 206, 0.2);
+    }
+
+    .btn-primary-custom:hover {
+    background-color: #2c5282;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(49, 130, 206, 0.3);
+    }
+
+    .btn-primary-custom:active {
+    transform: translateY(0);
+    }
+
+    .btn-primary-custom.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.875rem;
+    }
+
+    .btn-danger {
+    background-color: #e53e3e;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    font-size: 0.875rem;
+    }
+
+    .btn-danger:hover {
+    background-color: #c53030;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(229, 62, 62, 0.3);
+    }
+
+    /* Formulário de Busca */
+    .form-control {
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2);
+    outline: none;
+    }
+
+    /* Tabela */
+    .table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 1rem;
+    color: #2d3748;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(226, 232, 240, 0.3);
+    }
+
+    .table th {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #bee3f8;
+    }
+
+    .table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+    }
+
+    .table tr:hover td {
+    background-color: #ebf8ff;
+    }
+
+    /* Modal */
+    .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1050;
+    }
+
+    .modal-dialog {
+    max-width: 600px;
+    margin: 1.75rem auto;
+    }
+
+    .modal-content {
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-header-custom {
+    background-color: #3182ce;
+    padding: 1rem 1.5rem;
+    border-bottom: none;
+    }
+
+    .modal-title {
+    font-weight: 600;
+    color: white;
+    }
+
+    .btn-close-white {
+    filter: invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+    }
+
+    .btn-close-white:hover {
+    opacity: 1;
+    }
+
+    .modal-body {
+    padding: 1.5rem;
+    }
+
+    /* Formulário no Modal */
+    .form-label {
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    }
+
+    .InputText {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    }
+
+    .InputText:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2);
+    outline: none;
+    }
+
+    .btn-secondary {
+    background-color: #a0aec0;
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+    background-color: #718096;
+    }
+
+    /* Validação */
+    .validation-message {
+    color: #e53e3e;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    }
+
+    .validation-summary-errors {
+    color: #e53e3e;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: rgba(229, 62, 62, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #e53e3e;
+    }
+
+    /* Efeitos de Transição */
+    /* ===== ESTILO GERAL DO MODAL ===== */
+    .modal.show {
+    animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal-content {
+    border: none;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    }
+
+    .modal-header-custom {
+    background: linear-gradient(135deg, #1976d2, #0d47a1);
+    padding: 1.2rem 1.5rem;
+    color: white;
+    border-bottom: none;
+    }
+
+    .modal-title {
+    font-weight: 600;
+    margin: 0;
+    }
+
+    .btn-close-white {
+    filter: invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    }
+
+    .btn-close-white:hover {
+    opacity: 1;
+    }
+
+    /* ===== ABAS (TABS) ===== */
+    .nav-tabs {
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 1rem;
+    }
+
+    .nav-tabs .nav-link {
+    border: none;
+    color: #555;
+    font-weight: 500;
+    padding: 0.6rem 1.2rem;
+    transition: all 0.3s;
+    border-radius: 5px 5px 0 0;
+    margin-right: 0.2rem;
+    background: rgba(0, 0, 0, 0.05);
+    }
+
+    .nav-tabs .nav-link:hover {
+    background: rgba(25, 118, 210, 0.1);
+    color: #1565c0;
+    }
+
+    .nav-tabs .nav-link.active {
+    color: #1976d2;
+    background: transparent;
+    position: relative;
+    }
+
+    .nav-tabs .nav-link.active::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: #1976d2;
+    animation: underline 0.3s ease-out;
+    }
+
+    @@keyframes underline {
+    from
+
+    {
+    transform: scaleX(0);
+    }
+
+    to {
+    transform: scaleX(1);
+    }
+
+    }
+
+    /* ===== SEÇÕES EXPANSÍVEIS (SEM MEXER NO HTML) ===== */
+    /* 1. Esconde o conteúdo inicialmente */
+    .tab-pane:not(.active) {
+    display: none;
+    }
+
+    /* 2. Estiliza as seções (infoGerais, Financeiro, Observacao) */
+    .infoGerais, .Financeiro, .Observacao, .Endereco {
+    background: #f8faff;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 10px rgba(25, 118, 210, 0.1);
+    transition: all 0.4s ease;
+    /* overflow: hidden; */
+    max-height: auto; /* Valor alto para expansão */
+    }
+
+    /* 3. Cria um "cabeçalho" falso usando o primeiro elemento da seção */
+    .infoGerais > div:first-child,
+    .Financeiro > div:first-child,
+    .Observacao > div:first-child,
+    .Endereco > div:first-child{
+    position: relative;
+    cursor: pointer;
+    padding-right: 2rem;
+    }
+
+    /* 4. Adiciona uma seta indicativa (CSS-only) */
+    .infoGerais > div:first-child::after,
+    .Financeiro > div:first-child::after,
+    .Observacao > div:first-child::after,
+    .Endereco > div:first-child::after {
+    content: "▼";
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #1976d2;
+    transition: transform 0.3s;
+    }
+
+    /* 5. Define o estado "fechado" */
+    .infoGerais.collapsed,
+    .Financeiro.collapsed,
+    .Observacao.collapsed,
+    .Endereco.collapsed{
+    max-height: 3.5rem;
+    background: #e3f2fd;
+    }
+
+    .infoGerais.collapsed > div:not(:first-child),
+    .Financeiro.collapsed > div:not(:first-child),
+    .Observacao.collapsed > div:not(:first-child),
+    .Endereco.collapsed > div:not(:first-child{
+    opacity: 0;
+    height: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    }
+
+    .infoGerais.collapsed > div:first-child::after,
+    .Financeiro.collapsed > div:first-child::after,
+    .Observacao.collapsed > div:first-child::after,
+    .Endereco.collapsed > div:first-child::after{
+    transform: translateY(-50%) rotate(-90deg);
+    }
+
+    /* 6. Anima a abertura/fechamento */
+    @@keyframes slideDown {
+    from
+
+    {
+    opacity: 0;
+    max-height: 0;
+    }
+
+    to {
+    opacity: 1;
+    max-height: 500px;
+    }
+
+    }
+
+    .infoGerais:not(.collapsed),
+    .Financeiro:not(.collapsed),
+    .Observacao:not(.collapsed),
+    .Endereco:not(.collapsed){
+    animation: slideDown 0.4s ease-out;
+    }
+
+    /* ===== FORMULÁRIO ===== */
+    .mt-3{
+    padding: 10px;
+    }
+
+
+
+    .form-label {
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 0.5rem;
+    }
+
+    .form-control {
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 0.7rem 1rem;
+    transition: all 0.3s;
+    }
+
+    .form-control:focus {
+    border-color: #1976d2;
+    box-shadow: 0 0 0 0.2rem rgba(25, 118, 210, 0.25);
+    }
+
+    /* ===== BOTÕES ===== */
+    .btn {
+    font-weight: 500;
+    padding: 0.7rem 1.5rem;
+    border-radius: 6px;
+    transition: all 0.3s;
+    }
+
+    .btn-primary-custom {
+    background: linear-gradient(135deg, #1976d2, #1565c0);
+    color: white;
+    border: none;
+    box-shadow: 0 2px 5px rgba(25, 118, 210, 0.3);
+    }
+
+    .btn-primary-custom:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(25, 118, 210, 0.4);
+    }
+
+    .btn-secondary {
+    background: #f5f5f5;
+    color: #555;
+    border: 1px solid #ddd;
+    }
+
+    .btn-secondary:hover {
+    background: #e0e0e0;
+    }
+
+    /* ===== RESPONSIVIDADE ===== */
+    @@media (max-width: 768px) {
+    .modal-content
+
+    {
+    margin: 1rem;
+    }
+
+    .nav-tabs .nav-link {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.85rem;
+    }
+
+    .infoGerais, .Financeiro, .Observacao {
+    padding: 1rem;
+    }
+
+    }
+</style>
+
+<div class="layout">
+    <Menu />
+    <div class="page-container">
+        <div class="container mt-4">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Lista de Fornecedores</h4>
+                <button class="btn btn-primary-custom" @onclick="AbrirModalCadastro">Cadastrar Fornecedor</button>
+            </div>
+
+            <div class="mb-3">
+                <div class="mb-3">
+                    <input class="form-control"
+                    placeholder="Buscar fornecedor pela razão social..."
+                    @oninput="BuscarComFiltro" />
+                </div>
+            </div>
+
+            @if (fornecedores.Count == 0)
+            {
+                <p>Nenhum fornecedor cadastrado.</p>
+            }
+            else
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nome Fantasia</th>
+                            <th>RazaoSocial</th>
+                            <th>CPF/CNPJ</th>
+
+
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in fornecedoresFiltrados)
+                        {
+                            <tr>
+                                <td>@c.Fantasia</td>
+                                <td>@c.Razao</td>
+                                <td>@(c.TipoPessoa == "F" ? c.CPF : c.CPF)</td>
+
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-primary-custom btn-sm" @onclick="() => AbrirModalEdicao(c.Codigo)">Editar</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => ExcluirFornecedor(c.Codigo)">Excluir</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cadastro/Edicao -->
+@if (modalAberto)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <div class="modal-header modal-header-custom text-white">
+                    <h5 class="modal-title">@((fornecedorSelecionado.Codigo == 0) ? "Cadastrar Fornecedor" : "Editar Fornecedor")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="FecharModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Abas controladas por Blazor -->
+                    <ul class="nav nav-tabs mb-3">
+                        <li class="nav-item">
+                            <button class="nav-link @(abaAtiva == "info" ? "active" : "")" @onclick='() => abaAtiva = "info"'>Informações Gerais</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(abaAtiva == "endereco" ? "active" : "")" @onclick='() => abaAtiva = "endereco"'>Endereço</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(abaAtiva == "financeiro" ? "active" : "")" @onclick='() => abaAtiva = "financeiro"'>Financeiro</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(abaAtiva == "observacao" ? "active" : "")" @onclick='() => abaAtiva = "observacao"'>Observação</button>
+                        </li>
+                    </ul>
+
+
+
+
+                    <EditForm Model="fornecedorSelecionado" OnValidSubmit="SalvarFornecedor">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <!-- Conteúdo das Abas -->
+                        <div class="tab-content">
+                            @if (abaAtiva == "info")
+                            {
+                                <div class="tab-pane fade show active">
+                                    <div class="infoGerais">
+                                        <div class="mb-3">
+                                            <label for="nomeFantasia" class="form-label">Nome/Fantasia</label>
+                                            <InputText id="nomeFantasia" class="form-control" @bind-Value="fornecedorSelecionado.Fantasia" />
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="razaoSocial" class="form-label">Razão Social</label>
+                                            <InputText id="razaoSocial" class="form-control" @bind-Value="fornecedorSelecionado.Razao" />
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label class="form-label">Tipo de Pessoa</label>
+                                            <select class="form-control" @bind="fornecedorSelecionado.TipoPessoa">
+                                                <option value="">Selecione</option>
+                                                <option value="F">Pessoa Física</option>
+                                                <option value="J">Pessoa Jurídica</option>
+                                            </select>
+                                        </div>
+
+                                        @if (fornecedorSelecionado.TipoPessoa == "F")
+                                        {
+                                            <div class="mb-3">
+                                                <label for="cpf" class="form-label">CPF</label>
+                                                <InputText id="cpf" class="form-control" @bind-Value="fornecedorSelecionado.CPF" />
+                                            </div>
+                                        }
+                                        else if (fornecedorSelecionado.TipoPessoa == "J")
+                                        {
+                                            <div class="mb-3">
+                                                <label for="cnpj" class="form-label">CNPJ</label>
+                                                <InputText id="cnpj" class="form-control" @bind-Value="fornecedorSelecionado.CPF" />
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label for="ie" class="form-label">Inscrição Estadual</label>
+                                                <InputText id="ie" class="form-control" @bind-Value="fornecedorSelecionado.RG" />
+                                            </div>
+                                        }
+
+                                        <div class="mb-3">
+                                            <label for="complemento" class="form-label">Complemento</label>
+                                            <InputText id="complemento" class="form-control" @bind-Value="fornecedorSelecionado.Complemento" />
+                                        </div>                                        
+
+                                        <div class="mb-3">
+                                            <label for="telefone" class="form-label">Telefone</label>
+                                            <InputText id="telefone" class="form-control" @bind-Value="fornecedorSelecionado.Telefone" />
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="email" class="form-label">Email</label>
+                                            <InputText id="email" class="form-control" @bind-Value="fornecedorSelecionado.Email" />
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (abaAtiva == "endereco"){
+                                <div class="mb-3">
+                                    <label for="cep" class="form-label">CEP</label>
+                                    <InputText id="cep" class="form-control" @bind-Value="fornecedorSelecionado.CEP" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="uf" class="form-label">UF</label>
+                                    <InputText id="uf" class="form-control" @bind-Value="fornecedorSelecionado.UF" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="endereco" class="form-label">Endereço</label>
+                                    <InputText id="endereco" class="form-control" @bind-Value="fornecedorSelecionado.Endereco" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="numero" class="form-label">Número</label>
+                                    <InputText id="numero" class="form-control" @bind-Value="fornecedorSelecionado.Numero" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="bairro" class="form-label">Bairro</label>
+                                    <InputText id="bairro" class="form-control" @bind-Value="fornecedorSelecionado.Bairro" />
+                                </div>
+
+                                <div class="mb-3">
+                                    <label for="cidade" class="form-label">Cidade</label>
+                                    <InputText id="cidade" class="form-control" @bind-Value="fornecedorSelecionado.Cidade" />
+                                </div>
+                            }
+                            else if (abaAtiva == "financeiro")
+                            {
+                                <div class="tab-pane fade show active">
+                                    <div class="Financeiro">
+                                        <div class="mb-3">
+                                            <label for="comissao" class="form-label">Comissão</label>
+                                            <InputNumber id="comissao" class="form-control" @bind-Value="fornecedorSelecionado.Comissao" />
+                                        </div>                                       
+
+                                    </div>
+                                </div>
+                            }
+                            else if (abaAtiva == "observacao")
+                            {
+                                <div class="tab-pane fade show active">
+                                    <div class="Observacao">
+                                        <div class="mb-3">
+                                            <label for="observacao" class="form-label">Observação</label>
+                                        <InputTextArea id="observacao" class="form-control" @bind-Value="fornecedorSelecionado.Observacao" Rows="4" />
+
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+
+                        <div class="mt-3">
+                            <button type="submit" class="btn btn-primary-custom">
+                                @((fornecedorSelecionado.Codigo == 0) ? "Cadastrar" : "Atualizar")
+                            </button>
+                            <button type="button" class="btn btn-secondary ms-2" @onclick="FecharModal">Cancelar</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+
+    private string abaAtiva = "info";    
+
+    List<Fornecedor> fornecedores = new();
+    Fornecedor fornecedorSelecionado = new Fornecedor();
+    bool modalAberto = false;
+    int proximoId = 1;
+
+    string filtroNome = "";
+
+    IEnumerable<Fornecedor> fornecedoresFiltrados => string.IsNullOrWhiteSpace(filtroNome)
+        ? fornecedores
+        : fornecedores.Where(c => c.Razao?.Contains(filtroNome, StringComparison.OrdinalIgnoreCase) == true);
+
+    void AbrirModalCadastro()
+    {
+        fornecedorSelecionado = new Fornecedor();
+        abaAtiva = "info";
+        modalAberto = true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {       
+        await BuscaFornecedor("");
+    }
+
+     private async Task BuscaFornecedor(string razao)
+    {       
+        int CodEmp = await CarregarCodEmpAsync();
+        fornecedores = await fornecedorService.BuscaFornecedorAsync(CodEmp, razao);
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+
+    private async Task BuscarComFiltro(ChangeEventArgs e)
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        filtroNome = e.Value?.ToString();
+        await BuscaFornecedor(filtroNome);
+    }
+
+    void AbrirModalEdicao(int Codigo)
+    {
+        var c = fornecedores.Find(x => x.Codigo == Codigo);
+        if (c != null)
+        {
+            fornecedorSelecionado = new Fornecedor
+                {
+
+                // Gerais
+                    Codigo = c.Codigo,
+                    Fantasia = c.Fantasia,
+                    Razao = c.Razao,
+                    TipoPessoa = c.TipoPessoa,
+                    CPF = c.CPF,                   
+                    CEP = c.CEP,
+                    UF = c.UF,
+                    Endereco = c.Endereco,
+                    Numero = c.Numero,
+                    Bairro = c.Bairro,
+                    Cidade = c.Cidade,
+                    Complemento = c.Complemento,                   
+                    Telefone = c.Telefone,
+                    Email = c.Email,
+
+                // Financeiro
+
+                    Comissao = c.Comissao,
+                   
+                // Observação
+
+                    Observacao = c.Observacao
+
+                };
+            abaAtiva = "info";
+            modalAberto = true;
+        }
+    }
+
+    void FecharModal()
+    {
+        modalAberto = false;
+    }
+
+    private async Task SalvarFornecedor()
+    {
+        //insere
+        if (fornecedorSelecionado.Codigo == 0)
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await fornecedorService.AdicionarFornecedor(fornecedorSelecionado, CodEmp);
+        }
+        else //atualiza
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await fornecedorService.AtualizarFornecedor(fornecedorSelecionado, CodEmp);
+        }
+
+        await BuscaFornecedor("");
+
+        modalAberto = false;
+        StateHasChanged();
+    }
+
+    private async Task ExcluirFornecedor(int Codigo)
+    {
+        if (Codigo > 0)
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await fornecedorService.ExcluirFornecedor(Codigo, CodEmp);
+            await BuscaFornecedor("");
+        }
+    }
+}

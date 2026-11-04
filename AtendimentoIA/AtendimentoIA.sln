@@ -1,0 +1,56 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtendimentoIA", "AtendimentoIA.csproj", "{039CA74B-CD71-4638-B528-CF5F29CF19CB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{69E19328-6A75-48B4-A042-D9D49ECD4E38}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutTech.IA.Core", "src\EvolutTech.IA.Core\EvolutTech.IA.Core.csproj", "{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutTech.IA.Indexador", "src\EvolutTech.IA.Indexador\EvolutTech.IA.Indexador.csproj", "{1E217A6F-2E83-4533-ADC4-47C91C2E0414}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{3B245F1F-F185-4A34-838D-94C8C40153F8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutTech.IA.Tests", "tests\EvolutTech.IA.Tests\EvolutTech.IA.Tests.csproj", "{461FFF7F-296F-406B-BED5-A8380C589D25}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AtendimentoIA.Tests", "tests\AtendimentoIA.Tests\AtendimentoIA.Tests.csproj", "{F4CB4625-8040-41E5-A23D-C5874B40AEAD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{039CA74B-CD71-4638-B528-CF5F29CF19CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{039CA74B-CD71-4638-B528-CF5F29CF19CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{039CA74B-CD71-4638-B528-CF5F29CF19CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{039CA74B-CD71-4638-B528-CF5F29CF19CB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E217A6F-2E83-4533-ADC4-47C91C2E0414}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E217A6F-2E83-4533-ADC4-47C91C2E0414}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E217A6F-2E83-4533-ADC4-47C91C2E0414}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E217A6F-2E83-4533-ADC4-47C91C2E0414}.Release|Any CPU.Build.0 = Release|Any CPU
+		{461FFF7F-296F-406B-BED5-A8380C589D25}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{461FFF7F-296F-406B-BED5-A8380C589D25}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{461FFF7F-296F-406B-BED5-A8380C589D25}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{461FFF7F-296F-406B-BED5-A8380C589D25}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4CB4625-8040-41E5-A23D-C5874B40AEAD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4CB4625-8040-41E5-A23D-C5874B40AEAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4CB4625-8040-41E5-A23D-C5874B40AEAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4CB4625-8040-41E5-A23D-C5874B40AEAD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0B1FB2D2-2FAF-4586-AEBB-96C6EE805ACC} = {69E19328-6A75-48B4-A042-D9D49ECD4E38}
+		{1E217A6F-2E83-4533-ADC4-47C91C2E0414} = {69E19328-6A75-48B4-A042-D9D49ECD4E38}
+		{461FFF7F-296F-406B-BED5-A8380C589D25} = {3B245F1F-F185-4A34-838D-94C8C40153F8}
+		{F4CB4625-8040-41E5-A23D-C5874B40AEAD} = {3B245F1F-F185-4A34-838D-94C8C40153F8}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,43 @@
+@page "/login"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@layout LoginLayout
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar · EvolutTech IA</PageTitle>
+<div class="login-page">
+    <section class="login-card" aria-label="Acesso ao AtendimentoIA">
+        <aside class="login-brand">
+            <div class="login-brand-logo-box"><img src="images/logo-evoluttech.png" alt="EvolutTech" class="login-logo" /></div>
+            <div class="login-brand-copy"><strong>EvolutTech IA</strong><span>Conhecimento do ERP para um atendimento com mais contexto.</span></div>
+        </aside>
+        <main class="login-panel">
+            <div class="login-panel-header">
+                <p class="login-kicker">Acesso ao sistema</p>
+                <h1>Entrar no AtendimentoIA</h1>
+                <p class="login-subtitle">Use seu usuário e senha do HELP para continuar.</p>
+            </div>
+            @if(ErrorMessage.Length>0) {<div class="login-alert" role="alert">@ErrorMessage</div>}
+                <form method="post" action="/auth/login" class="login-form" data-enhance="false">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="returnUrl" value="@PanelAuthentication.SafeReturnUrl(ReturnUrl)" />
+                    <div class="login-field"><label for="username">Usuário</label><input id="username" name="username" autocomplete="username" maxlength="50" required autofocus /></div>
+                    <div class="login-field"><label for="password">Senha</label><input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required /></div>
+                    <button type="submit" class="login-submit">Entrar</button>
+                </form>
+            <div class="login-footnote">EvolutTech · Central de conhecimento</div>
+        </main>
+    </section>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext {get;set;}=default!;
+    [SupplyParameterFromQuery(Name="error")] public string? Error {get;set;}
+    [SupplyParameterFromQuery(Name="returnUrl")] public string? ReturnUrl {get;set;}
+    private string ErrorMessage=>Error switch {
+        "invalid"=>"Usuário ou senha incorretos.","blocked"=>"Sua conta está temporariamente bloqueada. Tente novamente mais tarde.",
+        "unavailable"=>"Não foi possível consultar o banco de dados. Peça ao administrador para conferir a conexão do AtendimentoIA.",_=>""};
+    protected override void OnInitialized()
+    {
+        if(HttpContext.User.Identity?.IsAuthenticated==true&&HttpContext.User.HasClaim("company_id","2")) Navigation.NavigateTo(PanelAuthentication.SafeReturnUrl(ReturnUrl),forceLoad:true);
+    }
+}

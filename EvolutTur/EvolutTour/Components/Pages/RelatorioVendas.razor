@@ -1,0 +1,266 @@
+﻿@page "/relatorioVendas"
+@using EvolutTur.Models
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject VendaService vendaService
+@inject AuthenticationStateProvider AuthProvider
+
+
+<style>
+    :root {
+    --azul-primario: #1a73e8;
+    --azul-secundario: #4285f4;
+    --azul-claro: #e8f0fe;
+    --azul-escuro: #0d47a1;
+    --cinza-borda: #dadce0;
+    --cinza-texto: #5f6368;
+    --branco: #ffffff;
+    }
+
+    /* Layout principal com grid */
+    .layout-relatorio {
+    display: grid;
+    grid-template-columns: 250px 1fr; /* Menu fixo + conteúdo */
+    gap: 20px;
+    height: 100vh;
+    }
+
+    /* Conteúdo do relatório */
+    .conteudo-relatorio {
+    padding: 20px;
+    overflow-y: auto;
+    font-family: Arial, sans-serif;
+    }
+
+    .titulo-pagina {
+    color: var(--azul-escuro);
+    margin-bottom: 20px;
+    }
+
+    .filtro-periodo {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: flex-end;
+    }
+
+    .filtro-periodo label {
+    font-weight: bold;
+    color: var(--cinza-texto);
+    }
+
+    .filtro-periodo input {
+    padding: 6px;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 4px;
+    }
+
+    .btn-buscar {
+    background-color: var(--azul-primario);
+    color: var(--branco);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    }
+
+    .btn-buscar:hover {
+    background-color: var(--azul-secundario);
+    }
+
+    .tabela-vendas {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    }
+
+    .tabela-vendas th, .tabela-vendas td {
+    border: 1px solid var(--cinza-borda);
+    padding: 8px;
+    text-align: left;
+    }
+
+    .tabela-vendas th {
+    background-color: var(--azul-claro);
+    color: var(--azul-escuro);
+    }
+
+    .acoes-botoes {
+    display: flex;
+    gap: 6px;
+    }
+
+    .btn-acao {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: opacity 0.2s;
+    }
+
+    .btn-excluir {
+    background-color: #e53935;
+    color: var(--branco);
+    }
+
+    .btn-reimprimir {
+    background-color: #fbc02d;
+    color: var(--branco);
+    }
+
+    .btn-contrato {
+    background-color: #43a047;
+    color: var(--branco);
+    }
+
+    .btn-acao:hover {
+    opacity: 0.85;
+    }
+
+    /* Responsividade para telas pequenas */
+    @@media (max-width: 768px) {
+    .layout-relatorio
+
+    {
+    grid-template-columns: 1fr;
+    }
+
+    .menu-lateral {
+    border-right: none;
+    border-bottom: 1px solid var(--cinza-borda);
+    }
+
+    }
+</style>
+
+<div class="layout-relatorio">
+    <Menu /> <!-- Menu fixo na esquerda -->
+
+
+    <div class="conteudo-relatorio">
+        <h3 class="titulo-pagina">Relatório de Vendas</h3>
+
+        <div class="filtro-periodo">
+            <div>
+                <label for="dataInicio">Data Início</label><br />
+                <input type="date" id="dataInicio" @bind="dataInicio" />
+            </div>
+            <div>
+                <label for="dataFim">Data Fim</label><br />
+                <input type="date" id="dataFim" @bind="dataFim" />
+            </div>
+            <button class="btn-buscar" @onclick="BuscarVendas">Buscar</button>
+        </div>
+
+        @if (vendasFiltradas.Count > 0)
+        {
+            <table class="tabela-vendas">
+                <thead>
+                    <tr>
+                        <th>Cliente</th>
+                        <th>Item</th>
+                        <th>Pagamento</th>
+                        <th>Valor</th>
+                        <th>Comissão</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var venda in vendasFiltradas)
+                    {
+                        <tr>
+                            <td>@venda.Cliente</td>
+                            <td>@venda.Item</td>
+                            <td>@venda.Pagamento</td>
+                            <td>@venda.Valor.ToString("C")</td>
+                            <td>@venda.Comissao.ToString("C")</td>
+                            <td>
+                                <div class="acoes-botoes">
+                                    <button class="btn-acao btn-excluir" @onclick="() => ExcluirVenda(venda.Codigo)">Excluir</button>
+                                    <button class="btn-acao btn-reimprimir" @onclick="() => ReimprimirVenda(venda.Codigo)">Reimprimir</button>
+                                    <button class="btn-acao btn-contrato" @onclick="() => ImprimirContrato(venda.Codigo)">Contrato</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <p>Nenhuma venda encontrada no período selecionado.</p>
+        }
+    </div>
+</div>
+
+@code {
+    private EvolutTur.Models.RelatorioVendas relVendas = new EvolutTur.Models.RelatorioVendas();
+
+    private DateTime dataInicio { get; set; }
+    private DateTime dataFim { get; set; }
+    [Inject] private IJSRuntime JS { get; set; }
+
+    private List<Models.RelatorioVendas> vendasFiltradas = new();
+
+    protected override void OnInitialized()
+    {
+        dataInicio = DateTime.Now;
+        dataFim = DateTime.Now;
+    }
+
+    private async Task BuscarVendas()
+    {
+        if (dataInicio == null)
+        {
+            await JS.InvokeVoidAsync("alert", "É obrigatório colocar a data Início!");
+            return;
+        }
+
+        if (dataFim == null)
+        {
+            await JS.InvokeVoidAsync("alert", "É obrigatório colocar a data Fim!");
+            return;
+        }
+
+        int CodEmp = await CarregarCodEmpAsync();
+
+        vendasFiltradas = await vendaService.BuscaRelatorioVenda(CodEmp, dataInicio, dataFim);
+    }
+
+
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+
+    private async Task ExcluirVenda(int id)
+    {
+       await vendaService.ExcluirVenda(id);
+        
+        int CodEmp = await CarregarCodEmpAsync();
+        vendasFiltradas = await vendaService.BuscaRelatorioVenda(CodEmp, dataInicio, dataFim);
+
+        StateHasChanged();
+    }
+
+    private void ReimprimirVenda(int id)
+    {
+        Console.WriteLine($"Reimprimindo venda {id}");
+    }
+
+    private void ImprimirContrato(int id)
+    {
+        Console.WriteLine($"Imprimindo contrato da venda {id}");
+    }
+}

@@ -1,0 +1,47 @@
+@page "/atendimento"
+@inject SupportContextService ContextService
+@inject PanelStore Store
+<PageTitle>Contexto do chamado · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">ATENDIMENTO COM CONTEXTO</div><h1>Comece pelo cliente certo.</h1><p>Consulte o segmento e o histórico do cliente vinculado ao chamado. Empresa @ContextService.CompanyId.</p></div></div>
+<section class="card"><EditForm Model="input" FormName="ticket" OnValidSubmit="Find"><DataAnnotationsValidator /><ValidationSummary /><div class="search-row"><label for="ticket-id">Código do chamado</label><InputNumber id="ticket-id" @bind-Value="input.TicketId" /><button class="primary" type="submit" disabled="@busy">@(busy ? "Consultando…" : "Consultar chamado")</button></div></EditForm></section>
+@if (notice is not null) { <div class="notice" role="status">@notice</div> }
+@if (context is { } customer)
+{
+<div class="overview-grid support-result"><section class="card"><div class="section-heading"><h2>Contexto do cliente</h2><span class="badge">USO INTERNO</span></div><div class="mapping"><strong>Chamado @customer.TicketId · cliente @customer.ClientId</strong><p>@customer.Subject</p></div><div class="mapping"><strong>Segmento</strong><p>@(string.IsNullOrWhiteSpace(customer.Segment) ? "Não informado no cadastro" : customer.Segment)</p></div><div class="mapping"><strong>Maior versão do ERP no cliente</strong><p>@(string.IsNullOrWhiteSpace(customer.Version) ? "Nenhuma versão numérica válida encontrada" : customer.Version)</p><small>Fonte: ControleMensalista.Versao, entre as máquinas deste cliente e desta empresa.</small></div><small>O segmento orienta a busca. Os módulos e as configurações efetivamente utilizados pelo cliente têm prioridade.</small></section>
+<section class="card"><h2>Orientações relacionadas</h2>@if (guidance.Count == 0) { <div class="empty"><span>◇</span><h3>Nenhuma orientação cadastrada para esse contexto</h3><p>Cadastre informações com o segmento igual ao cadastro do cliente ou use Todos.</p><a href="/orientacoes">Cadastrar orientação →</a></div> }@foreach (var item in guidance) { <article class="guidance-entry"><span class="badge">@item.Module</span><h3>@item.Title</h3><p class="preserve-lines">@item.Content</p><small>@(item.CustomerVisible ? "Permitido ao cliente" : "Orientação interna") · @item.Author</small></article> }</section></div>
+<section class="card"><div class="section-heading"><div><h2>Histórico do cliente</h2><p>Anotações de chamados deste cliente na empresa @ContextService.CompanyId, da mais recente para a mais antiga.</p></div><span class="badge neutral">TicketChamadoD</span></div><div class="notice neutral-note">Histórico para avaliação do técnico. Uma anotação não é automaticamente uma solução validada. Até 40 registros por página e 6.000 caracteres por anotação; nenhum conteúdo é enviado à IA.</div>
+@if (notes.Count == 0) { <div class="empty"><h3>Nenhuma anotação encontrada</h3></div> }
+@foreach (var note in notes) { <article class="guidance-entry"><div class="tags"><span class="badge">Chamado @note.TicketId</span><span class="subtle">@(note.Date == DateTime.MinValue ? "Data não informada" : note.Date.ToString("dd/MM/yyyy HH:mm"))</span></div><p class="preserve-lines">@note.Text</p></article> }
+@if (hasMore) { <button class="secondary" disabled="@busy" @onclick="More">Carregar anotações anteriores →</button> }
+</section>
+}
+@code {
+    private TicketInput input = new();
+    private SupportContext? context;
+    private List<SupportNote> notes = [];
+    private List<Guidance> guidance = [];
+    private bool busy,hasMore;
+    private string? notice;
+    private async Task Find()
+    {
+        busy=true; context=null; notes=[]; guidance=[]; notice=null; hasMore=false;
+        try {
+            context=await ContextService.GetAsync(input.TicketId);
+            if(context is null) { notice="Chamado não encontrado para esta empresa ou cliente não vinculado à mesma empresa."; return; }
+            var history=await ContextService.GetHistoryAsync(context.TicketId); notes=history.Notes; hasMore=history.HasMore;
+            guidance=(await Store.GetGuidanceAsync()).Where(g=>!g.Archived && (g.Segment.Equals("Todos",StringComparison.OrdinalIgnoreCase) || g.Segment.Equals(context.Segment,StringComparison.OrdinalIgnoreCase))).ToList();
+        }
+        catch(Microsoft.Data.SqlClient.SqlException ex) { notice=$"Não foi possível consultar o atendimento (código SQL {ex.Number})."; }
+        catch(Exception ex) when(ex is IOException or InvalidOperationException or System.Security.Cryptography.CryptographicException) { notice="Não foi possível concluir. Verifique a conexão e o armazenamento."; }
+        finally { busy=false; }
+    }
+    private async Task More()
+    {
+        if(context is null || notes.Count==0) return;
+        busy=true;
+        try { var page=await ContextService.GetHistoryAsync(context.TicketId,notes[^1].Id); notes=page.Notes; hasMore=page.HasMore; }
+        catch(Microsoft.Data.SqlClient.SqlException ex) { notice=$"Não foi possível carregar a página (código SQL {ex.Number})."; }
+        finally { busy=false; }
+    }
+    private sealed class TicketInput { [Range(1,int.MaxValue,ErrorMessage="Informe um código de chamado válido.")] public int TicketId { get; set; } }
+}

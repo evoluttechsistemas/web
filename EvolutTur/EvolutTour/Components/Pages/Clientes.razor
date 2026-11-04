@@ -1,0 +1,522 @@
+﻿@page "/clientes"
+@using System.ComponentModel.DataAnnotations
+@using EvolutTur.Models
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ClienteService clienteService
+@inject AuthenticationStateProvider AuthProvider
+
+<style>
+    /* Estilos Gerais */
+    body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    background-color: #f5f7fa;
+    color: #2c3e50;
+    }
+
+    .layout {
+    display: flex;
+    min-height: 100vh;
+    }
+
+    .layout > Menu {
+    width: 250px; /* ou ajuste como quiser */
+    background-color: #2c5282; /* cor do fundo do menu */
+    color: white;
+    padding: 20px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .page-container {
+    flex: 1;
+    padding: 20px;
+    background-color: #f5f7fa;
+    }
+
+    /* Cabeçalho e Botões */
+    h4 {
+    color: #1a365d;
+    font-weight: 600;
+    margin: 0;
+    }
+
+    .btn-primary-custom {
+    background-color: #3182ce;
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(49, 130, 206, 0.2);
+    }
+
+    .btn-primary-custom:hover {
+    background-color: #2c5282;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(49, 130, 206, 0.3);
+    }
+
+    .btn-primary-custom:active {
+    transform: translateY(0);
+    }
+
+    .btn-primary-custom.btn-sm {
+    padding: 5px 10px;
+    font-size: 0.875rem;
+    }
+
+    .btn-danger {
+    background-color: #e53e3e;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    font-size: 0.875rem;
+    }
+
+    .btn-danger:hover {
+    background-color: #c53030;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(229, 62, 62, 0.3);
+    }
+
+    /* Formulário de Busca */
+    .form-control {
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2);
+    outline: none;
+    }
+
+    /* Tabela */
+    .table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 1rem;
+    color: #2d3748;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(226, 232, 240, 0.3);
+    }
+
+    .table th {
+    background-color: #ebf8ff;
+    color: #2b6cb0;
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #bee3f8;
+    }
+
+    .table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+    }
+
+    .table tr:hover td {
+    background-color: #ebf8ff;
+    }
+
+    /* Modal */
+    .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1050;
+    }
+
+    .modal-dialog {
+    max-width: 600px;
+    margin: 1.75rem auto;
+    }
+
+    .modal-content {
+    border: none;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+
+    .modal-header-custom {
+    background-color: #3182ce;
+    padding: 1rem 1.5rem;
+    border-bottom: none;
+    }
+
+    .modal-title {
+    font-weight: 600;
+    color: white;
+    }
+
+    .btn-close-white {
+    filter: invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+    }
+
+    .btn-close-white:hover {
+    opacity: 1;
+    }
+
+    .modal-body {
+    padding: 1.5rem;
+    }
+
+    /* Formulário no Modal */
+    .form-label {
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+    }
+
+    .InputText {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    }
+
+    .InputText:focus {
+    border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.2);
+    outline: none;
+    }
+
+    .btn-secondary {
+    background-color: #a0aec0;
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+    background-color: #718096;
+    }
+
+    /* Validação */
+    .validation-message {
+    color: #e53e3e;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    }
+
+    .validation-summary-errors {
+    color: #e53e3e;
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background-color: rgba(229, 62, 62, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #e53e3e;
+    }
+
+    /* Efeitos de Transição */
+    .modal.fade.show {
+    animation: fadeIn 0.3s ease;
+    }
+
+    @@keyframes fadeIn {
+    from {
+    opacity: 0;
+    }
+
+    to {
+    opacity: 1;
+    }
+    }
+
+    .modal-content {
+    animation: slideDown 0.3s ease;
+    }
+
+    @@keyframes slideDown {
+    from {
+    transform: translateY(-20px);
+    opacity: 0;
+    }
+
+    to {
+    transform: translateY(0);
+    opacity: 1;
+    }
+    }
+
+    /* Responsividade */
+    @@media (max-width: 768px) {
+    .modal-dialog {
+    margin: 0.5rem;
+    width: auto;
+    }
+
+    .table-responsive {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    }
+
+    .d-flex.gap-1 {
+    flex-wrap: wrap;
+    gap: 0.5rem !important;
+    }
+
+    .btn {
+    width: 100%;
+    }
+    }
+</style>
+
+<div class="layout">
+    <Menu />
+    <div class="page-container">
+        <div class="container mt-4">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h4>Lista de Clientes</h4>
+                <button class="btn btn-primary-custom" @onclick="AbrirModalCadastro">Cadastrar Cliente</button>
+            </div>
+
+            <div class="mb-3">
+                <input class="form-control"
+                placeholder="Buscar cliente pelo nome..."
+                @oninput="BuscarComFiltro" />
+            </div>
+
+            @if (clientes.Count == 0)
+            {
+                <p>Nenhum cliente cadastrado.</p>
+            }
+            else
+            {
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nome</th>
+                            <th>Telefone</th>
+                            <th>CPF</th>
+                            <th>Email</th>
+                            <th style="width:120px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in clientes)
+                        {
+                            <tr>
+                                <td>@c.Nome</td>
+                                <td>@c.Telefone</td>
+                                <td>@c.CPF</td>
+                                <td>@c.Email</td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-primary-custom btn-sm" @onclick="() => AbrirModalEdicao(c.Codigo)">Editar</button>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => ExcluirCliente(c.Codigo)">Excluir</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Modal Cadastro/Edicao -->
+@if (modalAberto)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+
+                <div class="modal-header modal-header-custom text-white">
+                    <h5 class="modal-title">@((clienteSelecionado.Codigo == 0) ? "Cadastrar Cliente" : "Editar Cliente")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="FecharModal"></button>
+                </div>
+
+                <div class="modal-body">
+                    <EditForm Model="clienteSelecionado" OnValidSubmit="SalvarCliente">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+
+                        <div class="mb-3">
+                            <label for="nome" class="form-label">Nome</label>
+                            <InputText id="nome" class="form-control" @bind-Value="clienteSelecionado.Nome" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="telefone" class="form-label">Telefone</label>
+                            <InputText id="telefone" class="form-control" @bind-Value="clienteSelecionado.Telefone" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cpf" class="form-label">CPF</label>
+                            <InputText id="cpf" class="form-control" @bind-Value="clienteSelecionado.CPF" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="endereco" class="form-label">Endereço</label>
+                            <InputText id="endereco" class="form-control" @bind-Value="clienteSelecionado.Endereco" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="bairro" class="form-label">Bairro</label>
+                            <InputText id="bairro" class="form-control" @bind-Value="clienteSelecionado.Bairro" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="cidade" class="form-label">Cidade</label>
+                            <InputText id="cidade" class="form-control" @bind-Value="clienteSelecionado.Cidade" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="numero" class="form-label">Número</label>
+                            <InputText id="numero" class="form-control" @bind-Value="clienteSelecionado.Numero" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <InputText id="email" class="form-control" @bind-Value="clienteSelecionado.Email" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary-custom">
+                            @((clienteSelecionado.Codigo == 0) ? "Cadastrar" : "Atualizar")
+                        </button>
+                        <button type="button" class="btn btn-secondary ms-2" @onclick="FecharModal">Cancelar</button>
+                    </EditForm>
+                </div>
+
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+
+    List<Cliente> clientes = new();    
+    Cliente clienteSelecionado = new Cliente();
+    bool modalAberto = false;
+    int proximoId = 1;    
+
+    string filtroNome = "";
+
+
+    IEnumerable<Cliente> clientesFiltrados => string.IsNullOrWhiteSpace(filtroNome)
+        ? clientes
+        : clientes.Where(c => c.Nome?.Contains(filtroNome, StringComparison.OrdinalIgnoreCase) == true);
+
+    void AbrirModalCadastro()
+    {
+        clienteSelecionado = new Cliente();
+        modalAberto = true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {        
+        await BuscaClientes("");
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+
+    private async Task BuscaClientes(string nome)
+    {       
+        int CodEmp = await CarregarCodEmpAsync();
+        clientes = await clienteService.BuscaClienteAsync(CodEmp, nome);
+    }
+
+    private async Task BuscarComFiltro(ChangeEventArgs e)
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        filtroNome = e.Value?.ToString();
+        await BuscaClientes(filtroNome);
+    }
+
+    void AbrirModalEdicao(int Codigo)
+    {
+        var c = clientes.Find(x => x.Codigo == Codigo);
+        if (c != null)
+        {
+            clienteSelecionado = new Cliente
+                {
+                    Codigo = c.Codigo,
+                    Endereco = c.Email,
+                    Bairro = c.Bairro,
+                    Cidade = c.Cidade,
+                    Numero = c.Numero,
+                    Nome = c.Nome,
+                    Telefone = c.Telefone,
+                    CPF = c.CPF,
+                    Email = c.Email
+                };
+            modalAberto = true;
+        }
+    }
+
+    void FecharModal()
+    {
+        modalAberto = false;
+    }
+
+    private async Task SalvarCliente()
+    {
+        //insere
+        if (clienteSelecionado.Codigo == 0)
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await clienteService.AdicionarCliente(clienteSelecionado, CodEmp);
+        }
+        else //atualiza
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await clienteService.AtualizarCliente(clienteSelecionado, CodEmp);
+        }
+
+        await BuscaClientes("");
+
+        modalAberto = false;
+        StateHasChanged();
+    }
+
+    private async Task ExcluirCliente(int Codigo)
+    {
+        if (Codigo > 0)
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+            await clienteService.ExcluirCliente(Codigo, CodEmp);
+            await BuscaClientes("");
+        }
+    }
+}

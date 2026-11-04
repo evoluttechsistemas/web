@@ -1,0 +1,689 @@
+﻿@page "/configuracoes"
+@using System.ComponentModel.DataAnnotations
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject ParametrosService parametrosService
+@inject AuthenticationStateProvider AuthProvider
+
+
+<style>
+    :root {
+        --azul-primario: #1a73e8;
+        --azul-secundario: #4285f4;
+        --azul-claro: #e8f0fe;
+        --azul-escuro: #0d47a1;
+        --cinza-borda: #dadce0;
+        --cinza-texto: #5f6368;
+        --branco: #ffffff;
+    }
+
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        color: var(--cinza-texto);
+        background-color: #f8f9fa;
+    }
+
+    .container-config {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .aba-container {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--cinza-borda);
+    }
+
+    .aba {
+        padding: 10px 20px;
+        cursor: pointer;
+        border-radius: 8px 8px 0 0;
+        margin-right: 5px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+        .aba:hover {
+            background-color: var(--azul-claro);
+        }
+
+    .aba-ativa {
+        background-color: var(--azul-primario);
+        color: white;
+    }
+
+    .aba-conteudo {
+        background-color: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .form-group {
+        margin-bottom: 15px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+    }
+
+    input, select, textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid var(--cinza-borda);
+        border-radius: 4px;
+        font-size: 14px;
+    }
+
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--azul-primario);
+            outline: none;
+            box-shadow: 0 0 0 2px var(--azul-claro);
+        }
+
+    .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    .btn-primary {
+        background-color: var(--azul-primario);
+        color: white;
+    }
+
+        .btn-primary:hover {
+            background-color: var(--azul-escuro);
+        }
+
+    .btn-secondary {
+        background-color: var(--cinza-borda);
+        color: var(--cinza-texto);
+    }
+
+        .btn-secondary:hover {
+            background-color: #e0e0e0;
+        }
+
+    .mensagem {
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+    }
+
+    .mensagem-sucesso {
+        background-color: #e6f7ee;
+        color: #0a8150;
+        border: 1px solid #a7e8c9;
+    }
+
+    .mensagem-erro {
+        background-color: #fde8e8;
+        color: #c53030;
+        border: 1px solid #f8b4b4;
+    }
+
+    .tabela-usuarios {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .tabela-usuarios th, .tabela-usuarios td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--cinza-borda);
+        }
+
+        .tabela-usuarios th {
+            background-color: var(--azul-claro);
+            color: var(--azul-primario);
+        }
+
+        .tabela-usuarios tr:hover {
+            background-color: #f5f5f5;
+        }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .badge-ativo {
+        background-color: #e6f7ee;
+        color: #0a8150;
+    }
+
+    .badge-inativo {
+        background-color: #fde8e8;
+        color: #c53030;
+    }
+
+    .foto-perfil {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+
+    .modal-conteudo {
+        background-color: white;
+        width: 500px;
+        max-width: 90%;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .modal-cabecalho {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--cinza-borda);
+    }
+
+    .modal-titulo {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--azul-primario);
+    }
+
+    .modal-fechar {
+        background: none;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        color: var(--cinza-texto);
+    }
+
+    .upload-area {
+        border: 2px dashed var(--cinza-borda);
+        border-radius: 8px;
+        padding: 20px;
+        text-align: center;
+        cursor: pointer;
+        margin-bottom: 15px;
+        transition: all 0.3s;
+    }
+
+        .upload-area:hover {
+            border-color: var(--azul-primario);
+            background-color: var(--azul-claro);
+        }
+
+    .preview-imagem {
+        max-width: 200px;
+        max-height: 200px;
+        margin: 10px auto;
+        display: block;
+        border-radius: 4px;
+    }
+
+    .grid-2-colunas {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+    }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: .4s;
+        border-radius: 24px;
+    }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+    input:checked + .slider {
+        background-color: var(--azul-primario);
+    }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+</style>
+
+<div class="container-config">
+    <h2>Configurações da Agência</h2>
+
+    <div class="aba-container">
+        <div class="aba @(configs.AbaAtiva == 1 ? "aba-ativa" : "")" @onclick="() => configs.AbaAtiva = 1">Informações da Agência</div>
+        <div class="aba @(configs.AbaAtiva == 2 ? "aba-ativa" : "")" @onclick="() => configs.AbaAtiva = 2">Perfis e Usuários</div>
+        <div class="aba @(configs.AbaAtiva == 3 ? "aba-ativa" : "")" @onclick="() => configs.AbaAtiva = 3">Contratos e Documentos</div>
+        <div class="aba @(configs.AbaAtiva == 5 ? "aba-ativa" : "")" @onclick="() => configs.AbaAtiva = 5">Parâmetros de Operação</div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(configs.MensagemSucesso))
+    {
+        <div class="mensagem mensagem-sucesso">
+            @configs.MensagemSucesso
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(configs.MensagemErro))
+    {
+        <div class="mensagem mensagem-erro">
+            @configs.MensagemErro
+        </div>
+    }
+
+    <div class="aba-conteudo">
+        @if (configs.AbaAtiva == 1)
+        {
+            <!-- Informações da Agência -->
+            <h3>Informações da Agência</h3>
+
+            <div class="form-group">
+                <label for="nome-agencia">Nome da Agência</label>
+                <input id="nome-agencia" type="text" @bind="parametros.NomeAgencia" />
+            </div>
+
+            <div class="form-group">
+                <label for="cnpj">CNPJ/CPF</label>
+                <input id="cnpj" type="text" @bind="parametros.CNPJ" />
+            </div>
+
+            <div class="form-group">
+                <label for="endereco">Endereço Completo</label>
+                <input id="endereco" type="text" @bind="parametros.Endereco" />
+            </div>
+
+            <div class="grid-2-colunas">
+                <div class="form-group">
+                    <label for="telefone">Telefone</label>
+                    <input id="telefone" type="text" @bind="parametros.Telefone" />
+                </div>
+
+                <div class="form-group">
+                    <label for="email">E-mail de Contato</label>
+                    <input id="email" type="email" @bind="parametros.Email" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Logo da Empresa</label>
+                <label class="upload-area btn btn-primary" for="inputLogoFile" style="cursor:pointer;">
+                    Clique para adicionar ou arraste uma imagem
+                </label>
+                <InputFile id="inputLogoFile" OnChange="CarregarLogo" style="display:none" />
+
+                @*  @if (!string.IsNullOrEmpty(configs.LogoUrlEmpresa))
+                {
+                    <img src="@configs.LogoUrlEmpresa" class="preview-imagem" alt="Logo da agência" />
+                } *@
+            </div>
+
+            <button class="btn btn-primary" @onclick="SalvarConfiguracoes">Salvar Alterações</button>
+        }
+        else if (configs.AbaAtiva == 2)
+        {
+            <!-- Perfis e Usuários -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>Perfis e Usuários</h3>
+                <button class="btn btn-primary" @onclick="AbrirModalNovoUsuario">Adicionar Usuário</button>
+            </div>
+
+            <table class="tabela-usuarios">
+                <thead>
+                    <tr>
+                        <th>Foto</th>
+                        <th>Nome</th>
+                        <th>E-mail</th>
+                        <th>Perfil</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var usuario in configs.Usuarios)
+                    {
+                        <tr>
+                            <td><img src="@usuario.FotoPerfilUrlUsuario" class="foto-perfil" alt="Foto do usuário" /></td>
+                            <td>@usuario.NomeUsuario</td>
+                            <td>@usuario.EmailUsuario</td>
+                            <td>@usuario.PerfilUsuario</td>
+                            <td>
+                                <span class="badge @(usuario.AtivoUsuario ? "badge-ativo" : "badge-inativo")">
+                                    @(usuario.AtivoUsuario ? "Ativo" : "Inativo")
+                                </span>
+                            </td>
+                            <td>
+                                <button class="btn btn-secondary" @onclick="() => EditarUsuario(usuario)">Editar</button>
+
+                                <button class="btn @(usuario.AtivoUsuario ? "btn-secondary" : "btn-primary")"
+                                        @onclick="() => ToggleUsuarioAtivo(usuario)">
+                                    @(usuario.AtivoUsuario ? "Desativar" : "Ativar")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else if (configs.AbaAtiva == 3)
+        {
+            <!-- Contratos e Documentos -->
+            <h3>Contrato</h3>
+
+            <textarea @bind="Contrato"
+                      style="width:100%; height:500px; padding:10px; font-size:14px;"></textarea>
+
+            <button class="btn btn-primary" @onclick="SalvarConfiguracoes">Salvar Alterações</button>
+        }
+
+
+
+    </div>
+</div>
+
+@if (configs.MostrarModalUsuario)
+{
+    <div class="modal">
+        <div class="modal-conteudo">
+            <div class="modal-cabecalho">
+                <h3 class="modal-titulo">@(configs.IdUsuario == 0 ? "Adicionar Usuário" : "Editar Usuário")</h3>
+                <button class="modal-fechar" @onclick="FecharModalUsuario">&times;</button>
+            </div>
+
+            <div class="form-group">
+                <label>Foto de Perfil</label>
+                <div class="upload-area" @onclick="AbrirInputFotoPerfil">
+                    <p>Clique para adicionar ou arraste uma imagem</p>
+                    <input type="file" @ref="configs.InputFotoPerfilElement" style="display: none;"
+                           @onchange="CarregarFotoPerfil" accept="image/*" />
+                    @if (!string.IsNullOrEmpty(configs.FotoPerfilUrlUsuario))
+                    {
+                        <img src="@configs.FotoPerfilUrlUsuario" class="preview-imagem" alt="Foto do usuário" />
+                    }
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="nome-usuario">Nome Completo</label>
+                <input id="nome-usuario" type="text" @bind="configs.NomeUsuario" />
+            </div>
+
+            <div class="form-group">
+                <label for="email-usuario">E-mail</label>
+                <input id="email-usuario" type="email" @bind="configs.EmailUsuario" />
+            </div>
+
+            <div class="form-group">
+                <label for="perfil-usuario">Perfil</label>
+                <select id="perfil-usuario" @bind="configs.PerfilUsuario">
+                    <option value="@Models.Configuracoes.PerfilAgente.Agente">Agente</option>
+                    <option value="@Models.Configuracoes.PerfilAgente.Operador">Operador</option>
+                    <option value="@Models.Configuracoes.PerfilAgente.Supervisor">Supervisor</option>
+                </select>
+            </div>
+
+            @if (configs.IdUsuario == 0)
+            {
+                <div class="form-group">
+                    <label for="senha-usuario">Senha Temporária</label>
+                    <input id="senha-usuario" type="password" @bind="configs.SenhaTemporaria" />
+                </div>
+            }
+
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" @bind="configs.AtivoUsuario" />
+                    Usuário ativo
+                </label>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" @onclick="FecharModalUsuario">Cancelar</button>
+                <button class="btn btn-primary" @onclick="SalvarUsuario">Salvar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+
+    Models.Configuracoes configs = new Models.Configuracoes();
+    [Inject] private IJSRuntime JS { get; set; }
+
+    private string Contrato { get; set; } = string.Empty;
+   
+    private Models.Parametros parametros = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarDados();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+
+    }
+
+    private async Task AbrirSeletorArquivo()
+    {
+        await JS.InvokeVoidAsync("document.getElementById('inputLogoFile').click");
+    }
+
+    private async Task CarregarLogo(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await Task.Delay(300);
+            //configs.LogoUrlEmpresa = "https://via.placeholder.com/150";
+            configs.MensagemSucesso = "Logo carregado com sucesso!";
+            configs.MensagemErro = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            configs.MensagemErro = $"Erro ao carregar logo: {ex.Message}";
+            configs.MensagemSucesso = string.Empty;
+        }
+    }
+
+
+    private async Task AbrirSeletorFotoPerfil()
+    {
+        await JS.InvokeVoidAsync("triggerClick", configs.InputFotoPerfilElement);
+    }
+
+
+    private async Task CarregarFotoPerfil(ChangeEventArgs e)
+    {
+        var arquivo = (Microsoft.AspNetCore.Components.Forms.IBrowserFile)e.Value;
+        // Lógica para carregar a imagem (upload, pré-visualização, etc.)
+    }
+
+    private async Task AbrirInputFotoPerfil()
+    {
+        await JS.InvokeVoidAsync("clickElemento", configs.InputFotoPerfilElement);
+    }
+
+    private async Task CarregarDados()
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        parametros = await parametrosService.BuscaParametros(CodEmp);
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+
+    private async Task SalvarConfiguracoes()
+    {
+        try
+        {
+            int CodEmp = await CarregarCodEmpAsync();
+
+            // salva direto o contrato
+            await parametrosService.AtualizaContrato(Contrato, CodEmp);
+
+            await Task.Delay(500); // simulação
+            configs.MensagemSucesso = "Configurações salvas com sucesso!";
+            configs.MensagemErro = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            configs.MensagemErro = $"Erro ao salvar configurações: {ex.Message}";
+            configs.MensagemSucesso = string.Empty;
+        }
+    }
+
+    private void AbrirModalNovoUsuario()
+    {
+        {
+            configs.NomeUsuario = "";
+            configs.EmailUsuario = "";
+            configs.PerfilUsuario = Models.Configuracoes.PerfilAgente.Agente;
+            configs.AtivoUsuario = true;
+            configs.FotoPerfilUrlUsuario = string.Empty;
+
+        }
+        ;
+
+        configs.SenhaTemporaria = string.Empty;
+        configs.MostrarModalUsuario = true;
+
+    }
+
+
+    private void EditarUsuario(EvolutTur.Models.Configuracoes usuario)
+    {
+        var usuarioExistente = configs.Usuarios
+            .FirstOrDefault(u => u.IdUsuario == usuario.IdUsuario);
+
+        if (usuarioExistente != null)
+        {
+            usuarioExistente.NomeUsuario = usuario.NomeUsuario;
+            usuarioExistente.EmailUsuario = usuario.EmailUsuario;
+            usuarioExistente.PerfilUsuario = usuario.PerfilUsuario;
+            usuarioExistente.AtivoUsuario = usuario.AtivoUsuario;
+            usuarioExistente.FotoPerfilUrlUsuario = usuario.FotoPerfilUrlUsuario;
+        }
+    }
+
+    private void ToggleUsuarioAtivo(EvolutTur.Models.Configuracoes usuario)
+    {
+        usuario.AtivoUsuario = !usuario.AtivoUsuario;
+    }
+
+    private void FecharModalUsuario()
+    {
+        configs.MostrarModalUsuario = false;
+    }
+
+    private async Task SalvarUsuario()
+    {
+        try
+        {
+            if (configs.IdUsuario == 0)
+            {
+                int novoId = configs.Usuarios.Any() ? configs.Usuarios.Max(u => u.IdUsuario) + 1 : 1;
+            }
+            else
+            {
+                var usuarioExistente = configs.Usuarios.FirstOrDefault(u => u.IdUsuario == configs.IdUsuario);
+
+                if (usuarioExistente != null)
+                {
+                    usuarioExistente.NomeUsuario = configs.NomeUsuario;
+                    usuarioExistente.EmailUsuario = configs.EmailUsuario;
+                    usuarioExistente.PerfilUsuario = configs.PerfilUsuario;
+                    usuarioExistente.AtivoUsuario = configs.AtivoUsuario;
+                    if (!string.IsNullOrEmpty(configs.FotoPerfilUrlUsuario))
+                    {
+                        usuarioExistente.FotoPerfilUrlUsuario = configs.FotoPerfilUrlUsuario;
+                    }
+                }
+            }
+
+            configs.MostrarModalUsuario = false;
+            configs.MensagemSucesso = "Usuário salvo com sucesso!";
+            configs.MensagemErro = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            configs.MensagemErro = $"Erro ao salvar usuário: {ex.Message}";
+            configs.MensagemSucesso = string.Empty;
+        }
+    }
+
+    private void ToggleUsuarioAtivo(Usuario usuario)
+    {
+        configs.AtivoUsuario = !configs.AtivoUsuario;
+        configs.MensagemSucesso = $"Usuário {(configs.AtivoUsuario ? "ativado" : "desativado")} com sucesso!";
+    }
+
+    private async Task CarregarFotoPerfil(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            await Task.Delay(300);
+            configs.FotoPerfilUrlUsuario = $"https://randomuser.me/api/portraits/{(new Random().Next(0, 2) == 0 ? "men" : "women")}/{new Random().Next(1, 100)}.jpg";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            configs.MensagemErro = $"Erro ao carregar foto: {ex.Message}";
+        }
+    }
+}

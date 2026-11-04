@@ -1,0 +1,427 @@
+﻿@page "/relatorios"
+
+<style>
+    .pagina-relatorios {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        background-color: #f8f9fa;
+        min-height: 100vh;
+        padding: 20px;
+    }
+
+    .cabecalho {
+        background-color: #1a73e8;
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .titulo-principal {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+
+    .subtitulo {
+        font-size: 1rem;
+        opacity: 0.9;
+    }
+
+    .cartao-opcao {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 25px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        border-left: 5px solid #1a73e8;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .cartao-opcao:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+    .cartao-opcao-corpo {
+        padding: 20px;
+        flex-grow: 1;
+    }
+
+    .cartao-opcao-titulo {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #1a73e8;
+        margin-bottom: 10px;
+    }
+
+    .cartao-opcao-descricao {
+        color: #666;
+        font-size: 0.9rem;
+    }
+
+    .cartao-opcao-icone {
+        font-size: 2.5rem;
+        color: #1a73e8;
+        margin-bottom: 15px;
+    }
+
+    .grid-opcoes {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .botao-voltar {
+        background-color: transparent;
+        color: #1a73e8;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.3s;
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+        .botao-voltar:hover {
+            background-color: #e8f0fe;
+        }
+
+    .icone-voltar {
+        margin-right: 8px;
+    }
+
+    /* Estilos para o conteúdo dos relatórios (serão mostrados quando selecionados) */
+    .conteudo-relatorio {
+        display: none;
+    }
+
+        .conteudo-relatorio.ativo {
+            display: block;
+        }
+
+    /* Estilos reutilizados dos relatórios (quando mostrados) */
+    .cartao {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 25px;
+    }
+
+    .cartao-cabecalho {
+        background-color: #4285f4;
+        color: white;
+        padding: 15px 20px;
+        border-top-left-radius: 8px;
+        border-top-right-radius: 8px;
+        font-weight: 600;
+    }
+
+    .cartao-corpo {
+        padding: 20px;
+    }
+
+    .grafico-container {
+        height: 300px;
+        position: relative;
+    }
+
+    .lista-relatorios {
+        list-style: none;
+        padding: 0;
+    }
+
+    .item-lista {
+        padding: 12px 15px;
+        border-bottom: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .badge {
+        background-color: #e8f0fe;
+        color: #1a73e8;
+        padding: 5px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .botao {
+        background-color: #1a73e8;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+
+    .filtros {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        margin-bottom: 25px;
+    }
+
+    .destaque {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1a73e8;
+    }
+
+    .tabela-relatorios {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .tabela-relatorios th {
+            background-color: #4285f4;
+            color: white;
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        .tabela-relatorios td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+    .progresso {
+        height: 10px;
+        background-color: #e0e0e0;
+        border-radius: 5px;
+        margin-top: 5px;
+        overflow: hidden;
+    }
+
+    .barra-progresso {
+        height: 100%;
+        background-color: #1a73e8;
+        border-radius: 5px;
+    }
+</style>
+
+<div class="pagina-relatorios">
+    <div class="cabecalho">
+        <h1 class="titulo-principal">Relatórios de Viagens</h1>
+        <p class="subtitulo">Selecione o tipo de relatório que deseja visualizar</p>
+    </div>
+
+    <!-- Tela de seleção de relatórios -->
+    <div id="selecao-relatorios" style="@(relatorioSelecionado != null ? "display: none;" : "display: block;")">
+        <div class="grid-opcoes">
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("vendas")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">💰</div>
+                    <h3 class="cartao-opcao-titulo">Relatório de Vendas</h3>
+                    <p class="cartao-opcao-descricao">Analise o desempenho de vendas por período, agente e destino</p>
+                </div>
+            </div>
+
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("comissoes")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">📊</div>
+                    <h3 class="cartao-opcao-titulo">Comissões</h3>
+                    <p class="cartao-opcao-descricao">Visualize as comissões por agente e período</p>
+                </div>
+            </div>
+
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("clientes")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">👥</div>
+                    <h3 class="cartao-opcao-titulo">Clientes</h3>
+                    <p class="cartao-opcao-descricao">Relatório de clientes frequentes e preferências</p>
+                </div>
+            </div>
+
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("destinos")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">✈️</div>
+                    <h3 class="cartao-opcao-titulo">Destinos</h3>
+                    <p class="cartao-opcao-descricao">Destinos mais vendidos e sazonalidade</p>
+                </div>
+            </div>
+
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("proximas-viagens")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">📅</div>
+                    <h3 class="cartao-opcao-titulo">Próximas Viagens</h3>
+                    <p class="cartao-opcao-descricao">Listagem das viagens agendadas</p>
+                </div>
+            </div>
+
+            <div class="cartao-opcao" @onclick='() => SelecionarRelatorio("desempenho")'>
+                <div class="cartao-opcao-corpo">
+                    <div class="cartao-opcao-icone">📈</div>
+                    <h3 class="cartao-opcao-titulo">Desempenho</h3>
+                    <p class="cartao-opcao-descricao">Métricas de desempenho da agência</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conteúdo dos relatórios (inicialmente oculto) -->
+    <div id="conteudo-relatorio" style="@(relatorioSelecionado == null ? "display: none;" : "display: block;")">
+        <button class="botao-voltar" @onclick="VoltarParaSelecao">
+            <span class="icone-voltar">←</span> Voltar para todos os relatórios
+        </button>
+
+        <!-- Relatório de Vendas -->
+        <div class="conteudo-relatorio @(relatorioSelecionado == "vendas" ? "ativo" : "")">
+            <div class="cartao">
+                <div class="cartao-cabecalho">
+                    Relatório de Vendas
+                </div>
+                <div class="cartao-corpo">
+                    <div class="filtros">
+                        <h3>Filtrar Relatório</h3>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                            <div>
+                                <label>Período</label>
+                                <select class="form-control">
+                                    <option>Últimos 7 dias</option>
+                                    <option>Últimos 30 dias</option>
+                                    <option selected>Últimos 90 dias</option>
+                                    <option>Este ano</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Agente</label>
+                                <select class="form-control">
+                                    <option>Todos os agentes</option>
+                                    <option>Ana Silva</option>
+                                    <option>Carlos Mendes</option>
+                                    <option>Juliana Costa</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Tipo de Pacote</label>
+                                <select class="form-control">
+                                    <option>Todos os tipos</option>
+                                    <option>Pacote Familiar</option>
+                                    <option>Pacote Romântico</option>
+                                    <option>Pacote Aventura</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="botao" style="margin-top: 15px;">Aplicar Filtros</button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+                        <div class="cartao">
+                            <div class="cartao-cabecalho" style="background-color: #1a73e8;">
+                                Resumo de Vendas
+                            </div>
+                            <div class="cartao-corpo">
+                                <div class="destaque">R$ 124.850,00</div>
+                                <div style="color: #666; margin-bottom: 10px;">Total em vendas (últimos 90 dias)</div>
+                                <div class="progresso">
+                                    <div class="barra-progresso" style="width: 78%"></div>
+                                </div>
+                                <p>Meta: R$ 160.000,00 (78%)</p>
+                            </div>
+                        </div>
+
+                        <div class="cartao">
+                            <div class="cartao-cabecalho" style="background-color: #1a73e8;">
+                                Vendas por Mês
+                            </div>
+                            <div class="cartao-corpo">
+                                <div class="grafico-container">
+                                    <!-- Espaço para gráfico fictício -->
+                                    <div style="height: 100%; display: flex; justify-content: center; align-items: center; color: #666;">
+                                        [Gráfico de vendas mensais]
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cartao" style="margin-top: 20px;">
+                        <div class="cartao-cabecalho" style="background-color: #1a73e8;">
+                            Detalhes das Vendas
+                        </div>
+                        <div class="cartao-corpo">
+                            <table class="tabela-relatorios">
+                                <thead>
+                                    <tr>
+                                        <th>Data</th>
+                                        <th>Cliente</th>
+                                        <th>Destino</th>
+                                        <th>Valor</th>
+                                        <th>Agente</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>15/07/2023</td>
+                                        <td>Marcos Oliveira</td>
+                                        <td>Miami</td>
+                                        <td>R$ 7.850,00</td>
+                                        <td>Ana Silva</td>
+                                    </tr>
+                                    <tr>
+                                        <td>22/07/2023</td>
+                                        <td>Patrícia Santos</td>
+                                        <td>Lisboa</td>
+                                        <td>R$ 5.420,00</td>
+                                        <td>Carlos Mendes</td>
+                                    </tr>
+                                    <!-- Mais linhas... -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Relatório de Comissões -->
+        <div class="conteudo-relatorio @(relatorioSelecionado == "comissoes" ? "ativo" : "")">
+            <div class="cartao">
+                <div class="cartao-cabecalho">
+                    Relatório de Comissões
+                </div>
+                <div class="cartao-corpo">
+                    <!-- Conteúdo do relatório de comissões -->
+                    <div style="text-align: center; padding: 40px;">
+                        <h2>Relatório de Comissões</h2>
+                        <p>Selecione um período para visualizar as comissões</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Outros relatórios (clientes, destinos, etc.) -->
+        <!-- Estrutura similar para cada tipo de relatório -->
+
+    </div>
+</div>
+
+@code {
+    private string relatorioSelecionado = null;
+
+    private void SelecionarRelatorio(string tipoRelatorio)
+    {
+        relatorioSelecionado = tipoRelatorio;
+    }
+
+    private void VoltarParaSelecao()
+    {
+        relatorioSelecionado = null;
+    }
+
+    // Classes de modelo e métodos de carregamento de dados...
+    // (Manteria a mesma estrutura do exemplo anterior)
+}

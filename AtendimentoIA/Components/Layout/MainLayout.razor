@@ -1,0 +1,24 @@
+@inherits LayoutComponentBase
+@inject IHostEnvironment Environment
+
+<div class="workspace">
+    <aside class="sidebar">
+        <a class="brand" href="/"><span class="brand-mark">e<span>✦</span></span><span>EvolutTech <b>IA</b><small>Central de conhecimento</small></span></a>
+        <div class="nav-caption">ESPAÇO DE TRABALHO</div>
+        <nav aria-label="Navegação principal">
+            <NavLink href="/" Match="NavLinkMatch.All"><span class="nav-icon">◫</span> Visão geral</NavLink>
+            <NavLink href="/simulador"><span class="nav-icon">✦</span> Simulador de atendimento</NavLink>
+            <NavLink href="/forms"><span class="nav-icon">▤</span> Explorar Forms</NavLink>
+            <NavLink href="/orientacoes"><span class="nav-icon">◇</span> Orientações</NavLink>
+            <NavLink href="/atendimento"><span class="nav-icon">◷</span> Contexto do chamado</NavLink>
+            <NavLink href="/banco"><span class="nav-icon">▱</span> Banco e documentação</NavLink>
+            <NavLink href="/configuracoes"><span class="nav-icon">⚙</span> Configurações</NavLink>
+        </nav>
+        <div class="sidebar-bottom"><span class="status-dot"></span> Ambiente administrativo<small>Conhecimento com origem e contexto.</small></div>
+    </aside>
+    <div class="main-shell">
+        <header class="topbar"><span>EvolutTech <span class="slash">/</span> Inteligência do ERP</span><AuthorizeView><Authorized Context="auth"><span class="session-user">@auth.User.Identity?.Name <form method="post" action="/auth/logout" data-enhance="false"><AntiforgeryToken /><button type="submit" class="session-logout">Sair</button></form></span></Authorized></AuthorizeView></header>
+        <main>@Body</main>
+        <footer>EvolutTech IA <span>Fontes verificáveis. Atendimento com contexto.</span></footer>
+    </div>
+</div>

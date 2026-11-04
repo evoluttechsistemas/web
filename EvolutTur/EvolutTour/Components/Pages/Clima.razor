@@ -1,0 +1,37 @@
+﻿@page "/clima"
+@using EvolutTur.Models
+@using EvolutTur.Services
+@inject WeatherService WeatherService
+
+<h3>Previsão do Tempo</h3>
+
+<input @bind="cidade" placeholder="Digite uma cidade..." class="form-control" />
+<button class="btn btn-primary mt-2" @onclick="BuscarClima">Buscar</button>
+
+@if (clima != null)
+{
+    <div class="card mt-3 p-3">
+        <h4>@clima.Name</h4>
+        <p><strong>Temperatura:</strong> @clima.Main.Temp °C</p>
+        <p><strong>Sensação térmica:</strong> @clima.Main.Feels_Like °C</p>
+        <p><strong>Umidade:</strong> @clima.Main.Humidity %</p>
+        <p><strong>Vento:</strong> @clima.Wind.Speed m/s</p>
+        <p><strong>Condição:</strong> @clima.Weather[0].Description</p>
+        <img src="https://openweathermap.org/img/wn/@(clima.Weather[0].Icon)2x.png" />
+
+    </div>
+}
+
+@code {
+    private string cidade;
+    private WeatherResponse clima;
+
+    private async Task BuscarClima()
+    {
+        if (!string.IsNullOrWhiteSpace(cidade))
+        {
+            clima = await WeatherService.GetWeatherAsync(cidade);
+        }
+    }
+}
+

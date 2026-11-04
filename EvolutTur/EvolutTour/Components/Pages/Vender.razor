@@ -1,0 +1,1653 @@
+﻿@page "/vender"
+@using EvolutTur.Models
+@using System
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject VendaService vendaService;
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Navigation
+
+<style>
+
+    /* Container que ocupa o restante */
+    .page-container {
+        display: flex;
+        flex-direction: row;
+        overflow: hidden;
+    }
+
+    .meio {
+        display: flex;
+        flex-direction: column;
+        margin: 0 auto;
+        max-height: 80vh;
+    }
+
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .title {
+        color: #0d47a1;
+        font-size: 1.8rem;
+        font-weight: 600;
+    }
+
+    .card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        padding: 1.5rem;
+        margin: 0 auto 1.5rem auto;
+        max-height: 600px;
+        overflow-y: overlay;
+        /* Firefox */
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 123, 255, 0.4) transparent;
+    }
+
+        .card::-webkit-scrollbar {
+            width: 6px;
+            background: transparent;
+        }
+
+        .card::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .card::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 123, 255, 0.0); /* escondido por padrão */
+            border-radius: 10px;
+            transition: background-color 0.3s ease;
+        }
+
+        .card:hover::-webkit-scrollbar-thumb,
+        .card:active::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 123, 255, 0.4);
+        }
+
+        .card:hover::-webkit-scrollbar-track {
+            background: rgba(0, 123, 255, 0.05);
+        }
+
+
+    .card-title {
+        color: #1976d2;
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+    }
+
+        .card-title i {
+            margin-right: 0.5rem;
+            font-size: 1.4rem;
+        }
+
+    .form-group {
+        margin-bottom: 1.2rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: #424242;
+        font-weight: 500;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        transition: all 0.3s;
+    }
+
+        .form-control:focus {
+            border-color: #1976d2;
+            box-shadow: 0 0 0 0.2rem rgba(25, 118, 210, 0.25);
+            outline: none;
+        }
+
+    .tabs-container {
+        margin-bottom: 1.5rem;
+    }
+
+    .tabs-header {
+        display: flex;
+        border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-button {
+        padding: 0.75rem 1.5rem;
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        color: #616161;
+        position: relative;
+        transition: all 0.3s;
+    }
+
+        .tab-button.active {
+            color: #1976d2;
+        }
+
+            .tab-button.active::after {
+                content: '';
+                position: absolute;
+                bottom: -2px;
+                left: 0;
+                width: 100%;
+                height: 3px;
+                background: #1976d2;
+                border-radius: 3px 3px 0 0;
+            }
+
+    .tab-content {
+        display: none;
+        padding: 1.5rem 0;
+    }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+            max-width: 800px;
+        }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: none;
+    }
+
+        .btn.btn-remove {
+            background-color: red;
+            color: white;
+            padding: 6px 11px;
+            font-size: 12px;
+        }
+
+        .btn.btn-success {
+            padding: 6px 11px;
+            font-size: 12px;
+        }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #1976d2, #1565c0);
+        color: white;
+        box-shadow: 0 2px 5px rgba(25, 118, 210, 0.3);
+    }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #1565c0, #0d47a1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(25, 118, 210, 0.4);
+        }
+
+    .btn-secondary {
+        background: #f5f5f5;
+        color: #616161;
+        border: 1px solid #e0e0e0;
+    }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+
+    .item-options {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .item-option {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 2px solid transparent;
+    }
+
+        .item-option:hover {
+            background: #e3f2fd;
+        }
+
+        .item-option.selected {
+            background: #e3f2fd;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 0.2rem rgba(25, 118, 210, 0.25);
+        }
+
+        .item-option i {
+            font-size: 1.8rem;
+            color: #1976d2;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+    .dynamic-fields {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-top: 1.5rem;
+    }
+
+    .payment-methods {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+
+    .payment-method {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 2px solid transparent;
+    }
+
+        .payment-method:hover {
+            background: #e3f2fd;
+        }
+
+        .payment-method.selected {
+            background: #e3f2fd;
+            border-color: #1976d2;
+        }
+
+    @@media (max-width: 768px) {
+        .item-options {
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        }
+
+        .payment-methods {
+            grid-template-columns: 1fr;
+        }
+
+        .tab-button {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .item-options {
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        }
+    }
+</style>
+
+<div class="completo">
+
+    <div class="page-container">
+        <Menu />
+        <div class="meio">
+            <div class="header">
+                <h3 class="title">Vender</h3>
+                <div>
+                    <span class="badge bg-primary">Status: @vendas.Status</span>
+                </div>
+            </div>
+
+            <div class="tabs-container">
+                <div class="tabs-header">
+                    <button class="tab-button @(vendas.ActiveTab == 1 ? "active" : "")" @onclick="() => vendas.ActiveTab = 1">Informações Básicas</button>
+                    <button class="tab-button @(vendas.ActiveTab == 2 ? "active" : "")" @onclick="() => vendas.ActiveTab = 2">Itens de Venda</button>
+                    <button class="tab-button @(vendas.ActiveTab == 3 ? "active" : "")" @onclick="() => vendas.ActiveTab = 3">Pagamento</button>
+                    <button class="tab-button @(vendas.ActiveTab == 4 ? "active" : "")" @onclick="() => vendas.ActiveTab = 4">Resumo</button>
+                </div>
+
+                <div class="tab-content @(vendas.ActiveTab == 1 ? "active" : "")">
+                    <div class="card">
+                        <div class="card-title">
+                            <i class="fas fa-info-circle"></i> Informações da Venda
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 position-relative">
+                                <div class="form-group">
+                                    <label class="form-label">Fornecedor</label>
+                                    <InputText class="form-control"
+                                               placeholder="Digite o nome do fornecedor..."
+                                               @bind-Value="fornecedorBusca"
+                                               @oninput="FiltrarFornecedores" />
+
+                                    @if (fornecedoresFiltrados?.Any() == true)
+                                    {
+                                        <ul class="list-group shadow-lg border rounded position-absolute w-100 mt-1"
+                                            style="z-index:1000; max-height:200px; overflow-y:auto;">
+                                            @foreach (var fornecedor in fornecedoresFiltrados)
+                                            {
+                                                <li class="list-group-item list-group-item-action d-flex align-items-center"
+                                                    style="cursor:pointer;"
+                                                    @onclick="() => SelecionarFornecedor(fornecedor)">
+                                                    <i class="fas fa-truck text-primary me-2"></i> @fornecedor.Razao
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </div>
+
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Percentual de Comissão (%)</label>
+                                    <InputNumber class="form-control"
+                                                 @bind-Value="vendas.PercentualComissaoFornecedor" />
+                                </div>
+                            </div>
+
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group position-relative">
+                                    <label class="form-label">Vendedor</label>
+                                    <InputText class="form-control"
+                                               placeholder="Digite o nome do vendedor..."
+                                               @bind-Value="vendedorBusca"
+                                               @oninput="FiltrarVendedores" />
+
+                                    @if (vendedoresFiltrados?.Any() == true)
+                                    {
+                                        <ul class="list-group shadow-lg border rounded position-absolute w-100 mt-1"
+                                            style="z-index:1000; max-height:200px; overflow-y:auto;">
+                                            @foreach (var vendedor in vendedoresFiltrados)
+                                            {
+                                                <li class="list-group-item list-group-item-action d-flex align-items-center"
+                                                    style="cursor:pointer;"
+                                                    @onclick="() => SelecionarVendedor(vendedor)">
+                                                    <i class="fas fa-user-tie text-success me-2"></i> @vendedor.Nome
+                                                </li>
+                                            }
+                                        </ul>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Percentual de Comissão do Vendedor (%)</label>
+                                    <InputNumber class="form-control"
+                                                 @bind-Value="vendas.PercentualComissaoVendedor"
+                                                 readonly />
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Data da Venda</label>
+                                    <input type="date" class="form-control" @bind="vendas.DataVenda" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Viajantes</label>
+
+                            @foreach (var viajante in vendas.Viajantes)
+                            {
+                                <div class="row mb-2" @key="viajante">
+                                    <div class="col-md-3">
+                                        <label>Nome</label>
+                                        <InputText class="form-control" @bind-Value="viajante.Nome" maxlength="150" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>Sobrenome</label>
+                                        <InputText class="form-control" @bind-Value="viajante.Sobrenome" maxlength="150" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>CPF</label>
+                                        <InputText class="form-control" @bind-Value="viajante.CPF" maxlength="50" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label>Data de Nascimento</label>
+                                        <InputDate class="form-control" @bind-Value="viajante.DataNascimento" />
+                                    </div>
+                                </div>
+                            }
+
+
+                            <button class="btn btn-success" type="button" @onclick="AdicionarViajante">+ Adicionar Viajante</button>
+                            <button class="btn btn-remove" type="button" @onclick="DecrementarViajantes">- Remover Viajante</button>
+                        </div>
+
+                        <div class="form-group position-relative">
+                            <label class="form-label">Cliente</label>
+                            <InputText class="form-control"
+                                       placeholder="Digite o nome do cliente..."
+                                       @bind-Value="clienteBusca"
+                                       @oninput="FiltrarClientes" />
+
+                            @if (clientesFiltrados?.Any() == true)
+                            {
+                                <ul class="list-group shadow-lg border rounded position-absolute w-100 mt-1"
+                                    style="z-index:1000; max-height:200px; overflow-y:auto;">
+                                    @foreach (var cliente in clientesFiltrados)
+                                    {
+                                        <li class="list-group-item list-group-item-action d-flex align-items-center"
+                                            style="cursor:pointer;"
+                                            @onclick="() => SelecionarCliente(cliente)">
+                                            <i class="fas fa-user text-primary me-2"></i> @cliente.Nome
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Orçamento do Atendimento Relacionado</label>
+                            <input class="form-control" @bind="vendas.OrcamentoAtendimento" />
+                        </div>
+                        <div class="text-end">
+                            <button class="btn btn-primary" @onclick="() => vendas.ActiveTab = 2">Próximo <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+
+
+                </div>
+
+                <div class="tab-content @(vendas.ActiveTab == 2 ? "active" : "")">
+                    <div class="card">
+                        <div class="card-title">
+                            <i class="fas fa-shopping-cart"></i> Itens de Venda
+                        </div>
+
+                        <div class="item-options">
+                            <div class="item-option @(vendas.ItemSelecionado == "PassagemAerea" ? "selected" : "")" @onclick="@(() => SelecionarItem("PassagemAerea"))">
+                                <i class="fas fa-plane"></i>
+                                <span>Passagem Aérea</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "DiariaHospedagem" ? "selected" : "")" @onclick="@(() => SelecionarItem("DiariaHospedagem"))">
+                                <i class="fas fa-hotel"></i>
+                                <span>Diária de Hospedagem</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "PacoteTuristico" ? "selected" : "")" @onclick="@(() => SelecionarItem("PacoteTuristico"))">
+                                <i class="fas fa-suitcase"></i>
+                                <span>Pacote Turístico</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "SeguroViagem" ? "selected" : "")" @onclick="@(() => SelecionarItem("SeguroViagem"))">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Seguro Viagem</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "AluguelVeiculo" ? "selected" : "")" @onclick="@(() => SelecionarItem("AluguelVeiculo"))">
+                                <i class="fas fa-car"></i>
+                                <span>Aluguel de Veículo</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "Rodoviario" ? "selected" : "")" @onclick="@(() => SelecionarItem("Rodoviario"))">
+                                <i class="fas fa-bus"></i>
+                                <span>Rodoviário</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "Trem" ? "selected" : "")" @onclick="@(() => SelecionarItem("Trem"))">
+                                <i class="fas fa-train"></i>
+                                <span>Trem</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "Cruzeiro" ? "selected" : "")" @onclick="@(() => SelecionarItem("Cruzeiro"))">
+                                <i class="fas fa-ship"></i>
+                                <span>Cruzeiro</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "Passeio" ? "selected" : "")" @onclick="@(() => SelecionarItem("Passeio"))">
+                                <i class="fas fa-umbrella-beach"></i>
+                                <span>Passeio</span>
+                            </div>
+                            <div class="item-option @(vendas.ItemSelecionado == "Ingresso" ? "selected" : "")" @onclick="@(() => SelecionarItem("Ingresso"))">
+                                <i class="fas fa-ticket-alt"></i>
+                                <span>Ingresso</span>
+                            </div>
+                            @* <div class="item-option @(vendas.ItemSelecionado == "Educacional" ? "selected" : "")" @onclick="@(() => SelecionarItem("Educacional"))">
+                            <i class="fas fa-graduation-cap"></i>
+                            <span>Educacional</span>
+                        </div> *@
+                            <div class="item-option @(vendas.ItemSelecionado == "Outro" ? "selected" : "")" @onclick="@(() => SelecionarItem("Outro"))">
+                                <i class="fas fa-ellipsis-h"></i>
+                                <span>Outro</span>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(vendas.ItemSelecionado))
+                        {
+                            <div class="dynamic-fields">
+                                @switch (vendas.ItemSelecionado)
+                                {
+                                    case "PassagemAerea":
+                                        <h5>Detalhes da Passagem Aérea</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Companhia Aérea</label>
+                                                    <input class="form-control" @bind="vendas.CompanhiaAerea" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Localizador</label>
+                                                    <input class="form-control" @bind="vendas.Localizador" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Número do Voo</label>
+                                                    <input class="form-control" @bind="vendas.NumeroVoo" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Origem</label>
+                                                    <input class="form-control" @bind="vendas.OrigemVoo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Destino</label>
+                                                    <input class="form-control" @bind="vendas.DestinoVoo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data</label>
+                                                    <InputDate @bind-Value="vendas.DataVoo" class="form-control" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "DiariaHospedagem":
+                                        <h5>Detalhes da Hospedagem</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Hotel</label>
+                                                    <input class="form-control" @bind="vendas.NomeHotel" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input type="text" class="form-control" @bind="vendas.ReservaPacote" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Check-in</label>
+                                                    <InputDate @bind-Value="vendas.CheckIn" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Check-out</label>
+                                                    <InputDate @bind-Value="vendas.DataHoraRetiradaVeiculo" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Número de Quartos</label>
+                                                    <input type="number" class="form-control" @bind="vendas.NumeroQuartos" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "PacoteTuristico":
+                                        <h5>Detalhes do Pacote Turistico</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Nome do Pacote</label>
+                                                    <input class="form-control" @bind="vendas.NomePacote" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Transporte</label>
+                                                    <input class="form-control" @bind="vendas.TransportePacote" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Check-in</label>
+                                                    <InputDate @bind-Value="vendas.CheckIn" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Check-out</label>
+                                                    <InputDate @bind-Value="vendas.CheckOut" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoPacote" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input type="text" class="form-control" @bind="vendas.ReservaPacote" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Serviços Inclusos</label>
+                                                    <input type="text" class="form-control" @bind="vendas.ServicosInclusosPacote" />
+                                                </div>
+                                            </div>
+                                            @* <div class="col-md-4">
+                                            <div class="form-group">
+                                                <label class="form-label">Subproduto</label>
+                                                <input type="number" class="form-control" @bind="vendas.SubProdutoPacote" />
+                                            </div>
+                                        </div> *@
+                                        </div>
+                                        break;
+
+                                    case "SeguroViagem":
+                                        <h5>Detalhes do Seguro Viagem</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Seguro</label>
+                                                    <input class="form-control" @bind="vendas.Seguro" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoSeguro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Inicio</label>
+                                                    <InputDate @bind-Value="vendas.InicioSeguro" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Fim</label>
+                                                    <InputDate @bind-Value="vendas.FimSeguro" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input type="text" class="form-control" @bind="vendas.ReservaSeguro" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "AluguelVeiculo":
+                                        <h5>Detalhes do Aluguel de Carro</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Categoria do Carro</label>
+                                                    <input class="form-control" @bind="vendas.NomeVeiculo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoVeiculo" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaVeiculo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Local Retirada</label>
+                                                    <input class="form-control" @bind="vendas.LocalRetiradaVeiculo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Local Devolução</label>
+                                                    <input class="form-control" @bind="vendas.LocalDevolucaoVeiculo" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data/Hora retirada</label>
+                                                    <InputDate @bind-Value="vendas.DataHoraRetiradaVeiculo" class="form-control" />
+
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data/Hora devolução</label>
+                                                    <InputDate @bind-Value="vendas.DataHoraDevolucaoVeiculo" class="form-control" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Serviços Inclusos</label>
+                                                    <input class="form-control" @bind="vendas.ServicosInclusosVeiculo" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Rodoviario":
+                                        <h5>Detalhes do Transporte Rodoviário</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Descrição</label>
+                                                    <input class="form-control" @bind="vendas.DescricaoRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data de Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.DataEmissaoRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Companhia</label>
+                                                    <input class="form-control" @bind="vendas.CompanhiaRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Classe</label>
+                                                    <input class="form-control" @bind="vendas.ClasseRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Origem</label>
+                                                    <input class="form-control" @bind="vendas.OrigemRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Destino</label>
+                                                    <input class="form-control" @bind="vendas.DestinoRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Horário de Saída</label>
+                                                    <input type="date" class="form-control" @bind="vendas.SaidaRodoviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Horário de Chegada</label>
+                                                    <input type="date" class="form-control" @bind="vendas.ChegadaRodoviario" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Trem":
+                                        <h5>Detalhes do Transporte Ferroviário</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Descrição</label>
+                                                    <input class="form-control" @bind="vendas.DescricaoFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data de Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.DataEmissaoFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Companhia</label>
+                                                    <input class="form-control" @bind="vendas.CompanhiaFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Classe</label>
+                                                    <input class="form-control" @bind="vendas.ClasseFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Origem</label>
+                                                    <input class="form-control" @bind="vendas.OrigemFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Destino</label>
+                                                    <input class="form-control" @bind="vendas.DestinoFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Horário de Saída</label>
+                                                    <input type="date" class="form-control" @bind="vendas.SaidaFerroviario" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Horário de Chegada</label>
+                                                    <input type="date" class="form-control" @bind="vendas.ChegadaFerroviario" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Cruzeiro":
+                                        <h5>Detalhes do Cruzeiro</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Navio</label>
+                                                    <input class="form-control" @bind="vendas.NavioCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Início</label>
+                                                    <InputDate @bind-Value="vendas.InicioCruzeiro" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Fim</label>
+                                                    <InputDate @bind-Value="vendas.FimCruzeiro" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Número da Cabine</label>
+                                                    <input class="form-control" @bind="vendas.NumeroCabineCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Tipo da Cabine</label>
+                                                    <input class="form-control" @bind="vendas.TipoCabineCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Acomodação</label>
+                                                    <input class="form-control" @bind="vendas.AcomodacaoCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Regime</label>
+                                                    <input class="form-control" @bind="vendas.RegimeCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Destino</label>
+                                                    <input class="form-control" @bind="vendas.DestinoCruzeiro" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-12">
+                                                <div class="form-group">
+                                                    <label class="form-label">Serviços Inclusos</label>
+                                                    <textarea class="form-control" @bind="vendas.ServicosInclusosCruzeiro"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Passeio":
+                                        <h5>Detalhes do Passeio</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Nome do Passeio</label>
+                                                    <input class="form-control" @bind="vendas.NomePasseio" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoPasseio" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Início</label>
+                                                    <InputDate @bind-Value="vendas.InicioPasseio" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Fim</label>
+                                                    <InputDate @bind-Value="vendas.FimPasseio" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaPasseio" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-12">
+                                                <div class="form-group">
+                                                    <label class="form-label">Serviços Inclusos</label>
+                                                    <textarea class="form-control" @bind="vendas.ServicosInclusosPasseio"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Ingresso":
+                                        <h5>Detalhes do Ingresso</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Nome do Ingresso</label>
+                                                    <input class="form-control" @bind="vendas.Ingresso" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaIngresso" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoIngresso" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Data de Utilização</label>
+                                                    <InputDate @bind-Value="vendas.DataUtilizacaoIngresso" class="form-control" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Educacional":
+                                        <h5>Detalhes do Programa Educacional</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Escola</label>
+                                                    <input class="form-control" @bind="vendas.Escola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Produto</label>
+                                                    <input class="form-control" @bind="vendas.ProdutoEducacionalEscola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Idioma</label>
+                                                    <input class="form-control" @bind="vendas.IdiomaEscola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Cidade</label>
+                                                    <input class="form-control" @bind="vendas.CidadeEscola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">País</label>
+                                                    <input class="form-control" @bind="vendas.PaisEscola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoEscola" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Início</label>
+                                                    <InputDate @bind-Value="vendas.InicioEscola" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Fim</label>
+                                                    <InputDate @bind-Value="vendas.FimEscola" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaEscola" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Outro":
+                                        <h5>Detalhes de Outros Serviços</h5>
+                                        <div class="row">
+                                            <div class="col-md-12">
+                                                <div class="form-group">
+                                                    <label class="form-label">Descrição</label>
+                                                    <input class="form-control" @bind="vendas.DescricaoOutros" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Tipo de Produto</label>
+                                                    <input class="form-control" @bind="vendas.TipoProdutoOutros" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Reserva</label>
+                                                    <input class="form-control" @bind="vendas.ReservaOutros" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-12">
+                                                <div class="form-group">
+                                                    <label class="form-label">Serviços Inclusos</label>
+                                                    <textarea class="form-control" @bind="vendas.ServicosInclusosOutros"></textarea>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Emissão</label>
+                                                    <input type="date" class="form-control" @bind="vendas.EmissaoOutros" />
+                                                </div>
+
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Início</label>
+                                                    <InputDate @bind-Value="vendas.InicioOutros" class="form-control" />
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Fim</label>
+                                                    <InputDate @bind-Value="vendas.FimOutros" class="form-control" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+
+
+                                    default:
+                                        <div class="form-group">
+                                            <label class="form-label">Descrição do Item</label>
+                                            <textarea class="form-control" @bind="vendas.DescricaoItem"></textarea>
+                                        </div>
+                                        break;
+                                }
+
+                                <div class="form-group">
+                                    <label class="form-label">Valor</label>
+                                    <input type="text" class="form-control" @bind="vendas.ValorItem" />
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex justify-content-between">
+                            <button class="btn btn-secondary" @onclick="() => vendas.ActiveTab = 1"><i class="fas fa-arrow-left"></i> Anterior</button>
+                            <button class="btn btn-primary" @onclick="() => vendas.ActiveTab = 3">Próximo <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content @(vendas.ActiveTab == 3 ? "active" : "")">
+                    <div class="card">
+                        <div class="card-title">
+                            <i class="fas fa-credit-card"></i> Forma de Pagamento
+                        </div>
+
+                        <div class="payment-methods">
+                            <div class="payment-method @(vendas.FormaPagamento == "CartaoCredito" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("CartaoCredito")'>
+                                <i class="fas fa-credit-card"></i>
+                                <h6>Cartão de Crédito</h6>
+                            </div>
+
+                            <div class="payment-method @(vendas.FormaPagamento == "CartaoDebito" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("CartaoDebito")'>
+                                <i class="fas fa-credit-card"></i>
+                                <h6>Cartão de Débito</h6>
+                            </div>
+
+                            <div class="payment-method @(vendas.FormaPagamento == "Boleto" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("Boleto")'>
+                                <i class="fas fa-barcode"></i>
+                                <h6>Boleto</h6>
+                            </div>
+
+                            <div class="payment-method @(vendas.FormaPagamento == "Pix" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("Pix")'>
+                                <i class="fas fa-qrcode"></i>
+                                <h6>Pix</h6>
+                            </div>
+
+                            <div class="payment-method @(vendas.FormaPagamento == "Transferencia" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("Transferencia")'>
+                                <i class="fas fa-exchange-alt"></i>
+                                <h6>Transferência</h6>
+                            </div>
+
+                            <div class="payment-method @(vendas.FormaPagamento == "Dinheiro" ? "selected" : "")"
+                                 @onclick='() => SelecionarFormaPagamento("Dinheiro")'>
+                                <i class="fas fa-money-bill-wave"></i>
+                                <h6>Dinheiro</h6>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(vendas.FormaPagamento))
+                        {
+                            <div class="dynamic-fields mt-3">
+                                @switch (vendas.FormaPagamento)
+                                {
+                                    case "CartaoCredito":
+                                    case "CartaoDebito":
+                                        <h5>Dados do Cartão</h5>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Número do Cartão</label>
+                                                    <input class="form-control" @bind="vendas.NumeroCartao" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="form-group">
+                                                    <label class="form-label">Nome no Cartão</label>
+                                                    <input class="form-control" @bind="vendas.NomeCartao" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Validade</label>
+                                                    <input class="form-control" placeholder="MM/AA" @bind="vendas.ValidadeCartao" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">CVV</label>
+                                                    <input class="form-control" @bind="vendas.CvvCartao" />
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="form-group">
+                                                    <label class="form-label">Parcelas</label>
+                                                    <select class="form-control" @bind="vendas.Parcelas">
+                                                        <option value="1">1x</option>
+                                                        <option value="2">2x</option>
+                                                        <option value="3">3x</option>
+                                                        <option value="4">4x</option>
+                                                        <option value="5">5x</option>
+                                                        <option value="6">6x</option>
+                                                        <option value="7">7x</option>
+                                                        <option value="8">8x</option>
+                                                        <option value="9">9x</option>
+                                                        <option value="10">10x</option>
+                                                        <option value="11">11x</option>
+                                                        <option value="12">12x</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        break;
+
+                                    case "Boleto":
+                                        <h5>Boleto Bancário</h5>
+                                        <div class="alert alert-info">
+                                            O boleto será gerado após a confirmação da compra e enviado para o e-mail do cliente.
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Vencimento</label>
+                                            <input type="date" class="form-control" @bind="vendas.VencimentoBoleto" />
+                                        </div>
+                                        break;
+
+                                    case "Pix":
+                                        <h5>Pagamento via Pix</h5>
+                                        <div class="alert alert-info">
+                                            O QR Code será gerado após a confirmação da compra.
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Chave Pix</label>
+                                            <select class="form-control" @bind="vendas.ChavePix">
+                                                <option value="CPF">CPF</option>
+                                                <option value="CNPJ">CNPJ</option>
+                                                <option value="Email">E-mail</option>
+                                                <option value="Celular">Celular</option>
+                                                <option value="Aleatoria">Chave Aleatória</option>
+                                            </select>
+                                        </div>
+                                        break;
+                                }
+                            </div>
+                        }
+
+                        <div class="d-flex justify-content-between">
+                            <button class="btn btn-secondary" @onclick="() => vendas.ActiveTab = 2"><i class="fas fa-arrow-left"></i> Anterior</button>
+                            <button class="btn btn-primary" @onclick="() => vendas.ActiveTab = 4">Próximo <i class="fas fa-arrow-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content @(vendas.ActiveTab == 4 ? "active" : "")">
+                    <div class="card">
+                        <div class="card-title">
+                            <i class="fas fa-file-alt"></i> Resumo da Venda
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Informações da Venda</h5>
+                                <div class="info-item">
+                                    <strong>Fornecedor:</strong> @vendas.Grupo
+                                </div>
+                                <div class="info-item">
+                                    <strong>Vendedor:</strong> @vendas.Consultor
+                                </div>
+                                <div class="info-item">
+                                    <strong>Data da Venda:</strong> @vendas.DataVenda.ToShortDateString()
+                                </div>
+                                <div class="info-item">
+                                    <strong>Cliente:</strong> @vendas.ResponsavelCompra
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <h5>Itens de Venda</h5>
+                                <div class="info-item">
+                                    <strong>Item Selecionado:</strong> @GetNomeItem(vendas.ItemSelecionado)
+                                </div>
+                                @if (!string.IsNullOrEmpty(vendas.ItemSelecionado))
+                                {
+                                    <div class="info-item">
+                                        <strong>Valor:</strong> @vendas.ValorItem.ToString("C")
+                                    </div>
+                                }
+
+                                <h5 class="mt-3">Pagamento</h5>
+                                <div class="info-item">
+                                    <strong>Forma de Pagamento:</strong> @GetNomePagamento(vendas.FormaPagamento)
+                                </div>
+                                @if (vendas.FormaPagamento == "CartaoCredito" || vendas.FormaPagamento == "CartaoDebito")
+                                {
+                                    <div class="info-item">
+                                        <strong>Parcelas:</strong> @vendas.Parcelas
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="total-section mt-4">
+                            <h4>Total: @CalcularTotal().ToString("C")</h4>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <button class="btn btn-secondary"
+                                @onclick="() => vendas.ActiveTab = 3"
+                                disabled="@isFinalizando">
+                            <i class="fas fa-arrow-left"></i> Anterior
+                        </button>
+
+                        <button class="btn btn-success"
+                                @onclick="FinalizarVenda"
+                                disabled="@isFinalizando">
+                            <i class="fas fa-check"></i> Finalizar Venda
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+</div>
+
+
+
+@code {
+    Models.Vender vendas = new Models.Vender();
+    private List<Vender> viajantes = new();
+    private string fornecedorBusca { get; set; }
+    private List<Fornecedor> fornecedores { get; set; } = new();
+    private List<Fornecedor> fornecedoresFiltrados { get; set; } = new();
+    private string vendedorBusca { get; set; }
+    private List<Models.Vendedor> vendedores { get; set; } = new();
+    private List<Models.Vendedor> vendedoresFiltrados { get; set; } = new();
+    private string clienteBusca { get; set; }
+    private List<Cliente> clientes { get; set; } = new();
+    private List<Cliente> clientesFiltrados { get; set; } = new();
+    public int codFornecedorBusca { get; set; }
+    public int codVendedorBusca { get; set; }
+    public int codClienteBusca { get; set; }
+    [Inject] private IJSRuntime JS { get; set; }
+    private bool isFinalizando = false;
+
+    private void AdicionarViajante() => vendas.Viajantes.Add(new Models.VendaViajante());
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Aqui você puxa do banco
+        int CodEmp = await CarregarCodEmpAsync();
+        fornecedores = await vendaService.BuscaFornecedor(CodEmp, "");
+        vendedores = await vendaService.BuscarVendedor(CodEmp, "");
+        clientes = await vendaService.BuscarCliente(CodEmp, "");
+    }
+
+    private void FiltrarVendedores(ChangeEventArgs e)
+    {
+        codVendedorBusca = 0;
+        vendedorBusca = e.Value?.ToString();
+        vendedoresFiltrados = vendedores
+            .Where(v => v.Nome.Contains(vendedorBusca, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
+    }
+
+    private void FiltrarClientes(ChangeEventArgs e)
+    {
+        codClienteBusca = 0;
+        clienteBusca = e.Value?.ToString();
+        clientesFiltrados = clientes
+            .Where(c => c.Nome.Contains(clienteBusca, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
+    }
+
+    private void SelecionarCliente(Cliente cliente)
+    {
+        vendas.ResponsavelCompra = cliente.Nome; // ou cliente.Id, se preferir
+        clienteBusca = cliente.Nome;
+        codClienteBusca = cliente.Codigo;
+        clientesFiltrados.Clear();
+    }
+
+    private void SelecionarVendedor(Models.Vendedor vendedor)
+    {
+        vendas.Consultor = vendedor.Nome; // ou vendedor.Id, depende da regra
+        vendedorBusca = vendedor.Nome;
+        codVendedorBusca = vendedor.Codigo;
+
+        vendas.PercentualComissaoVendedor = vendedor.Comissao;
+
+        vendedoresFiltrados.Clear();
+    }
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+
+    private void FiltrarFornecedores(ChangeEventArgs e)
+    {
+        codFornecedorBusca = 0;
+        fornecedorBusca = e.Value?.ToString();
+        fornecedoresFiltrados = fornecedores
+            .Where(f => f.Razao.Contains(fornecedorBusca, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
+    }
+
+    private void SelecionarFornecedor(Fornecedor fornecedor)
+    {
+        vendas.Grupo = fornecedor.Razao; // ou fornecedor.Id, depende da regra
+        fornecedorBusca = fornecedor.Razao;
+        codFornecedorBusca = fornecedor.Codigo;
+
+        vendas.PercentualComissaoFornecedor = fornecedor.Comissao;
+
+        fornecedoresFiltrados.Clear();
+    }
+
+    private void SelecionarItem(string item)
+    {
+        vendas.ItemSelecionado = item;
+    }
+
+    private void SelecionarFormaPagamento(string forma)
+    {
+        vendas.FormaPagamento = forma;
+    }
+
+    private string GetNomeItem(string item)
+    {
+        return item switch
+        {
+            "PassagemAerea" => "Passagem Aérea",
+            "DiariaHospedagem" => "Diária de Hospedagem",
+            "PacoteTuristico" => "Pacote Turístico",
+            "SeguroViagem" => "Seguro Viagem",
+            "AluguelVeiculo" => "Aluguel de Veículo",
+            "Rodoviario" => "Rodoviário",
+            "Trem" => "Trem",
+            "Cruzeiro" => "Cruzeiro",
+            "Passeio" => "Passeio",
+            "Ingresso" => "Ingresso",
+            "Educacional" => "Educacional",
+            "Outro" => "Outro",
+            _ => "Nenhum item selecionado"
+        };
+    }
+
+    private string GetNomePagamento(string pagamento)
+    {
+        return pagamento switch
+        {
+            "CartaoCredito" => "Cartão de Crédito",
+            "CartaoDebito" => "Cartão de Débito",
+            "Boleto" => "Boleto Bancário",
+            "Pix" => "Pix",
+            "Transferencia" => "Transferência Bancária",
+            "Dinheiro" => "Dinheiro",
+            _ => "Nenhuma forma selecionada"
+        };
+    }
+
+    private decimal CalcularTotal()
+    {
+        return vendas.ValorItem;
+    }
+
+    private void IncrementarViajantes()
+    {
+        vendas.Viajantes.Add(new Models.VendaViajante());
+    }
+
+    private void DecrementarViajantes()
+    {
+        if (vendas.Viajantes.Count > 0)
+            vendas.Viajantes.RemoveAt(vendas.Viajantes.Count - 1);
+    }
+
+    private async Task FinalizarVenda()
+    {
+        try
+        {
+            if (codClienteBusca == 0)
+            {
+                await JS.InvokeVoidAsync("alert", "É obrigatório informar o cliente!");
+                return;
+            }
+
+            if (vendas.ValorItem <= 0)
+            {
+                await JS.InvokeVoidAsync("alert", "É obrigatório informar o valor!");
+                return;
+            }
+
+            if (codVendedorBusca == 0)
+            {
+                await JS.InvokeVoidAsync("alert", "É obrigatório informar o vendedor!");
+                return;
+            }
+
+            if (codFornecedorBusca == 0)
+            {
+                await JS.InvokeVoidAsync("alert", "É obrigatório informar o fornecedor!");
+                return;
+            }
+
+            var a = vendas.FormaPagamento;
+
+            if (a == "")
+            {
+                await JS.InvokeVoidAsync("alert", "É obrigatório informar um pagamento!");
+                return;
+            }
+
+            int CodEmp = await CarregarCodEmpAsync();
+            int codVendaC = await vendaService.AdicionarVendaC(
+                CodEmp,
+                codFornecedorBusca,
+                codVendedorBusca,
+                vendas.DataVenda.ToString("yyyy-MM-dd"),
+                codClienteBusca,
+                vendas.OrcamentoAtendimento,
+                vendas.ValorItem,
+                vendas.PercentualComissaoFornecedor,
+                vendas.PercentualComissaoVendedor
+            );
+
+            await vendaService.AdicionarViajantes(codVendaC, vendas.Viajantes);
+
+            await vendaService.AdicionarItens(codVendaC, vendas);
+
+            await vendaService.AdicionarContaReceber(codVendaC, vendas, vendas.ValorItem);
+
+            vendas.Status = "Concluído";
+            vendas.Clear();
+            Navigation.NavigateTo("/vender", forceLoad: true);
+
+        }
+        finally
+        {
+            isFinalizando = false; // 🔓 Reativa se você quiser liberar novamente
+        }
+    }
+}

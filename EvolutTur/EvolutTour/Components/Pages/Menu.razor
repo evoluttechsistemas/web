@@ -1,0 +1,705 @@
+﻿@page "/menu"
+@using EvolutTur.Models
+@using EvolutTur.Services
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+@implements IDisposable
+@inherits LayoutComponentBase
+@inject EmpresaService empresaService
+@inject AuthenticationStateProvider AuthProvider
+
+
+<style>
+    .menu-lateral {
+        height: 100vh;
+        background-color: rgb(21, 100, 148);
+        color: white;
+        transition: all 0.3s ease;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+    }
+
+        .menu-lateral.fechado {
+            width: 70px;
+        }
+
+        .menu-lateral.aberto {
+            width: 250px;
+        }
+
+    .cabecalho-menu {
+        flex-direction: column;
+        display: flex;
+        align-items: center;
+        padding: 20px 15px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.3s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 0 auto;
+        width: 100%;
+    }
+
+        .cabecalho-menu:hover {
+            background: linear-gradient(90deg, #0d2b6b 0%, #1e42a1 100%);
+        }
+
+    .logo-empresa {
+        width: 50px;
+        height: 50px;
+        border-radius: 20%;
+        object-fit: cover;
+        transition: all 0.3s ease;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        background-color: white;
+        padding: 4px;
+    }
+
+    .nome-empresa {
+        margin-top: 7px;
+        font-weight: bold;
+        font-size: 1.1rem;
+        white-space: nowrap;
+        opacity: 1;
+        transition: opacity 0.2s ease;
+        color: #ffffff;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    }
+
+    .menu-lateral.fechado .nome-empresa {
+        opacity: 0;
+        width: 0;
+        margin-left: 0;
+    }
+
+    .separando {
+        margin-top: auto;
+        padding-bottom: 10px;
+    }
+
+    .btn-toggle-menu {
+        position: absolute;
+        right: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        width: 25px;
+        height: 25px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .btn-toggle-menu:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #a8c6ff;
+        }
+
+    .nav-menu {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100vh;
+        padding: 10px 0;
+    }
+
+    .menu-item-container {
+        margin-bottom: 5px;
+    }
+
+    .menu-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+    }
+
+        .menu-item:hover {
+            background-color: rgba(28, 68, 163, 0.5);
+        }
+
+        .menu-item.principal {
+            font-weight: 500;
+        }
+
+        .menu-item.secundario {
+            padding-left: 40px;
+            background-color: rgba(13, 43, 107, 0.5);
+            font-size: 0.9rem;
+        }
+
+            .menu-item.secundario:hover {
+                background-color: rgba(28, 68, 163, 0.7);
+            }
+
+    .icone-item {
+        font-size: 1.1rem;
+        min-width: 25px;
+        transition: all 0.3s ease;
+        color: #a8c6ff;
+    }
+
+    .texto-item {
+        margin-left: 15px;
+        white-space: nowrap;
+        transition: all 0.3s ease;
+        color: #e6f0ff;
+    }
+
+    .menu-lateral.fechado .texto-item {
+        opacity: 0;
+        width: 0;
+        margin-left: 0;
+    }
+
+    .seta-submenu {
+        margin-left: auto;
+        font-size: 0.8rem;
+        transition: transform 0.3s ease;
+        color: #a8c6ff;
+    }
+
+    .submenu {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        background-color: rgba(0, 0, 0, 0.1);
+    }
+
+        .submenu.aberto {
+            max-height: 500px;
+        }
+
+    .menu-item.ativo {
+        border-left: 3px solid #4d90fe;
+        background-color: rgba(28, 68, 163, 0.7);
+    }
+
+        .menu-item.ativo .icone-item {
+            color: #ffffff;
+        }
+
+        .menu-item.ativo .texto-item {
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+    .container-principal {
+        display: flex;
+        height: 100vh;
+    }
+
+    .dashboard {
+        flex: 1;
+        overflow-y: auto;
+        background-color: #f5f7fa;
+    }
+
+    .hamburguer-btn {
+        display: none;
+        flex-direction: column;
+        justify-content: space-between;
+        width: 24px;
+        height: 18px;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+    }
+
+        .hamburguer-btn span {
+            width: 100%;
+            height: 3px;
+            background: white;
+            transition: all 0.3s ease;
+        }
+
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateX(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .menu-item {
+        animation: fadeIn 0.3s ease forwards;
+    }
+
+    .nav-menu::-webkit-scrollbar {
+        width: 5px;
+    }
+
+    .nav-menu::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.1);
+    }
+
+    .nav-menu::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 5px;
+    }
+
+        .nav-menu::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+    .menu-item {
+        position: relative;
+        overflow: hidden;
+    }
+
+        .menu-item:after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 5px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.5);
+            opacity: 0;
+            border-radius: 100%;
+            transform: scale(1, 1) translate(-50%);
+            transform-origin: 50% 50%;
+        }
+
+        .menu-item:focus:not(:active)::after {
+            animation: ripple 0.6s ease-out;
+        }
+
+    @@keyframes ripple {
+        0% {
+            transform: scale(0, 0);
+            opacity: 0.5;
+        }
+
+        100% {
+            transform: scale(20, 20);
+            opacity: 0;
+        }
+    }
+
+    @@media (max-width: 768px) {
+        .container-principal {
+            flex-direction: column;
+            height: auto;
+            min-height: 100vh;
+        }
+
+        .hamburguer-btn {
+            display: flex;
+        }
+
+        .btn-toggle-menu {
+            display: none !important;
+        }
+
+        .menu-lateral {
+            width: 100% !important;
+            height: auto;
+            flex-direction: row;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .cabecalho-menu {
+            width: 100%;
+            justify-content: center;
+            padding: 15px;
+            border-bottom: none;
+        }
+
+        .nome-empresa {
+            opacity: 1 !important;
+            width: auto !important;
+            margin-left: 15px !important;
+        }
+
+        .btn-toggle-menu {
+            display: none;
+        }
+
+        .nav-menu {
+            width: 100%;
+            display: none;
+            padding: 0;
+            overflow: visible;
+        }
+
+        .menu-lateral.mobile-aberto .nav-menu {
+            display: block;
+        }
+
+        .menu-item-container {
+            margin-bottom: 0;
+        }
+
+        .menu-item {
+            padding: 12px 15px;
+            border-left: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+            .menu-item.principal {
+                position: relative;
+            }
+
+            .menu-item.secundario {
+                display: flex !important;
+                padding-left: 30px !important;
+                background-color: rgba(0, 0, 0, 0.15) !important;
+                font-size: 0.9rem;
+                opacity: 1 !important;
+                width: auto !important;
+                height: auto !important;
+                visibility: visible !important;
+                transform: none !important;
+            }
+
+        .menu-item-container.aberto .menu-item.secundario {
+            transition: none !important;
+            display: flex;
+        }
+
+        .texto-item {
+            opacity: 1 !important;
+            width: auto !important;
+            margin-left: 15px !important;
+        }
+
+        .seta-submenu {
+            transform: rotate(0deg);
+            transition: transform 0.3s ease;
+        }
+
+        .menu-item-container.aberto .seta-submenu {
+            transform: rotate(90deg);
+        }
+
+        .submenu {
+            display: none !important;
+        }
+
+            .submenu.aberto {
+                display: block !important;
+            }
+
+
+        .menu-item.ativo {
+            border-left: none;
+            border-bottom: 3px solid #4d90fe;
+        }
+
+        .mobile-menu-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            border-radius: 4px;
+            margin-left: auto;
+            transition: all 0.3s ease;
+        }
+
+            .mobile-menu-toggle:hover {
+                background: rgba(255, 255, 255, 0.2);
+            }
+
+        .dashboard {
+            padding: 15px;
+        }
+        /* Ajuste para o cabeçalho no mobile */
+        .cabecalho-menu {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .seta-submenu.desktop {
+            display: none;
+        }
+    }
+
+    @@media (min-width: 769px) {
+        .mobile-menu-toggle {
+            display: none;
+        }
+
+        .seta-submenu.mobile {
+            display: none;
+        }
+    }
+</style>
+
+<div class="container-principal">
+    <div class="menu-lateral @(menuAberto ? "aberto" : "fechado") @(menuMobileAberto ? "mobile-aberto" : "")">
+        <div class="cabecalho-menu" @onclick="ToggleMenu">
+            <img src="/imagens/logo.png" alt="Logo da Empresa" class="logo-empresa" />
+            <span class="nome-empresa">@empresa?.Fantasia</span>
+
+            <!-- Botão Hamburguer - visível apenas no mobile -->
+            <button class="hamburguer-btn" @onclick="ToggleMenuMobile">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <button class="btn-toggle-menu">
+                <i class="@(menuAberto ? "fas fa-chevron-left" : "fas fa-chevron-right")"></i>
+            </button>
+        </div>
+
+
+        <nav class="nav-menu">
+            <!-- Cadastros -->
+            <div class="menu-item-container">
+                <div class="menu-item principal" @onclick='() => ToggleSubMenu("cadastros")'>
+
+                    <i class="fas fa-user-plus icone-item"></i>
+                    <span class="texto-item">Cadastros</span>
+                    <i class="fas fa-chevron-@(subMenuAberto == "cadastros" ? "up" : "down") seta-submenu"></i>
+                </div>
+
+                <div class="submenu @(subMenuAberto == "cadastros" ? "aberto" : "fechado")">
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/clientes")'>
+                        <i class="fas fa-users icone-item"></i>
+                        <span class="texto-item">Clientes</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/fornecedor")'>
+                        <i class="fas fa-truck icone-item"></i>
+                        <span class="texto-item">Fornecedores</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/vendedores")'>
+                        <i class="fas fa-handshake icone-item"></i>
+                        <span class="texto-item">Vendedores</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/usuarios")'>
+                        <i class="fas fa-user icone-item"></i>
+                        <span class="texto-item">Usuários</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vendas -->
+            <div class="menu-item-container">
+                <div class="menu-item principal" @onclick='() => ToggleSubMenu("vendas")'>
+                    <i class="fas fa-shopping-cart icone-item"></i>
+                    <span class="texto-item">Vendas</span>
+                    <i class="fas fa-chevron-@(subMenuAberto == "vendas" ? "up" : "down") seta-submenu"></i>
+                </div>
+
+                <div class="submenu @(subMenuAberto == "vendas" ? "aberto" : "fechado")">
+                    @if (usuarioMaster == "S")
+                    {
+                        <div class="menu-item secundario" @onclick='() => NavegarPara("/vendas/mes-atual")'>
+                            <i class="fas fa-calendar-alt icone-item"></i>
+                            <span class="texto-item">Mês Atual</span>
+                        </div>
+
+                        <div class="menu-item secundario" @onclick='() => NavegarPara("/relatorioVendas")'>
+                            <i class="fas fa-chart-bar icone-item"></i>
+                            <span class="texto-item">Relatórios</span>
+                        </div>
+                    }
+
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/clima-ranking")'>
+                        <i class="fas fa-bullhorn icone-item"></i>
+                        <span class="texto-item">Ranking</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/vender")'>
+                        <i class="fas fa-shopping-cart icone-item"></i>
+                        <span class="texto-item">Vender</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/clima")'>
+                        <i class="fas fa-shopping-cart icone-item"></i>
+                        <span class="texto-item">Clima</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="menu-item-container">
+                <div class="menu-item principal" @onclick='() => ToggleSubMenu("financeiro")'>
+
+                    <i class="fas fa-coins icone-item"></i>
+                    <span class="texto-item">Financeiro</span>
+                    <i class="fas fa-chevron-@(subMenuAberto == "financeiro" ? "up" : "down") seta-submenu"></i>
+                </div>
+
+                <div class="submenu @(subMenuAberto == "financeiro" ? "aberto" : "fechado")">
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/relatorios")'>
+                        <i class="fas fa-users icone-item"></i>
+                        <span class="texto-item">Relatórios</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/fornecedores")'>
+                        <i class="fas fa-truck icone-item"></i>
+                        <span class="texto-item">Contas a Pagar</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/fornecedores")'>
+                        <i class="fas fa-truck icone-item"></i>
+                        <span class="texto-item">Contas a Receber</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/fornecedores")'>
+                        <i class="fas fa-truck icone-item"></i>
+                        <span class="texto-item">Comissão do Vendedor</span>
+                    </div>
+                    <div class="menu-item secundario" @onclick='() => NavegarPara("/fornecedores")'>
+                        <i class="fas fa-truck icone-item"></i>
+                        <span class="texto-item">Agenda Financeira</span>
+                    </div>
+                </div>
+            </div>
+
+            @* dashboard *@
+            <div class="menu-item-container">
+                <div class="menu-item principal" @onclick='() => NavegarPara("/dashboard")'>
+                    <i class="fas fa-tachometer-alt icone-item"></i>
+                    <span class="texto-item">DashBoard</span>
+                </div>
+            </div>
+            <div class="menu-item-container">
+            </div>
+
+            <div class="separando">
+                <!-- Configurações -->
+                <div class="menu-item-container">
+                    <div class="menu-item principal" @onclick='() => NavegarPara("/configuracoes")'>
+                        <i class="fas fa-cog icone-item"></i>
+                        <span class="texto-item">Configurações</span>
+                    </div>
+                </div>
+
+                <div class="menu-item-container">
+                    <div class="menu-item principal" @onclick="Sair">
+                        <i class="fas fa-sign-out-alt icone-item"></i>
+                        <span class="texto-item">Sair</span>
+                    </div>
+                </div>
+
+                @*  <div class="menu-item-container">
+                    <div class="menu-item principal" @onclick="Redefinir">
+                        <i class="fas fa-sign-out-alt icone-item"></i>
+                        <span class="texto-item">Redefinir Senha</span>
+                    </div>
+                </div> *@
+            </div>
+        </nav>
+
+    </div>
+    <div class="dashboard">
+        @Body
+    </div>
+</div>
+
+@code {
+    private bool menuAberto = true;
+    private string subMenuAberto = "";
+    private bool menuMobileAberto = false;
+    private DotNetObjectReference<Menu>? objRef;
+    private Empresa empresa = new Empresa();
+    string usuarioMaster = "N";
+
+    protected override void OnInitialized()
+    {
+        objRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        int CodEmp = await CarregarCodEmpAsync();
+        empresa = await empresaService.BuscaEmpresa(CodEmp);
+
+        usuarioMaster = await CarregarUsuarioMaster();      
+    }
+
+    private async Task<string> CarregarUsuarioMaster()
+    {
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+
+        if (user.Identity.IsAuthenticated)
+        {
+            var usuarioMaster = user.FindFirst("UsuarioMaster")?.Value ?? "N";
+            return usuarioMaster;
+        }
+
+        return "N";
+    }
+
+
+    private async Task<int> CarregarCodEmpAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity.IsAuthenticated)
+        {
+            return int.Parse(user.FindFirst("CodEmp")?.Value);
+        }
+
+        return 0;
+    }
+    private void ToggleMenu()
+    {
+        menuAberto = !menuAberto;
+        if (!menuAberto)
+        {
+            subMenuAberto = "";
+        }
+    }
+
+    private void ToggleSubMenu(string subMenu)
+    {
+        if (subMenuAberto == subMenu)
+        {
+            subMenuAberto = "";
+        }
+        else
+        {
+            subMenuAberto = subMenu;
+        }
+    }
+
+    private void ToggleMenuMobile()
+    {
+        menuMobileAberto = !menuMobileAberto;
+    }
+
+    private void NavegarPara(string url)
+    {
+        Navigation.NavigateTo(url);
+    }
+
+    private async Task Sair()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    private async Task Redefinir()
+    {
+        Navigation.NavigateTo("/redefinir-senha");
+    }
+
+    public void Dispose()
+    {
+        objRef?.Dispose();
+    }
+}

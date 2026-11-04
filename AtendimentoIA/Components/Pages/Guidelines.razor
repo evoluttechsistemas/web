@@ -1,0 +1,41 @@
+@page "/orientacoes"
+@inject PanelStore Store
+@inject AuthenticationStateProvider Authentication
+<PageTitle>Orientações · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">CONHECIMENTO DA EQUIPE</div><h1>Cada segmento tem seu contexto.</h1><p>Registre procedimentos e orientações validadas para apoiar o atendimento.</p></div><span class="badge">@entries.Count(g => !g.Archived) orientação(ões) ativa(s)</span></div>
+@if (notice is not null) { <div class="notice" role="status">@notice</div> }
+<div class="editor-grid"><section class="card"><div class="section-heading"><div><h2>Nova orientação</h2><p>Informação cadastrada pela equipe, com autoria e data.</p></div></div>
+<EditForm Model="model" OnValidSubmit="Save" FormName="guidance"><DataAnnotationsValidator /><ValidationSummary />
+    <label for="title">Título</label><InputText id="title" @bind-Value="model.Title" placeholder="Ex.: Procedimento de venda por segmento" />
+    <div class="field-row"><div><label for="segment">Segmento</label><InputText id="segment" @bind-Value="model.Segment" placeholder="Supermercado, vestuário ou Todos" /></div><div><label for="module">Módulo</label><InputText id="module" @bind-Value="model.Module" placeholder="Ex.: PDV" /></div></div>
+    <label for="guidance-content">Orientação</label><InputTextArea id="guidance-content" @bind-Value="model.Content" rows="7" placeholder="Descreva o procedimento, quando se aplica e quais são as exceções." />
+    <label class="checkbox"><InputCheckbox @bind-Value="model.CustomerVisible" /> Conteúdo permitido em respostas ao cliente</label>
+    <p class="field-help">Sem essa marcação, o conteúdo fica identificado como orientação técnica interna. Não inclua senhas ou dados pessoais.</p>
+    <button type="submit" class="primary" disabled="@saving">@(saving ? "Salvando…" : "Salvar orientação")</button>
+</EditForm></section>
+<section class="card"><div class="section-heading"><h2>Orientações cadastradas</h2></div><label for="guidance-search">Buscar por título, segmento ou módulo</label><input id="guidance-search" @bind="search" @bind:event="oninput" placeholder="Buscar orientações…" />
+@if (!entries.Any(g => !g.Archived)) { <div class="empty"><span>◇</span><h3>Comece pelo que sua equipe já sabe</h3><p>Uma orientação pode explicar, por exemplo, quando usar PDV ou Vendas.</p></div> }
+@foreach (var entry in entries.Where(g => !g.Archived && ($"{g.Title} {g.Segment} {g.Module}").Contains(search, StringComparison.OrdinalIgnoreCase)).OrderByDescending(g => g.UpdatedAt))
+{ <article class="guidance-entry"><div class="tags"><span class="badge">@entry.Segment</span><span class="badge neutral">@entry.Module</span><span class="subtle">@(entry.CustomerVisible ? "Permitido ao cliente" : "Uso interno")</span></div><h3>@entry.Title</h3><p class="preserve-lines">@entry.Content</p><small>@entry.Author · @entry.UpdatedAt.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm")</small><button class="text-button" @onclick="() => Archive(entry.Id)">Arquivar</button></article> }
+</section></div>
+<div class="notice neutral-note">Estas orientações são armazenadas para compor a base de conhecimento. Respostas e geração de documentação por IA serão integradas em uma etapa futura.</div>
+@code {
+    private GuidanceInput model = new();
+    private List<Guidance> entries = [];
+    private string search = "";
+    private string? notice;
+    private bool saving;
+    protected override async Task OnInitializedAsync() => entries = await Store.GetGuidanceAsync();
+    private async Task Save()
+    {
+        saving = true;
+        try { var auth = await Authentication.GetAuthenticationStateAsync(); await Store.SaveGuidanceAsync(model, auth.User.Identity?.Name ?? "Administrador"); entries = await Store.GetGuidanceAsync(); model = new(); notice = "Orientação salva com autoria e data."; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ValidationException) { notice = "Não foi possível salvar. Verifique os campos e o armazenamento."; }
+        finally { saving = false; }
+    }
+    private async Task Archive(Guid id)
+    {
+        try { await Store.ArchiveGuidanceAsync(id); entries = await Store.GetGuidanceAsync(); notice = "Orientação arquivada. O registro foi preservado."; }
+        catch (IOException) { notice = "Não foi possível arquivar a orientação."; }
+    }
+}

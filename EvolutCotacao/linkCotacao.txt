@@ -1,0 +1,1 @@
+/cotacao?empresa=EMPRESA%20TESTE&fornecedor=CLARO&codigoFornecedor=1&codigoCotacao=6&cnpjEmpresa=39.397.657/0001-70

@@ -1,0 +1,398 @@
+﻿@page "/cotacao"
+@inject NavigationManager NavManager
+@using System.Globalization
+@using System.Web
+@rendermode InteractiveServer
+@using EvolutCotacao.Models
+@using EvolutCotacao.Service
+@inject CotacaoService cotacaoService
+
+<PageTitle>Cotação de Produtos</PageTitle>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --primary-dark: #005a9e;
+        --success: #16a34a;
+        --danger: #dc2626;
+        --gray: #6b7280;
+        --bg: #f1f5f9;
+        --radius: 12px;
+        --shadow: 0 4px 10px rgba(0,0,0,0.08);
+        --transition: all 0.3s ease;
+    }
+
+    body {
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        margin: 0;
+        padding: 0;
+    }
+
+    .top-bar {
+        position: sticky;
+        top: 0;
+        background: var(--primary);
+        color: white;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom-left-radius: 16px;
+        border-bottom-right-radius: 16px;
+        box-shadow: var(--shadow);
+        z-index: 100;
+    }
+
+        .top-bar h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin: 0 auto;
+        }
+
+    .btn-voltar {
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 38px;
+        height: 38px;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-voltar:hover {
+            transform: scale(1.05);
+            background: #f0f0f0;
+        }
+
+    .page-container {
+        padding: 16px;
+        padding-bottom: 100px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .empresa-info {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 14px 18px;
+        margin-bottom: 20px;
+    }
+
+        .empresa-info h4 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: var(--primary-dark);
+        }
+
+        .empresa-info small {
+            color: var(--gray);
+            display: block;
+            margin-top: 2px;
+        }
+
+    .lista-produtos {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .card-produto {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 16px 16px 20px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        transition: var(--transition);
+        position: relative;
+    }
+
+        .card-produto:hover {
+            transform: scale(1.01);
+        }
+
+        .card-produto h5 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin: 0;
+            color: #1e293b;
+        }
+
+    .info {
+        font-size: 0.9rem;
+        color: var(--gray);
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .preco-input {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #d1d5db;
+        border-radius: var(--radius);
+        text-align: right;
+        font-size: 1rem;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+        margin-bottom: 6px;
+        transition: border 0.2s;
+    }
+    .preco-input:focus {
+        border: 1.5px solid var(--primary);
+        outline: none;
+    }
+
+    .obs-input {
+        width: 100%;
+        min-height: 48px;
+        max-height: 90px;
+        border: 1px solid #d1d5db;
+        border-radius: var(--radius);
+        padding: 8px 10px;
+        font-size: 0.98rem;
+        resize: vertical;
+        margin-top: 2px;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
+        transition: border 0.2s;
+    }
+    .obs-input:focus {
+        border: 1.5px solid var(--primary);
+        outline: none;
+    }
+
+    .total-geral {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 14px 18px;
+        font-weight: 600;
+        color: var(--primary-dark);
+        font-size: 1.1rem;
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+    }
+
+    .btn-enviar {
+        width: 100%;
+        background: var(--success);
+        color: white;
+        font-size: 1.1rem;
+        border: none;
+        border-radius: var(--radius);
+        padding: 14px;
+        margin-top: 16px;
+        font-weight: 600;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-enviar:hover {
+            background: #15803d;
+            transform: translateY(-2px);
+        }
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: var(--radius);
+        padding: 24px;
+        box-shadow: var(--shadow);
+        text-align: center;
+        width: 90%;
+        max-width: 380px;
+        animation: scaleIn 0.3s ease;
+    }
+
+    @@keyframes scaleIn {
+        from {
+            transform: scale(0.9);
+            opacity: 0;
+        }
+
+        to {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    .modal-content h3 {
+        color: var(--success);
+        margin: 0 0 12px;
+    }
+
+    .modal-content .erro {
+        color: var(--danger);
+    }
+
+    .btn-fechar {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius);
+        padding: 10px 18px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .btn-fechar:hover {
+            background: var(--primary-dark);
+        }
+
+    @@media (max-width: 600px) {
+        .top-bar h3 {
+            font-size: 1rem;
+        }
+
+        .preco-input {
+            font-size: 0.95rem;
+        }
+
+        .card-produto h5 {
+            font-size: 0.95rem;
+        }
+    }
+</style>
+
+<div class="top-bar">
+    <button class="btn-voltar" @onclick="Voltar">←</button>
+    <h3>Cotação de Produtos</h3>
+</div>
+
+<div class="page-container">
+    <!-- 🔹 Dados da empresa -->
+    <div class="empresa-info">
+        <h4>@NomeEmpresa</h4>
+        <small>Fornecedor: @NomeFornecedor</small>
+        <small>Cód. Fornecedor: @CodigoFornecedor</small>
+        <small>Cód. Cotação: @CodigoCotacao</small>
+    </div>
+
+    <!-- 🔹 Lista de produtos -->
+    <div class="lista-produtos">
+        @foreach (var item in Produtos)
+        {
+            <div class="card-produto">
+                <h5>@item.Nome</h5>
+                <div class="info">
+                    <span>Qtd: @item.Quantidade.ToString("N2", CultureInfo.GetCultureInfo("pt-BR"))</span>
+                    <span>Total: @item.Total.ToString("C", CultureInfo.GetCultureInfo("pt-BR"))</span>
+                </div>
+                <input type="text"
+                       class="preco-input"
+                       placeholder="Digite o preço unitário (R$)"
+                       value="@item.PrecoTexto"
+                       @oninput="(e) => AtualizarPrecoTexto(item, e.Value?.ToString())" />
+                <textarea class="obs-input"
+                          maxlength="300"
+                          placeholder="Observações (máx. 300 caracteres)"
+                          @bind="item.Observacao"></textarea>
+            </div>
+        }
+    </div>
+
+    <!-- 🔹 Total geral -->
+    <div class="total-geral">
+        <span>Total Geral</span>
+        <span>@Produtos.Sum(p => p.Total).ToString("C", CultureInfo.GetCultureInfo("pt-BR"))</span>
+    </div>
+
+    <!-- 🔹 Botão -->
+    <button class="btn-enviar" @onclick="EnviarCotacao">📤 Enviar Cotação</button>
+</div>
+
+@if (CotacaoEnviada)
+{
+    <div class="modal-backdrop">
+        <div class="modal-content">
+            <h3 class="@(MensagemSucesso.Contains("sucesso") ? "" : "erro")">@MensagemSucesso</h3>
+            <button class="btn-fechar" @onclick="FecharMensagem">Fechar</button>
+        </div>
+    </div>
+}
+
+@code {
+    string NomeEmpresa = "Empresa padrão";
+    string NomeFornecedor = "Fornecedor padrão";
+    string CodigoFornecedor = "N/A";
+    string CodigoCotacao = "N/A";
+    string CNPJEmpresa = "N/A";
+
+    string MensagemSucesso = "";
+    bool CotacaoEnviada = false;
+
+    List<ProdutoCotado> Produtos = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        var query = HttpUtility.ParseQueryString(uri.Query);
+
+        NomeEmpresa = query["empresa"] ?? NomeEmpresa;
+        NomeFornecedor = query["fornecedor"] ?? NomeFornecedor;
+        CodigoFornecedor = query["codigoFornecedor"] ?? CodigoFornecedor;
+        CodigoCotacao = query["codigoCotacao"] ?? CodigoCotacao;
+        CNPJEmpresa = query["cnpjEmpresa"] ?? CNPJEmpresa;
+
+        Produtos = await cotacaoService.BuscarCotacao(CodigoCotacao, CNPJEmpresa, CodigoFornecedor);
+    }
+
+    void AtualizarPrecoTexto(ProdutoCotado item, string valor)
+    {
+        item.PrecoTexto = valor ?? "";
+        if (decimal.TryParse(item.PrecoTexto, NumberStyles.Any, CultureInfo.GetCultureInfo("pt-BR"), out var preco))
+            item.PrecoUnitario = preco;
+        else
+            item.PrecoUnitario = 0;
+        StateHasChanged();
+    }
+
+    async Task EnviarCotacao()
+    {
+        if (Produtos.Count == 0)
+        {
+            CotacaoEnviada = true;
+            MensagemSucesso = "Sem produtos para cotação!";
+            return;
+        }
+
+        var produtosComErro = Produtos.Where(p => p.PrecoUnitario < 0).ToList();
+        if (produtosComErro.Any())
+        {
+            CotacaoEnviada = true;
+            MensagemSucesso = "Todos os produtos devem ter preço unitário preenchido.";
+            return;
+        }
+
+        await cotacaoService.GravarRespostaCotacao(CodigoCotacao, CodigoFornecedor, Produtos, CNPJEmpresa);
+
+        CotacaoEnviada = true;
+        MensagemSucesso = "Cotação enviada com sucesso! 🎉";
+        Produtos.Clear();
+        StateHasChanged();
+    }
+
+    void FecharMensagem()
+    {
+        CotacaoEnviada = false;
+        MensagemSucesso = "";
+    }
+
+    void Voltar() => NavManager.NavigateTo("/");
+}

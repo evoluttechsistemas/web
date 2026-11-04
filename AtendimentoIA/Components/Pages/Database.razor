@@ -1,0 +1,31 @@
+@page "/banco"
+@inject SecretStore Secrets
+@inject SqlCatalogService Catalog
+<PageTitle>Banco de conhecimento · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">ERP E EVOLUTHELP</div><h1>Conheça a estrutura da base.</h1><p>Leitura dos catálogos SQL Server, sem alterações no banco de origem.</p></div><button class="primary" disabled="@(busy || !Secrets.HasSql)" @onclick="ReadSchema">@(busy ? "Lendo estrutura…" : "Ler estrutura do banco")</button></div>
+@if (notice is not null) { <div class="notice" role="status">@notice</div> }
+<div class="overview-grid"><section class="card"><div class="section-heading"><h2>Conexão protegida</h2><span class="badge">@(Secrets.HasSql ? "CONFIGURADA" : "PENDENTE")</span></div><p>Uma base SQL Server reúne as informações do ERP e do atendimento. A configuração da conexão fica junto das demais credenciais na tela única.</p><div class="settings-actions"><a class="secondary" href="/configuracoes#banco">Abrir configurações do banco →</a></div></section>
+<section class="card"><h2>Fontes internas indicadas pela equipe</h2><div class="mapping"><strong>TicketChamadoC → Cliente</strong><p>CodCliente → Codigo; segmento em Cliente.Segmento. CodEmp delimita a empresa.</p></div><div class="mapping"><strong>TicketChamadoD</strong><p>Histórico de atendimentos e soluções anteriores. Vínculo e campos de conteúdo a conferir na estrutura.</p></div><div class="mapping"><strong>Documentacao*</strong><p>Documentação produzida pelo suporte. Geração de novas documentações pela IA: etapa futura.</p></div><div class="mapping"><strong>TicketAssistenteIA</strong><p>Informações de apoio já organizadas para o atendimento. Conteúdo a mapear após verificar a estrutura.</p></div><small>Fontes internas da EvolutTech. A estrutura comum do ERP existe nas bases dos clientes; isso não libera registros internos para respostas externas.</small></section></div>
+@if (snapshot is { } schema)
+{
+<section class="metrics schema-metrics"><article><span>Tabelas</span><strong>@schema.Objects.Count(o => o.Kind == "USER_TABLE")</strong></article><article><span>Colunas</span><strong>@schema.Columns.Count</strong></article><article><span>Relações declaradas</span><strong>@schema.Relations.Count</strong></article><article><span>Documentacao*</span><strong>@schema.Objects.Count(o => o.Name.StartsWith("Documentacao", StringComparison.OrdinalIgnoreCase))</strong></article></section>
+<section class="card"><div class="section-heading"><div><h2>Objetos encontrados</h2><p>Estrutura lida em @schema.ReadAt.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM/yyyy HH:mm"). Os registros comerciais não são consultados nesta tela.</p></div></div><label for="schema-filter">Filtrar objeto</label><input id="schema-filter" @bind="filter" @bind:event="oninput" placeholder="Ex.: TicketChamado, Cliente ou Documentacao" />
+@foreach (var obj in schema.Objects.Where(o => $"{o.Schema}.{o.Name}".Contains(filter, StringComparison.OrdinalIgnoreCase)).Take(100))
+{ <details class="form-item"><summary><strong>@obj.Schema.@obj.Name</strong><span class="badge neutral">@obj.Kind</span></summary><div class="form-detail"><div class="table-scroll"><table><thead><tr><th>Coluna</th><th>Tipo</th><th>Chave</th><th>Aceita nulo</th></tr></thead><tbody>@foreach (var column in schema.Columns.Where(c => c.Schema == obj.Schema && c.Table == obj.Name)) { <tr><td>@column.Name</td><td>@column.Type</td><td>@(schema.Indexes.Any(i => i.Schema == obj.Schema && i.Table == obj.Name && i.Column == column.Name && i.PrimaryKey) ? "PK" : "—")</td><td>@(column.Nullable ? "Sim" : "Não")</td></tr> }</tbody></table></div>@foreach (var relation in schema.Relations.Where(r => r.Schema == obj.Schema && r.Table == obj.Name)) { <p class="source-path">@relation.Column → @relation.TargetSchema.@relation.TargetTable.@relation.TargetColumn</p> }</div></details> }
+<p class="field-help">Exibindo até 100 objetos por filtro. Definições de procedimentos e conteúdos das tabelas não são lidos nesta versão.</p></section>
+}
+@code {
+    private SqlSnapshot? snapshot;
+    private string? notice;
+    private string filter = "";
+    private bool busy;
+    protected override async Task OnInitializedAsync() => snapshot = await Catalog.GetSnapshotAsync();
+    private async Task ReadSchema()
+    {
+        busy = true;
+        try { snapshot = await Catalog.ReadAsync(); notice = "Estrutura consultada. Nenhum registro comercial foi lido e nenhuma alteração foi feita no banco."; }
+        catch (Microsoft.Data.SqlClient.SqlException ex) { notice = $"A consulta SQL não foi concluída (código {ex.Number}). Verifique conectividade e permissões no servidor."; }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Security.Cryptography.CryptographicException) { notice = "Não foi possível concluir. Verifique a conexão protegida e o armazenamento."; }
+        finally { busy = false; }
+    }
+}

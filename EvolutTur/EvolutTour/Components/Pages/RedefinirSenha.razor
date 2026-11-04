@@ -1,0 +1,266 @@
+﻿@page "/redefinir-senha"
+@using EvolutTur.Data
+@using System.Security.Cryptography
+@using System.Text
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@inject MasterDbContext contexto
+@inject AuthenticationStateProvider AuthProvider
+
+
+<style>
+    .modal-background {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .modal-card {
+        background: #fff;
+        padding: 2rem;
+        border-radius: 12px;
+        width: 100%;
+        max-width: 500px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.4s ease;
+    }
+
+    .modal-title {
+        text-align: center;
+        font-size: 1.6rem;
+        font-weight: bold;
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        background-color: #f9f9f9;
+        font-size: 1rem;
+        transition: all 0.3s;
+    }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #4d90fe;
+            box-shadow: 0 0 0 3px rgba(77, 144, 254, 0.2);
+        }
+
+    .btn-cadastrar {
+        width: 100%;
+        padding: 0.75rem;
+        border: none;
+        border-radius: 8px;
+        background: linear-gradient(135deg, #1a3a8f, #2a4ba0);
+        color: white;
+        font-size: 1rem;
+        font-weight: 500;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+        .btn-cadastrar:hover {
+            background: linear-gradient(135deg, #2a4ba0, #1a3a8f);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(26, 58, 143, 0.3);
+        }
+
+        .btn-cadastrar:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+    .btn-loading {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+    }
+
+    .btn-cadastrar:disabled .btn-text {
+        opacity: 0;
+    }
+
+    .btn-cadastrar:disabled .btn-loading {
+        opacity: 1;
+    }
+
+    .validation-summary {
+        background-color: #f8d7da;
+        color: #842029;
+        border: 1px solid #f5c2c7;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+    }
+
+    @@keyframes fadeIn {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+</style>
+
+<div class="modal-background">
+
+    <div class="modal-card">
+        <h3 class="modal-title">Redefinir Senha</h3>
+
+        <EditForm Model="@modelo" OnValidSubmit="AtualizarSenha" class="cadastro-form">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="validation-summary" />
+
+            <div class="form-group">
+                <label>Senha Atual*</label>
+                <InputText type="password" class="form-control" @bind-Value="modelo.SenhaAtual" />
+                <ValidationMessage For="@(() => modelo.SenhaAtual)" />
+            </div>
+
+            <div class="form-group">
+                <label>Nova Senha*</label>
+                <InputText type="password" class="form-control" @bind-Value="modelo.NovaSenha" />
+                <ValidationMessage For="@(() => modelo.NovaSenha)" />
+            </div>
+
+            <div class="form-group">
+                <label>Confirmar Nova Senha*</label>
+                <InputText type="password" class="form-control" @bind-Value="modelo.ConfirmarSenha" />
+                <ValidationMessage For="@(() => modelo.ConfirmarSenha)" />
+            </div>
+
+            <button type="submit" class="btn-cadastrar" disabled="@enviando">
+                <span class="btn-text">Atualizar Senha</span>
+                <span class="btn-loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private RedefinirSenhaModel modelo = new();
+    private bool enviando = false;
+
+    private class RedefinirSenhaModel
+    {
+        [Required(ErrorMessage = "Informe a senha atual")]
+        public string SenhaAtual { get; set; }
+
+        [Required(ErrorMessage = "Informe a nova senha")]
+        [MinLength(8, ErrorMessage = "Mínimo de 8 caracteres")]
+        [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$",
+            ErrorMessage = "Deve conter maiúscula, minúscula, número e símbolo")]
+        public string NovaSenha { get; set; }
+
+        [Required(ErrorMessage = "Confirme a nova senha")]
+        [Compare(nameof(NovaSenha), ErrorMessage = "Senhas não coincidem")]
+        public string ConfirmarSenha { get; set; }
+    }
+
+    private async Task AtualizarSenha()
+    {
+        enviando = true;
+
+        try
+        {
+            string emailUsuario = await CarregarUsuarioAsync();
+            var auth = await contexto.Usuarios.FirstOrDefaultAsync(u => u.Usuario == emailUsuario);
+
+            if (auth == null)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Usuário não encontrado.");
+                return;
+            }
+
+            var senhaAtualHash = HashSenha(modelo.SenhaAtual);
+
+            if (auth.Senha != senhaAtualHash)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Senha atual incorreta.");
+                return;
+            }
+
+            if (modelo.SenhaAtual == modelo.NovaSenha)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "A nova senha deve ser diferente da atual.");
+                return;
+            }
+
+            auth.Senha = HashSenha(modelo.NovaSenha);
+            await contexto.SaveChangesAsync();
+
+            await JSRuntime.InvokeVoidAsync("alert", "Senha atualizada com sucesso!");
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Erro: {ex.Message}");
+        }
+        finally
+        {
+            enviando = false;
+        }
+    }
+
+    private async Task<string> CarregarUsuarioAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated ?? false)
+        {
+            return user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+        }
+
+        return "";
+    }
+
+    private string HashSenha(string senha)
+    {
+        using var sha = SHA256.Create();
+        var bytes = Encoding.UTF8.GetBytes(senha);
+        var hash = sha.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
+    }
+}
