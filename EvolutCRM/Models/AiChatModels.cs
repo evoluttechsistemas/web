@@ -51,7 +51,17 @@ public sealed class AiFonte
     public string Titulo { get; init; } = "";
     public int CodDoc { get; init; }
     public int CodTicket { get; init; }
+
+    /// <summary>Código do caso em AiTicketInsights (para o 👎 e o reaproveitamento contarem no caso certo).</summary>
+    public int CodInsight { get; init; }
+    public string Slug { get; init; } = "";
     public float Score { get; init; }
+
+    /// <summary>Nota da reordenação (0 a 3); -1 quando a reordenação não rodou.</summary>
+    public int Nota { get; init; } = -1;
+
+    /// <summary>Trecho usado (documentação) ou "caso + solução" (ticket) — para mostrar ao atendente.</summary>
+    public string Texto { get; init; } = "";
 }
 
 /// <summary>Resultado completo da sugestão: texto + fontes + confiança + log.</summary>

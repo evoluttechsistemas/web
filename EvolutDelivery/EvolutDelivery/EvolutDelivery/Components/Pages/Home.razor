@@ -8,6 +8,8 @@
 @inject NavigationManager NavManager
 @inject StorageService storage
 @inject EmpresaService empresaService
+@inject LojaStatusService lojaStatusService
+@inject ILogger<Home> Logger
 
 <PageTitle>@nomeEmpresa — Cardápio</PageTitle>
 
@@ -25,36 +27,44 @@
         --green: #16a34a;
         --green-light: #dcfce7;
         --red: #dc2626;
+        --red-light: #fef2f2;
         --text: #0f172a;
         --muted: #64748b;
         --border: #e2e8f0;
-        --bg: #f8fafc;
+        --bg: #f1f5f9;
         --white: #ffffff;
-        --radius-sm: 8px;
+        --radius-sm: 10px;
         --radius: 14px;
-        --radius-lg: 20px;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,.06);
-        --shadow: 0 2px 8px rgba(0,0,0,.08);
-        --shadow-md: 0 4px 16px rgba(0,0,0,.10);
+        --radius-lg: 22px;
+        --shadow-sm: 0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.06);
+        --shadow: 0 2px 8px rgba(15,23,42,.08);
+        --shadow-md: 0 6px 20px rgba(15,23,42,.12);
+        --wrap: 1080px;
     }
 
     html, body {
         background: var(--bg);
-        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
         color: var(--text);
         min-height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-text-size-adjust: 100%;
     }
 
-    /* HEADER */
+    button {
+        font-family: inherit;
+    }
+
+    /* ===== HEADER ===== */
     .hm-header {
         background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
-        padding: 18px 18px 60px;
+        padding: calc(14px + env(safe-area-inset-top)) 16px 40px;
         position: relative;
         overflow: hidden;
     }
 
     .hm-header-inner {
-        max-width: 700px;
+        max-width: var(--wrap);
         margin: 0 auto;
         position: relative;
         z-index: 1;
@@ -66,30 +76,30 @@
         bottom: -1px;
         left: 0;
         right: 0;
-        height: 28px;
+        height: 22px;
         background: var(--bg);
-        border-radius: 28px 28px 0 0;
+        border-radius: 22px 22px 0 0;
     }
 
     .hm-header-deco {
         position: absolute;
-        top: -40px;
-        right: -40px;
+        top: -50px;
+        right: -50px;
         width: 200px;
         height: 200px;
         border-radius: 50%;
-        background: rgba(255,255,255,.06);
+        background: rgba(255,255,255,.07);
         pointer-events: none;
     }
 
     .hm-header-deco2 {
         position: absolute;
-        bottom: 10px;
-        left: -30px;
-        width: 120px;
-        height: 120px;
+        bottom: 0;
+        left: -40px;
+        width: 130px;
+        height: 130px;
         border-radius: 50%;
-        background: rgba(255,255,255,.04);
+        background: rgba(255,255,255,.05);
         pointer-events: none;
     }
 
@@ -97,23 +107,28 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 18px;
-        z-index: 1;
+        margin-bottom: 14px;
         gap: 12px;
     }
 
+    .hm-header-top > div:first-child {
+        min-width: 0;
+    }
+
     .hm-logo-text {
-        font-size: 1.2rem;
+        font-size: 1.15rem;
         font-weight: 800;
         color: #fff;
         letter-spacing: -.3px;
+        line-height: 1.2;
+        overflow-wrap: anywhere;
     }
 
     .hm-logo-sub {
         font-size: 0.72rem;
-        color: rgba(255,255,255,.7);
+        color: rgba(255,255,255,.75);
         font-weight: 500;
-        margin-top: 1px;
+        margin-top: 2px;
     }
 
     .hm-btn-admin {
@@ -125,47 +140,40 @@
         font-size: 0.78rem;
         font-weight: 600;
         cursor: pointer;
-        transition: background .15s;
     }
 
-        .hm-btn-admin:hover {
-            background: rgba(255,255,255,.25);
-        }
-
     .hm-btn-orders {
-        background: rgba(255,255,255,.92);
-        border: 1px solid rgba(255,255,255,.35);
+        flex-shrink: 0;
+        background: rgba(255,255,255,.95);
+        border: none;
         color: var(--primary-dark);
         border-radius: 20px;
-        padding: 7px 14px;
-        font-size: 0.78rem;
+        padding: 9px 14px;
+        font-size: 0.8rem;
         font-weight: 800;
         cursor: pointer;
         white-space: nowrap;
         box-shadow: var(--shadow-sm);
-        transition: transform .15s, background .15s;
     }
-
-        .hm-btn-orders:hover {
-            background: #fff;
-            transform: translateY(-1px);
-        }
 
     .hm-search {
         position: relative;
-        z-index: 1;
     }
 
+        /* 16px evita o zoom automatico do iPhone ao focar o campo */
         .hm-search input {
             width: 100%;
-            padding: 13px 48px 13px 18px;
+            height: 48px;
+            padding: 0 46px 0 18px;
             border-radius: 30px;
             border: none;
-            font-size: 0.95rem;
+            font-size: 16px;
             color: var(--text);
             background: var(--white);
             box-shadow: var(--shadow-md);
             outline: none;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
             .hm-search input::placeholder {
@@ -177,43 +185,42 @@
         right: 16px;
         top: 50%;
         transform: translateY(-50%);
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         pointer-events: none;
     }
 
-    /* WRAP */
+    /* ===== CONTEUDO ===== */
     .hm-wrap {
-        max-width: 700px;
+        max-width: var(--wrap);
         margin: 0 auto;
-        padding-bottom: 100px;
+        padding-bottom: calc(110px + env(safe-area-inset-bottom));
     }
 
-    /* SECOES */
+    /* Categorias fixas no topo ao rolar */
     .hm-secoes {
+        position: sticky;
+        top: 0;
+        z-index: 60;
         display: flex;
         overflow-x: auto;
         gap: 8px;
-        padding: 16px 16px 12px;
-        scrollbar-width: thin;
-        scrollbar-color: var(--border) transparent;
+        padding: 10px 16px;
+        background: rgba(241,245,249,.94);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
     }
 
         .hm-secoes::-webkit-scrollbar {
-            height: 4px;
-        }
-
-        .hm-secoes::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .hm-secoes::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
+            display: none;
         }
 
     .hm-secao-btn {
         flex-shrink: 0;
-        padding: 8px 18px;
+        height: 38px;
+        padding: 0 16px;
         border-radius: 30px;
         border: 1.5px solid var(--border);
         background: var(--white);
@@ -222,13 +229,9 @@
         color: var(--muted);
         cursor: pointer;
         white-space: nowrap;
-        transition: all .15s;
+        scroll-snap-align: start;
+        transition: background .15s, color .15s, border-color .15s;
     }
-
-        .hm-secao-btn:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
 
         .hm-secao-btn.ativo {
             background: var(--primary);
@@ -237,16 +240,16 @@
             box-shadow: 0 2px 8px rgba(37,99,235,.25);
         }
 
-    /* LABEL */
     .hm-section-label {
-        padding: 4px 16px 12px;
-        font-size: 0.78rem;
+        padding: 8px 16px 12px;
+        font-size: 0.76rem;
         font-weight: 700;
         color: var(--muted);
         text-transform: uppercase;
         letter-spacing: .5px;
         display: flex;
         align-items: center;
+        flex-wrap: wrap;
         gap: 6px;
     }
 
@@ -254,34 +257,59 @@
             background: var(--primary-light);
             color: var(--primary);
             border-radius: 20px;
-            padding: 2px 8px;
+            padding: 2px 9px;
             font-size: 0.72rem;
             text-transform: none;
             letter-spacing: 0;
             font-weight: 700;
         }
 
-    /* BANNER PROMO */
+    /* ===== LOJA FECHADA ===== */
+    .hm-fechada {
+        margin: 4px 16px 14px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #991b1b;
+    }
+
+    .hm-fechada-icone {
+        font-size: 1.6rem;
+        flex-shrink: 0;
+    }
+
+    .hm-fechada-titulo {
+        font-size: 0.95rem;
+        font-weight: 800;
+        margin-bottom: 2px;
+    }
+
+    .hm-fechada-texto {
+        font-size: 0.82rem;
+        line-height: 1.4;
+        color: #b91c1c;
+        overflow-wrap: anywhere;
+    }
+
+    /* ===== BANNER PROMO ===== */
     .hm-promo-banner {
-        margin: 0 16px 16px;
+        margin: 4px 16px 14px;
         background: linear-gradient(135deg, #7c3aed, #a855f7);
         border-radius: var(--radius);
-        padding: 14px 18px;
+        padding: 14px 16px;
         display: flex;
         align-items: center;
         gap: 12px;
         cursor: pointer;
-        transition: transform .15s, box-shadow .15s;
         box-shadow: 0 4px 12px rgba(124,58,237,.25);
     }
 
-        .hm-promo-banner:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(124,58,237,.35);
-        }
-
     .hm-promo-icon {
-        font-size: 2rem;
+        font-size: 1.8rem;
         flex-shrink: 0;
     }
 
@@ -294,25 +322,27 @@
 
     .hm-promo-sub {
         font-size: 0.78rem;
-        color: rgba(255,255,255,.8);
+        color: rgba(255,255,255,.85);
     }
 
     .hm-promo-arrow {
         margin-left: auto;
-        color: rgba(255,255,255,.7);
-        font-size: 1.2rem;
+        color: rgba(255,255,255,.8);
+        font-size: 1.4rem;
         flex-shrink: 0;
     }
 
-    /* GRID */
-    .hm-grid {
+    /* ===== GRADE DE PRODUTOS ===== */
+    /* Celular: 2 colunas | Tablet: 3 | Desktop: 4-5 */
+    .hm-grid,
+    .hm-skeleton-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-        gap: 12px;
-        padding: 0 16px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 0 12px;
     }
 
-    /* CARD PRODUTO */
+    /* ===== CARD ===== */
     .hm-card {
         background: var(--white);
         border-radius: var(--radius);
@@ -321,39 +351,33 @@
         display: flex;
         flex-direction: column;
         cursor: pointer;
-        transition: transform .18s, box-shadow .18s;
         border: 1px solid var(--border);
+        transition: transform .18s, box-shadow .18s;
     }
-
-        .hm-card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-md);
-        }
 
         .hm-card:active {
             transform: scale(.98);
         }
 
+    /* Imagem quadrada e INTEIRA (contain): nao corta embalagens */
+    /* O quadro tem altura FIXA (quadrado): a foto se ajusta dentro dele, nunca o contrário */
     .hm-card-img-wrap {
         position: relative;
         width: 100%;
-        padding-top: 70%;
-        background: var(--bg);
+        height: 0;
+        padding-top: 100%;
+        background: #fff;
         overflow: hidden;
+        border-bottom: 1px solid #f1f5f9;
     }
 
     .hm-card-img {
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform .25s;
-    }
-
-    .hm-card:hover .hm-card-img {
-        transform: scale(1.04);
+        top: 10px;
+        left: 10px;
+        width: calc(100% - 20px);
+        height: calc(100% - 20px);
+        object-fit: contain;
     }
 
     .hm-promo-badge {
@@ -362,7 +386,7 @@
         left: 8px;
         background: var(--red);
         color: #fff;
-        font-size: 0.65rem;
+        font-size: 0.64rem;
         font-weight: 800;
         padding: 3px 7px;
         border-radius: 6px;
@@ -372,31 +396,36 @@
 
     .hm-card-body {
         flex: 1;
-        padding: 10px 10px 0;
+        padding: 10px 11px 0;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 6px;
     }
 
+    /* Nome COMPLETO, sem cortar com reticencias */
     .hm-card-nome {
-        font-size: 0.88rem;
-        font-weight: 700;
+        font-size: 0.82rem;
+        font-weight: 600;
         color: var(--text);
-        line-height: 1.25;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
+        line-height: 1.32;
+        overflow-wrap: anywhere;
+        hyphens: auto;
+    }
+
+    .hm-card-precos {
+        margin-top: auto;
+        display: flex;
+        flex-direction: column;
     }
 
     .hm-card-preco-antigo {
-        font-size: 0.75rem;
+        font-size: 0.74rem;
         color: var(--muted);
         text-decoration: line-through;
     }
 
     .hm-card-preco {
-        font-size: 0.98rem;
+        font-size: 1.02rem;
         font-weight: 800;
         color: var(--primary-dark);
     }
@@ -406,28 +435,28 @@
         }
 
     .hm-card-add {
-        margin-top: auto;
+        margin: 10px 11px 11px;
+        height: 40px;
         border: none;
-        border-top: 1px solid var(--border);
-        background: none;
+        border-radius: var(--radius-sm);
+        background: var(--primary-light);
         color: var(--primary);
-        font-size: 0.85rem;
+        font-size: 0.86rem;
         font-weight: 700;
-        padding: 10px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
         gap: 6px;
         transition: background .12s, color .12s;
-        width: 100%;
     }
 
-        .hm-card-add:hover {
-            background: var(--primary-light);
+        .hm-card-add:active {
+            background: var(--primary);
+            color: #fff;
         }
 
-    /* VAZIO */
+    /* ===== VAZIO ===== */
     .hm-empty {
         display: flex;
         flex-direction: column;
@@ -454,31 +483,24 @@
         line-height: 1.6;
     }
 
-    /* BARRA CARRINHO */
+    /* ===== BARRA CARRINHO ===== */
     .hm-cart-bar {
         position: fixed;
-        bottom: 16px;
-        left: 16px;
-        right: 16px;
-        max-width: 668px;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        left: 12px;
+        right: 12px;
+        max-width: 560px;
         margin: 0 auto;
         background: var(--primary-dark);
         border-radius: var(--radius-lg);
-        padding: 14px 18px;
+        padding: 12px 12px 12px 18px;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 12px;
         box-shadow: 0 8px 30px rgba(30,64,175,.35);
         z-index: 90;
         animation: cartSlideUp .25s ease;
-    }
-
-    @@media (min-width: 700px) {
-        .hm-cart-bar {
-            left: 50%;
-            transform: translateX(-50%);
-            width: 668px;
-        }
     }
 
     @@keyframes cartSlideUp {
@@ -495,58 +517,57 @@
 
     .hm-cart-info {
         color: #fff;
+        min-width: 0;
     }
 
     .hm-cart-qty {
-        font-size: 0.75rem;
-        color: rgba(255,255,255,.7);
-        margin-bottom: 2px;
+        font-size: 0.74rem;
+        color: rgba(255,255,255,.75);
+        margin-bottom: 1px;
     }
 
     .hm-cart-val {
-        font-size: 1.05rem;
+        font-size: 1.08rem;
         font-weight: 800;
         color: #fff;
     }
 
     .hm-cart-btn {
+        flex-shrink: 0;
+        height: 44px;
         background: #fff;
         color: var(--primary-dark);
         border: none;
         border-radius: var(--radius);
-        padding: 10px 20px;
+        padding: 0 18px;
         font-size: 0.9rem;
         font-weight: 800;
         cursor: pointer;
         white-space: nowrap;
-        transition: background .12s;
     }
 
-        .hm-cart-btn:hover {
-            background: #e0e7ff;
-        }
-
-    /* OVERLAY */
+    /* ===== OVERLAY / MODAIS ===== */
     .hm-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,.5);
+        background: rgba(15,23,42,.55);
         z-index: 200;
         display: flex;
         align-items: flex-end;
         justify-content: center;
+        -webkit-backdrop-filter: blur(2px);
         backdrop-filter: blur(2px);
+        animation: fadeIn .18s ease;
     }
 
-    /* MODAL PRODUTO */
-    .hm-modal {
-        background: var(--white);
-        width: 100%;
-        max-width: 500px;
-        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        padding: 0 0 env(safe-area-inset-bottom);
-        animation: modalUp .22s ease;
-        overflow: hidden;
+    @@keyframes fadeIn {
+        from {
+            opacity: 0;
+        }
+
+        to {
+            opacity: 1;
+        }
     }
 
     @@keyframes modalUp {
@@ -559,60 +580,90 @@
         }
     }
 
-    .hm-modal-img-wrap {
-        position: relative;
+    /* MODAL PRODUTO (bottom sheet no celular) */
+    .hm-modal {
+        background: var(--white);
         width: 100%;
-        height: 200px;
-        background: var(--bg);
+        max-width: 520px;
+        max-height: 92vh;
+        max-height: 92dvh;
+        border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        display: flex;
+        flex-direction: column;
+        animation: modalUp .24s ease;
         overflow: hidden;
     }
 
-    .hm-modal-img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+    .hm-modal-handle {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 40px;
+        height: 4px;
+        border-radius: 4px;
+        background: #cbd5e1;
+        z-index: 2;
     }
 
-    .hm-modal-img-gradient {
+    /* Imagem inteira, sem corte */
+    .hm-modal-img-wrap {
+        position: relative;
+        flex-shrink: 0;
+        width: 100%;
+        height: min(40vh, 300px);
+        background: #fff;
+        overflow: hidden;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .hm-modal-img {
         position: absolute;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 80px;
-        background: linear-gradient(transparent, rgba(0,0,0,.4));
+        top: 22px;
+        left: 20px;
+        width: calc(100% - 40px);
+        height: calc(100% - 30px);
+        object-fit: contain;
     }
 
     .hm-modal-close {
         position: absolute;
         top: 12px;
         right: 12px;
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
         border-radius: 50%;
-        background: rgba(0,0,0,.4);
+        background: rgba(15,23,42,.08);
         border: none;
-        color: #fff;
+        color: var(--text);
         font-size: 1rem;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
+        z-index: 2;
     }
 
     .hm-modal-body {
-        padding: 20px;
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 18px 20px 0;
     }
 
     .hm-modal-nome {
-        font-size: 1.1rem;
+        font-size: 1.08rem;
         font-weight: 800;
         color: var(--text);
-        margin-bottom: 4px;
+        line-height: 1.3;
+        margin-bottom: 6px;
+        overflow-wrap: anywhere;
     }
 
     .hm-modal-preco {
-        font-size: 1rem;
-        font-weight: 700;
+        font-size: 1.15rem;
+        font-weight: 800;
         color: var(--primary-dark);
         margin-bottom: 16px;
     }
@@ -622,7 +673,7 @@
         }
 
     .hm-modal-obs-label {
-        font-size: 0.78rem;
+        font-size: 0.76rem;
         font-weight: 700;
         color: var(--muted);
         text-transform: uppercase;
@@ -635,13 +686,13 @@
         padding: 11px 14px;
         border: 1.5px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 0.9rem;
+        font-size: 16px;
         font-family: inherit;
         color: var(--text);
         resize: none;
         outline: none;
         transition: border-color .15s;
-        margin-bottom: 18px;
+        margin-bottom: 4px;
     }
 
         .hm-modal-obs:focus {
@@ -649,12 +700,126 @@
             box-shadow: 0 0 0 3px rgba(37,99,235,.1);
         }
 
+    /* Rodape fixo no fim do modal: quantidade + adicionar sempre visiveis */
     .hm-modal-footer {
+        position: sticky;
+        bottom: 0;
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 10px;
+        background: var(--white);
+        margin: 0 -20px;
+        padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+        border-top: 1px solid var(--border);
+        margin-top: 12px;
     }
 
+    /* Avisos de estoque no modal */
+    .hm-estoque-aviso {
+        border-radius: var(--radius-sm);
+        padding: 11px 14px;
+        font-size: 0.86rem;
+        font-weight: 600;
+        line-height: 1.4;
+        margin-top: 12px;
+    }
+
+        .hm-estoque-aviso.indisponivel {
+            background: var(--red-light);
+            color: var(--red);
+            border: 1px solid #fecaca;
+        }
+
+        .hm-estoque-aviso.limite {
+            background: #fffbeb;
+            color: #b45309;
+            border: 1px solid #fde68a;
+        }
+
+    .hm-btn-add-confirm:disabled {
+        background: #cbd5e1;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .hm-qty-ctrl {
+        display: flex;
+        align-items: center;
+        border: 1.5px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .hm-qty-btn {
+        width: 42px;
+        height: 48px;
+        border: none;
+        background: var(--white);
+        color: var(--primary);
+        font-size: 1.3rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .hm-qty-btn:active {
+            background: var(--primary-light);
+        }
+
+        .hm-qty-btn:disabled {
+            color: var(--border);
+            cursor: default;
+        }
+
+    .hm-qty-num {
+        width: 58px;
+        min-width: 58px;
+        text-align: center;
+        font-size: 16px;
+        font-weight: 800;
+        color: var(--text);
+        border-left: 1.5px solid var(--border);
+        border-right: 1.5px solid var(--border);
+        border-top: none;
+        border-bottom: none;
+        height: 48px;
+        outline: none;
+        border-radius: 0;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    .hm-btn-add-confirm {
+        flex: 1;
+        min-width: 0;
+        height: 48px;
+        padding: 0 12px;
+        background: var(--green);
+        color: #fff;
+        border: none;
+        border-radius: var(--radius-sm);
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: background .12s, transform .1s;
+    }
+
+        .hm-btn-add-confirm:active {
+            transform: scale(.98);
+            background: #15803d;
+        }
+
+    /* MODAL MEUS PEDIDOS */
     .hm-orders-modal {
         background: var(--white);
         width: 100%;
@@ -681,10 +846,11 @@
 
     .hm-orders-input {
         width: 100%;
-        padding: 13px 14px;
+        height: 48px;
+        padding: 0 14px;
         border: 1.5px solid var(--border);
         border-radius: var(--radius-sm);
-        font-size: 1rem;
+        font-size: 16px;
         font-weight: 700;
         color: var(--text);
         outline: none;
@@ -710,7 +876,7 @@
 
     .hm-orders-secondary,
     .hm-orders-primary {
-        height: 44px;
+        height: 48px;
         border-radius: var(--radius-sm);
         border: none;
         font-size: 0.92rem;
@@ -732,87 +898,11 @@
         box-shadow: 0 2px 8px rgba(37,99,235,.25);
     }
 
-    .hm-qty-ctrl {
-        display: flex;
-        align-items: center;
-        border: 1.5px solid var(--border);
-        border-radius: var(--radius-sm);
-        overflow: hidden;
-        flex-shrink: 0;
-    }
-
-    .hm-qty-btn {
-        width: 38px;
-        height: 42px;
-        border: none;
-        background: var(--white);
-        color: var(--primary);
-        font-size: 1.2rem;
-        font-weight: 700;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background .12s;
-    }
-
-        .hm-qty-btn:hover {
-            background: var(--primary-light);
-        }
-
-        .hm-qty-btn:disabled {
-            color: var(--border);
-            cursor: default;
-        }
-
-    .hm-qty-num {
-        width: 76px;
-        min-width: 76px;
-        text-align: center;
-        font-size: 1rem;
-        font-weight: 800;
-        color: var(--text);
-        border-left: 1.5px solid var(--border);
-        border-right: 1.5px solid var(--border);
-        border-top: none;
-        border-bottom: none;
-        height: 42px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        outline: none;
-    }
-
-    .hm-btn-add-confirm {
-        flex: 1;
-        padding: 13px;
-        background: var(--green);
-        color: #fff;
-        border: none;
-        border-radius: var(--radius-sm);
-        font-size: 0.95rem;
-        font-weight: 700;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        transition: background .12s, transform .1s;
-    }
-
-        .hm-btn-add-confirm:hover {
-            background: #15803d;
-        }
-
-        .hm-btn-add-confirm:active {
-            transform: scale(.98);
-        }
-
     /* MODAL SECOES */
     .hm-secoes-modal {
         background: var(--white);
         width: 100%;
-        max-width: 500px;
+        max-width: 520px;
         border-radius: var(--radius-lg) var(--radius-lg) 0 0;
         padding: 20px 20px env(safe-area-inset-bottom);
         max-height: 75vh;
@@ -843,7 +933,7 @@
         }
 
     .hm-secao-item {
-        padding: 13px 14px;
+        padding: 14px;
         border-radius: var(--radius-sm);
         cursor: pointer;
         font-size: 0.92rem;
@@ -852,12 +942,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        transition: background .12s;
     }
-
-        .hm-secao-item:hover {
-            background: var(--bg);
-        }
 
         .hm-secao-item.ativo {
             background: var(--primary-light);
@@ -865,18 +950,11 @@
         }
 
             .hm-secao-item.ativo::after {
-                content: 'check';
-                font-size: 0.8rem;
+                content: '✓';
+                font-size: 0.9rem;
             }
 
-    /* SKELETON */
-    .hm-skeleton-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
-        gap: 12px;
-        padding: 0 16px;
-    }
-
+    /* ===== SKELETON ===== */
     .hm-skeleton-card {
         background: var(--white);
         border-radius: var(--radius);
@@ -886,20 +964,21 @@
 
     .hm-skeleton-img {
         width: 100%;
-        padding-top: 70%;
-        background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+        height: 0;
+        padding-top: 100%;
+        background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
         background-size: 200% 100%;
         animation: shimmer 1.4s infinite;
     }
 
     .hm-skeleton-body {
-        padding: 10px;
+        padding: 11px;
     }
 
     .hm-skeleton-line {
         height: 12px;
         border-radius: 6px;
-        background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+        background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
         background-size: 200% 100%;
         animation: shimmer 1.4s infinite;
         margin-bottom: 8px;
@@ -915,24 +994,24 @@
         }
     }
 
-    /* TOAST */
+    /* ===== TOAST ===== */
     .hm-toast {
         position: fixed;
-        bottom: 90px;
+        bottom: calc(92px + env(safe-area-inset-bottom));
         left: 50%;
         transform: translateX(-50%);
+        max-width: calc(100vw - 32px);
         background: #1e293b;
         color: #fff;
-        padding: 10px 20px;
+        padding: 11px 20px;
         border-radius: 30px;
         font-size: 0.85rem;
         font-weight: 600;
         z-index: 300;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
         animation: toastAnim 2.2s ease forwards;
-        display: flex;
-        align-items: center;
-        gap: 8px;
     }
 
     @@keyframes toastAnim {
@@ -955,13 +1034,156 @@
         }
     }
 
-    @@media (max-width: 400px) {
-        .hm-grid {
-            grid-template-columns: repeat(2, 1fr);
+    /* ===== EFEITOS DE HOVER SO EM QUEM TEM MOUSE ===== */
+    @@media (hover: hover) {
+        .hm-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
         }
 
+        .hm-card-add:hover {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .hm-secao-btn:not(.ativo):hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .hm-btn-orders:hover {
+            background: #fff;
+        }
+
+        .hm-promo-banner:hover {
+            box-shadow: 0 6px 20px rgba(124,58,237,.35);
+        }
+
+        .hm-cart-btn:hover {
+            background: #e0e7ff;
+        }
+
+        .hm-secao-item:not(.ativo):hover {
+            background: var(--bg);
+        }
+
+        .hm-qty-btn:not(:disabled):hover {
+            background: var(--primary-light);
+        }
+
+        .hm-btn-add-confirm:hover {
+            background: #15803d;
+        }
+
+        .hm-secoes {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+
+            .hm-secoes::-webkit-scrollbar {
+                display: block;
+                height: 4px;
+            }
+
+            .hm-secoes::-webkit-scrollbar-thumb {
+                background: #cbd5e1;
+                border-radius: 4px;
+            }
+    }
+
+    /* ===== CELULAR PEQUENO ===== */
+    @@media (max-width: 360px) {
+        .hm-grid,
         .hm-skeleton-grid {
-            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            padding: 0 8px;
+        }
+
+        .hm-card-body {
+            padding: 9px 9px 0;
+        }
+
+        .hm-card-add {
+            margin: 9px;
+        }
+
+        .hm-qty-btn {
+            width: 38px;
+        }
+
+        .hm-qty-num {
+            width: 48px;
+            min-width: 48px;
+        }
+
+        .hm-btn-add-confirm {
+            font-size: 0.88rem;
+        }
+    }
+
+    /* ===== TABLET ===== */
+    @@media (min-width: 600px) {
+        .hm-header {
+            padding: 20px 24px 48px;
+        }
+
+        .hm-secoes,
+        .hm-section-label {
+            padding-left: 20px;
+            padding-right: 20px;
+        }
+
+        .hm-promo-banner {
+            margin-left: 20px;
+            margin-right: 20px;
+        }
+
+        .hm-grid,
+        .hm-skeleton-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            padding: 0 20px;
+        }
+
+        .hm-card-nome {
+            font-size: 0.88rem;
+        }
+
+        /* Modais centralizados em telas maiores */
+        .hm-overlay {
+            align-items: center;
+            padding: 20px;
+        }
+
+        .hm-modal,
+        .hm-orders-modal,
+        .hm-secoes-modal {
+            border-radius: var(--radius-lg);
+            max-height: 88vh;
+        }
+
+        .hm-modal-handle {
+            display: none;
+        }
+
+        .hm-modal-footer {
+            padding-bottom: 16px;
+        }
+    }
+
+    /* ===== DESKTOP ===== */
+    @@media (min-width: 900px) {
+        .hm-grid,
+        .hm-skeleton-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+        }
+    }
+
+    @@media (min-width: 1080px) {
+        .hm-grid,
+        .hm-skeleton-grid {
+            grid-template-columns: repeat(5, minmax(0, 1fr));
         }
     }
 </style>
@@ -991,6 +1213,17 @@
 
 <!-- CONTEÚDO -->
 <div class="hm-wrap">
+
+    @if (lojaFechada)
+    {
+        <div class="hm-fechada">
+            <div class="hm-fechada-icone">🔒</div>
+            <div>
+                <div class="hm-fechada-titulo">Loja fechada no momento</div>
+                <div class="hm-fechada-texto">@(string.IsNullOrWhiteSpace(mensagemLojaFechada) ? "Não estamos recebendo pedidos agora." : mensagemLojaFechada)</div>
+            </div>
+        </div>
+    }
 
     <!-- Seções -->
     <div class="hm-secoes">
@@ -1085,8 +1318,11 @@
                 <div class="hm-card" @onclick="() => AbrirModal(p)">
                     <div class="hm-card-img-wrap">
                         <img class="hm-card-img"
-                             src="@(string.IsNullOrEmpty(p.ImagemBase64) ? semImagem : p.ImagemBase64)"
-                             alt="@p.Nome" />
+                             src="@ImagemUrl(p.Codigo)"
+                             onerror="this.onerror=null;this.style.visibility='hidden'"
+                             alt="@p.Nome"
+                             loading="lazy"
+                             decoding="async" />
                         @if (temPromo)
                         {
                             <div class="hm-promo-badge">Oferta</div>
@@ -1094,15 +1330,17 @@
                     </div>
                     <div class="hm-card-body">
                         <div class="hm-card-nome">@p.Nome</div>
-                        @if (temPromo)
-                        {
-                            <div class="hm-card-preco-antigo">@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</div>
-                            <div class="hm-card-preco promo">@p.PrecoPromocao.ToString("C", new CultureInfo("pt-BR"))</div>
-                        }
-                        else
-                        {
-                            <div class="hm-card-preco">@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</div>
-                        }
+                        <div class="hm-card-precos">
+                            @if (temPromo)
+                            {
+                                <div class="hm-card-preco-antigo">@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</div>
+                                <div class="hm-card-preco promo">@p.PrecoPromocao.ToString("C", new CultureInfo("pt-BR"))</div>
+                            }
+                            else
+                            {
+                                <div class="hm-card-preco">@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</div>
+                            }
+                        </div>
                     </div>
                     <button class="hm-card-add" @onclick:stopPropagation @onclick="() => AbrirModal(p)">
                         + Adicionar
@@ -1136,11 +1374,12 @@
     <div class="hm-overlay" @onclick="FecharModal">
         <div class="hm-modal" @onclick:stopPropagation>
             <div class="hm-modal-img-wrap">
+                <div class="hm-modal-handle"></div>
                 <img class="hm-modal-img"
-                     src="@(string.IsNullOrEmpty(produtoSelecionado.ImagemBase64) ? semImagem : produtoSelecionado.ImagemBase64)"
+                     src="@ImagemUrl(produtoSelecionado.Codigo)"
+                     onerror="this.onerror=null;this.style.visibility='hidden'"
                      alt="@produtoSelecionado.Nome" />
-                <div class="hm-modal-img-gradient"></div>
-                <button class="hm-modal-close" @onclick="FecharModal">✕</button>
+                <button class="hm-modal-close" @onclick="FecharModal" aria-label="Fechar">✕</button>
             </div>
             <div class="hm-modal-body">
                 <div class="hm-modal-nome">@produtoSelecionado.Nome</div>
@@ -1161,8 +1400,41 @@
                 }
                 <div class="hm-modal-obs-label">Observação</div>
                 <textarea class="hm-modal-obs" rows="2"
+                          maxlength="200"
                           placeholder="Ex: sem cebola, bem passado..."
                           @bind="observacaoSelecionada"></textarea>
+
+                @if (lojaFechada)
+                {
+                    <div class="hm-estoque-aviso indisponivel">
+                        A loja está fechada no momento e não está recebendo pedidos.
+                    </div>
+                }
+                else if (ProdutoIndisponivel)
+                {
+                    <div class="hm-estoque-aviso indisponivel">
+                        Produto indisponível no estoque no momento.
+                    </div>
+                }
+                else if (ExcedeEstoque)
+                {
+                    <div class="hm-estoque-aviso limite">@MensagemLimiteEstoque</div>
+                }
+
+                @if (lojaFechada)
+                {
+                    <div class="hm-modal-footer">
+                        <button class="hm-btn-add-confirm" disabled>Loja fechada</button>
+                    </div>
+                }
+                else if (ProdutoIndisponivel)
+                {
+                    <div class="hm-modal-footer">
+                        <button class="hm-btn-add-confirm" disabled>Indisponível</button>
+                    </div>
+                }
+                else
+                {
                 <div class="hm-modal-footer">
                     <div class="hm-qty-ctrl">
                         <button class="hm-qty-btn" @onclick="DiminuirQtd" disabled="@(quantidadeSelecionada <= QuantidadeMinima)">−</button>
@@ -1189,10 +1461,11 @@
                         }
                         <button class="hm-qty-btn" @onclick="AumentarQtd">+</button>
                     </div>
-                    <button class="hm-btn-add-confirm" @onclick="ConfirmarAdicionar">
+                    <button class="hm-btn-add-confirm" @onclick="ConfirmarAdicionar" disabled="@(ExcedeEstoque || verificandoEstoque)">
                         Adicionar · @totalModal.ToString("C", new CultureInfo("pt-BR"))
                     </button>
                 </div>
+                }
             </div>
         </div>
     </div>
@@ -1263,7 +1536,8 @@
 }
 
 @code {
-    private const string semImagem = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='140' viewBox='0 0 200 140'%3E%3Crect width='200' height='140' fill='%23f1f5f9'/%3E%3C/svg%3E";
+    // Imagem servida por HTTP (endpoint /img/{slug}/{codigo} no Program.cs), com cache do navegador
+    private string ImagemUrl(int codigo) => $"img/{Uri.EscapeDataString(slug ?? "")}/{codigo}";
     private string _slugCarregado = "";
     [Parameter] public string slug { get; set; } = string.Empty;
 
@@ -1283,6 +1557,81 @@
     private int totalPromocoes = 0;
 
     private bool mostrarModal = false;
+
+    // ===== LOJA ABERTA / FECHADA (painel admin) =====
+    private int codEmpLoja = 0;
+    private bool lojaFechada = false;
+    private string mensagemLojaFechada = "";
+
+    private async Task AtualizarStatusLojaAsync()
+    {
+        try
+        {
+            var status = await lojaStatusService.ObterAsync(codEmpLoja);
+            lojaFechada = status.Fechada;
+            mensagemLojaFechada = status.Mensagem;
+        }
+        catch (Exception ex)
+        {
+            // Se não der para consultar, mantém o último status conhecido
+            Logger.LogWarning(ex, "Não foi possível consultar o status da loja {CodEmp}", codEmpLoja);
+        }
+    }
+
+    // ===== ESTOQUE (ProdutoAFV.EstoqueAtual) =====
+    // O cliente não vê a quantidade o tempo todo: só é avisado quando o produto
+    // está sem estoque ou quando pede mais do que existe.
+    private decimal? estoqueModal;          // estoque vendável do produto aberto (null = sem controle)
+    private bool verificandoEstoque = false;
+
+    private decimal QuantidadeNoCarrinho(int codigo) =>
+        carrinho.Where(i => i.Codigo == codigo).Sum(i => i.Quantidade);
+
+    // Quanto ainda pode ser adicionado (estoque - o que já está no carrinho)
+    private decimal? DisponivelParaAdicionar =>
+        estoqueModal == null || produtoSelecionado == null
+            ? null
+            : Math.Max(0, estoqueModal.Value - QuantidadeNoCarrinho(produtoSelecionado.Codigo));
+
+    private bool ProdutoIndisponivel => estoqueModal != null && estoqueModal <= 0;
+
+    private bool ExcedeEstoque => DisponivelParaAdicionar != null && quantidadeSelecionada > DisponivelParaAdicionar;
+
+    private string MensagemLimiteEstoque
+    {
+        get
+        {
+            if (estoqueModal == null || produtoSelecionado == null) return "";
+
+            var total = CarrinhoService.FormatarQuantidade(estoqueModal.Value);
+            var noCarrinho = QuantidadeNoCarrinho(produtoSelecionado.Codigo);
+
+            if (noCarrinho <= 0)
+                return $"Este produto tem apenas {total} em estoque.";
+
+            var podeAdicionar = DisponivelParaAdicionar ?? 0;
+            return podeAdicionar > 0
+                ? $"Este produto tem apenas {total} em estoque e você já tem {CarrinhoService.FormatarQuantidade(noCarrinho)} no carrinho. Você pode adicionar mais {CarrinhoService.FormatarQuantidade(podeAdicionar)}."
+                : $"Este produto tem apenas {total} em estoque e todos já estão no seu carrinho.";
+        }
+    }
+
+    private async Task AtualizarEstoqueModalAsync()
+    {
+        if (produtoSelecionado == null) return;
+
+        try
+        {
+            var estoque = await produtoService.BuscarEstoqueAsync(produtoSelecionado.Codigo, cnpj);
+            produtoSelecionado.EstoqueAtual = estoque;
+            estoqueModal = CarrinhoService.EstoqueVendavel(estoque, produtoSelecionado.PermiteDecimal);
+        }
+        catch (Exception ex)
+        {
+            // Se a consulta falhar, fica com o estoque carregado junto com a vitrine
+            Logger.LogWarning(ex, "Não foi possível atualizar o estoque do produto {Codigo}", produtoSelecionado.Codigo);
+        }
+    }
     private bool mostrarSeletorSecoes = false;
     private Produto? produtoSelecionado;
     private decimal quantidadeSelecionada = 1;
@@ -1297,7 +1646,9 @@
     private string erroTelefonePedidos = "";
 
     private decimal TotalItensCarrinho => carrinho.Sum(i => i.Quantidade);
-    private decimal TotalCarrinho => carrinho.Sum(i => i.Preco * i.Quantidade);
+    // O carrinho salvo no navegador não tem preço: o total usa o preço atual dos produtos carregados
+    private Dictionary<int, decimal> precoPorCodigo = new();
+    private decimal TotalCarrinho => carrinho.Sum(i => (precoPorCodigo.TryGetValue(i.Codigo, out var preco) ? preco : 0) * i.Quantidade);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -1308,8 +1659,6 @@
 
         try
         {
-            Console.WriteLine($"[HOME] Iniciando carregamento slug={slug}");
-
             if (string.IsNullOrWhiteSpace(slug))
             {
                 nomeEmpresa = "Empresa não encontrada";
@@ -1317,9 +1666,7 @@
                 return;
             }
 
-            Console.WriteLine($"[HOME] Buscando empresa...");
             var empresa = await empresaService.BuscarPorSlugAsync(slug);
-            Console.WriteLine($"[HOME] Empresa: {empresa?.Fantasia ?? "null"}");
 
             if (empresa == null)
             {
@@ -1330,47 +1677,27 @@
 
             cnpj = empresa.CNPJ;
             nomeEmpresa = empresa.Fantasia;
+            codEmpLoja = empresa.Codigo;
 
-            Console.WriteLine($"[HOME] Buscando seções...");
+            await AtualizarStatusLojaAsync();
+
             secoes = await Task.Run(() => produtoService.BuscarSecoes(cnpj));
-            Console.WriteLine($"[HOME] Seções: {secoes.Count}");
-
-            Console.WriteLine($"[HOME] Buscando produtos...");
             produtos = await Task.Run(() => produtoService.BuscarProdutos("", cnpj));
-            Console.WriteLine($"[HOME] Produtos: {produtos.Count}");
+
+            precoPorCodigo = produtos
+                .GroupBy(p => p.Codigo)
+                .ToDictionary(g => g.Key, g => CarrinhoService.PrecoAtual(g.First()));
 
             totalPromocoes = produtos.Count(p => p.PrecoPromocao > 0 && p.PrecoPromocao < p.PrecoVenda);
             produtosFiltrados = produtos;
 
             carregando = false;
-            StateHasChanged();
-
-            // Busca imagens em background
-            _ = CarregarImagensBackground();
-
-            Console.WriteLine($"[HOME] Carregamento concluído.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[HOME] ERRO: {ex}");
+            Logger.LogError(ex, "Erro ao carregar a loja {Slug}", slug);
             nomeEmpresa = "Erro ao carregar";
             carregando = false;
-        }
-        finally
-        {
-        }
-    }
-
-    private async Task CarregarImagensBackground()
-    {
-        foreach (var p in produtos)
-        {
-            if (string.IsNullOrEmpty(p.ImagemBase64))
-            {
-                p.ImagemBase64 = await Task.Run(() =>
-                    produtoService.BuscarImagemBase64(p.Codigo, cnpj));
-                await InvokeAsync(StateHasChanged);
-            }
         }
     }
 
@@ -1380,31 +1707,33 @@
 
         try
         {
-            var salvo = await storage.GetAsync<List<ItemCarrinho>>($"carrinho_{slug}");
-            if (salvo != null)
-            {
-                carrinho = salvo;
+            carrinho = await storage.ObterCarrinhoAsync(slug);
+            if (carrinho.Any())
                 StateHasChanged();
-            }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Não foi possível ler o carrinho do navegador");
+        }
     }
 
-    private async Task SelecionarSecao(int codigo, string descricao)
+    // Filtra em memória: os produtos já foram carregados, não precisa ir ao banco de novo
+    private List<Produto> ProdutosDaSecao(int codigo) =>
+        codigo == 0 ? produtos : produtos.Where(p => p.CodSecao == codigo).ToList();
+
+    private void SelecionarSecao(int codigo, string descricao)
     {
         secaoSelecionadaCodigo = codigo;
         secaoAtualNome = codigo == 0 ? "Todos os produtos" : descricao;
         mostrandoPromocoes = false;
         filtro = "";
 
-        produtosFiltrados = codigo == 0
-            ? produtos
-            : await Task.Run(() => produtoService.BuscarProdutosPorSecao(codigo, cnpj));
+        produtosFiltrados = ProdutosDaSecao(codigo);
     }
 
-    private async Task SelecionarSecaoModal(int codigo, string descricao)
+    private void SelecionarSecaoModal(int codigo, string descricao)
     {
-        await SelecionarSecao(codigo, descricao);
+        SelecionarSecao(codigo, descricao);
         mostrarSeletorSecoes = false;
     }
 
@@ -1424,9 +1753,7 @@
         mostrandoPromocoes = false;
 
         produtosFiltrados = string.IsNullOrWhiteSpace(filtro)
-            ? (secaoSelecionadaCodigo == 0
-                ? produtos
-                : produtoService.BuscarProdutosPorSecao(secaoSelecionadaCodigo, cnpj))
+            ? ProdutosDaSecao(secaoSelecionadaCodigo)
             : produtos.Where(p => p.Nome.Contains(filtro, StringComparison.OrdinalIgnoreCase)).ToList();
     }
 
@@ -1595,9 +1922,20 @@
 
         NormalizarQuantidadeDigitada();
 
-        decimal preco = produtoSelecionado.PrecoPromocao > 0 && produtoSelecionado.PrecoPromocao < produtoSelecionado.PrecoVenda
-            ? produtoSelecionado.PrecoPromocao
-            : produtoSelecionado.PrecoVenda;
+        // Confere de novo no banco se a loja continua aberta e o estoque (podem ter mudado)
+        verificandoEstoque = true;
+        await AtualizarStatusLojaAsync();
+        await AtualizarEstoqueModalAsync();
+        verificandoEstoque = false;
+
+        if (lojaFechada || ProdutoIndisponivel || ExcedeEstoque)
+            return; // o aviso aparece no modal e o botão fica desativado
+
+        decimal preco = CarrinhoService.PrecoAtual(produtoSelecionado);
+
+        observacaoSelecionada = (observacaoSelecionada ?? "").Trim();
+        if (observacaoSelecionada.Length > 200)
+            observacaoSelecionada = observacaoSelecionada[..200];
 
         var existente = carrinho.FirstOrDefault(i =>
             i.Codigo == produtoSelecionado.Codigo &&
@@ -1617,7 +1955,7 @@
                 PermiteDecimal = produtoSelecionado.PermiteDecimal ?? "N"
             });
 
-        await storage.SaveAsync($"carrinho_{slug}", carrinho);
+        await storage.SalvarCarrinhoAsync(slug, carrinho);
 
         var nomeCurto = produtoSelecionado.Nome.Length > 22
             ? produtoSelecionado.Nome[..22] + "…"
@@ -1674,15 +2012,15 @@
         quantidadeSelecionada = 1;
         quantidadeDigitada = "1";
         observacaoSelecionada = "";
-        mostrarModal = true;
 
-        // Busca imagem só agora, se ainda não foi carregada
-        if (string.IsNullOrEmpty(p.ImagemBase64))
-        {
-            p.ImagemBase64 = await Task.Run(() =>
-                produtoService.BuscarImagemBase64(p.Codigo, cnpj));
-            StateHasChanged();
-        }
+        // Mostra já com o estoque carregado na vitrine e confirma no banco na hora
+        estoqueModal = CarrinhoService.EstoqueVendavel(p.EstoqueAtual, p.PermiteDecimal);
+        verificandoEstoque = true;
+        mostrarModal = true;
+        StateHasChanged();
+
+        await AtualizarEstoqueModalAsync();
+        verificandoEstoque = false;
     }
 
     private async Task ExibirToast(string msg)

@@ -1,6 +1,9 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Routing
 @implements IDisposable
+@using EvolutDelivery.Services
+@inject EmpresaService EmpresaService
+@using Microsoft.AspNetCore.Components.Authorization
 
 <style>
     * {
@@ -234,13 +237,7 @@
         <div class="menu-section">
             <div class="menu-title">📊 Dashboard</div>
             
-            <NavLink href="/admin-pedidos" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">📦</span>
-                <span>Pedidos</span>
-                <span class="badge">5</span>
-            </NavLink>
-
-            <NavLink href="/admin-dashboard" class="menu-item" Match="NavLinkMatch.All">
+            <NavLink href="admin-dashboard" class="menu-item" Match="NavLinkMatch.All">
                 <span class="icon">📈</span>
                 <span>Dashboard</span>
             </NavLink>
@@ -250,74 +247,24 @@
         <div class="menu-section">
             <div class="menu-title">⚙️ Gestão</div>
 
-            <NavLink href="/admin-produtos" class="menu-item" Match="NavLinkMatch.All">
+            <NavLink href="admin-produtos" class="menu-item" Match="NavLinkMatch.All">
                 <span class="icon">🍔</span>
                 <span>Produtos</span>
             </NavLink>
 
-            <NavLink href="/admin-categorias" class="menu-item" Match="NavLinkMatch.All">
+            <NavLink href="admin-categorias" class="menu-item" Match="NavLinkMatch.All">
                 <span class="icon">📂</span>
                 <span>Categorias</span>
             </NavLink>
 
-            <NavLink href="/admin-entregadores" class="menu-item" Match="NavLinkMatch.All">
+            <NavLink href="admin-entregadores" class="menu-item" Match="NavLinkMatch.All">
                 <span class="icon">🚚</span>
                 <span>Entregadores</span>
             </NavLink>
 
-            <NavLink href="/admin-clientes" class="menu-item" Match="NavLinkMatch.All">
+            <NavLink href="admin-clientes" class="menu-item" Match="NavLinkMatch.All">
                 <span class="icon">👥</span>
                 <span>Clientes</span>
-            </NavLink>
-        </div>
-
-        <!-- MARKETING -->
-        <div class="menu-section">
-            <div class="menu-title">🎁 Marketing</div>
-
-            <NavLink href="/admin-promocoes" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">🏷️</span>
-                <span>Promoções</span>
-            </NavLink>
-
-            <NavLink href="/admin-cupons" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">🎫</span>
-                <span>Cupons</span>
-            </NavLink>
-        </div>
-
-        <!-- RELATÓRIOS -->
-        <div class="menu-section">
-            <div class="menu-title">📊 Relatórios</div>
-
-            <NavLink href="/admin-relatorios-vendas" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">💰</span>
-                <span>Vendas</span>
-            </NavLink>
-
-            <NavLink href="/admin-relatorios-produtos" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">📊</span>
-                <span>Produtos</span>
-            </NavLink>
-
-            <NavLink href="/admin-avaliacoes" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">⭐</span>
-                <span>Avaliações</span>
-            </NavLink>
-        </div>
-
-        <!-- CONFIGURAÇÕES -->
-        <div class="menu-section">
-            <div class="menu-title">🔧 Sistema</div>
-
-            <NavLink href="/admin-configuracoes" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">⚙️</span>
-                <span>Configurações</span>
-            </NavLink>
-
-            <NavLink href="/admin-usuarios" class="menu-item" Match="NavLinkMatch.All">
-                <span class="icon">👤</span>
-                <span>Usuários</span>
             </NavLink>
         </div>
 
@@ -330,12 +277,15 @@
             <h1>@CurrentPageTitle</h1>
 
             <div class="header-actions">
-                <button class="btn-header btn-site" @onclick='() => Nav.NavigateTo("/")'>
+                <button class="btn-header btn-site" @onclick="VerSite">
                     🏠 Ver Site
                 </button>
-                <button class="btn-header btn-logout">
-                    🚪 Sair
-                </button>
+                @* Formulário comum (POST) para o endpoint /auth/logout do Program.cs *@
+                <form method="post" action="auth/logout" style="margin:0;">
+                    <button type="submit" class="btn-header btn-logout">
+                        🚪 Sair
+                    </button>
+                </form>
             </div>
         </header>
 
@@ -349,6 +299,7 @@
 
 @code {
     [Inject] private NavigationManager Nav { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private string CurrentPageTitle { get; set; } = "Painel Administrativo";
 
@@ -366,22 +317,28 @@
 
     private void UpdateTitle()
     {
-        CurrentPageTitle = Nav.Uri.Contains("/admin-pedidos") ? "Gestão de Pedidos" :
-                          Nav.Uri.Contains("/admin-dashboard") ? "Dashboard" :
+        CurrentPageTitle = Nav.Uri.Contains("/admin-dashboard") ? "Dashboard" :
                           Nav.Uri.Contains("/admin-produtos") ? "Produtos" :
                           Nav.Uri.Contains("/admin-categorias") ? "Categorias" :
                           Nav.Uri.Contains("/admin-entregadores") ? "Entregadores" :
                           Nav.Uri.Contains("/admin-clientes") ? "Clientes" :
-                          Nav.Uri.Contains("/admin-promocoes") ? "Promoções" :
-                          Nav.Uri.Contains("/admin-cupons") ? "Cupons" :
-                          Nav.Uri.Contains("/admin-relatorios") ? "Relatórios" :
-                          Nav.Uri.Contains("/admin-configuracoes") ? "Configurações" :
-                          Nav.Uri.Contains("/admin-usuarios") ? "Usuários" :
                           "Painel Administrativo";
     }
 
     public void Dispose()
     {
         Nav.LocationChanged -= OnLocationChanged;
+    }
+
+    private async Task VerSite()
+    {
+        var user = (await AuthState).User;
+        var cnpj = user.FindFirst("CNPJ")?.Value ?? "";
+        int.TryParse(user.FindFirst("CodEmp")?.Value, out var codEmp);
+
+        if (codEmp <= 0 || string.IsNullOrWhiteSpace(cnpj)) return;
+
+        var slug = await EmpresaService.GarantirSlugAsync(codEmp, cnpj);
+        Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}");
     }
 }

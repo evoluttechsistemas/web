@@ -274,6 +274,9 @@ SELECT Codigo,
        CodCliente AS CodCRMC
 FROM Agenda
 WHERE {cond} CodEmp=@CodEmp AND UsuarioUltimaGravacao=@Usuario
+  -- o mestre de uma agenda repetitiva só guarda a regra, não é um dia
+  AND (AgendaPaiCodigo IS NOT NULL OR ISNULL(TipoRepeticao, '') IN ('', 'UmaVez'))
+  AND ISNULL(Status, '') <> 'EXCLUIDO'
 ORDER BY DataAgendamento, HoraAgendamento";
 
 
@@ -353,7 +356,7 @@ WHERE UsuarioCard = @Usuario
         const string sql = @"
         SELECT CodCRMC, COUNT(1) AS Qt
         FROM Agenda
-        WHERE Usuario=@u AND CodEmp=@CodEmp
+        WHERE Usuario=@u AND CodEmp=@CodEmp AND ISNULL(Status, '') <> 'EXCLUIDO'
         GROUP BY CodCRMC";
 
         using var cmd = new SqlCommand(sql, con);

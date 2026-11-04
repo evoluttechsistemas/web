@@ -16,7 +16,120 @@
         <Routes @rendermode="InteractiveServer" />
     </CascadingAuthenticationState>
 
-    <script src="_framework/blazor.web.js"></script>
+    @* ===== TELA "ATUALIZANDO" =====
+       Quando o servidor reinicia (deploy) ou a conexão cai, o Blazor mostra este aviso
+       no lugar da mensagem padrão em inglês. Assim que o site volta, a página recarrega sozinha.
+       O carrinho fica no navegador (localStorage), então não se perde. *@
+    <div id="components-reconnect-modal" aria-live="polite">
+        <div class="rc-box">
+            <div class="rc-spinner"></div>
+            <div class="rc-titulo">Atualizando a loja</div>
+            <div class="rc-texto">Aguarde, a página volta sozinha em instantes.<br />Seu carrinho continua salvo.</div>
+        </div>
+    </div>
+
+    <style>
+        #components-reconnect-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(241, 245, 249, .96);
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            font-family: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+            color: #0f172a;
+            text-align: center;
+        }
+
+            #components-reconnect-modal.components-reconnect-show,
+            #components-reconnect-modal.components-reconnect-failed,
+            #components-reconnect-modal.components-reconnect-rejected {
+                display: flex;
+            }
+
+        #components-reconnect-modal .rc-box {
+            background: #fff;
+            border-radius: 20px;
+            padding: 28px 24px;
+            max-width: 340px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, .12);
+        }
+
+        #components-reconnect-modal .rc-spinner {
+            width: 42px;
+            height: 42px;
+            margin: 0 auto 14px;
+            border: 4px solid #dbeafe;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: rc-gira .8s linear infinite;
+        }
+
+        #components-reconnect-modal .rc-titulo {
+            font-size: 1.1rem;
+            font-weight: 800;
+            margin-bottom: 6px;
+        }
+
+        #components-reconnect-modal .rc-texto {
+            font-size: .9rem;
+            color: #64748b;
+            line-height: 1.5;
+        }
+
+        @@keyframes rc-gira {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script>
+        (function () {
+            // Tenta reconectar a cada 3 s (o padrão do .NET 8 é 20 s), por até 90 s
+            Blazor.start({
+                circuit: {
+                    reconnectionOptions: { maxRetries: 30, retryIntervalMilliseconds: 3000 }
+                }
+            });
+
+            var modal = document.getElementById('components-reconnect-modal');
+            var aguardando = false;
+
+            // Recarrega só quando o site responder 200 de novo
+            // (durante o deploy o IIS devolve 503 com a página app_offline)
+            function recarregarQuandoVoltar() {
+                if (aguardando) return;
+                aguardando = true;
+
+                function tentar() {
+                    fetch(location.href, { cache: 'no-store', credentials: 'same-origin' })
+                        .then(function (r) {
+                            if (r.ok) { location.reload(); }
+                            else { setTimeout(tentar, 3000); }
+                        })
+                        .catch(function () { setTimeout(tentar, 3000); });
+                }
+
+                tentar();
+            }
+
+            // O Blazor marca o modal com estas classes:
+            //  - rejected: o servidor reiniciou (deploy) e a sessão antiga não existe mais
+            //  - failed:   esgotou as tentativas de reconexão
+            // Nos dois casos, a página é recarregada assim que o site estiver no ar.
+            new MutationObserver(function () {
+                if (modal.classList.contains('components-reconnect-rejected') ||
+                    modal.classList.contains('components-reconnect-failed')) {
+                    recarregarQuandoVoltar();
+                }
+            }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+        })();
+    </script>
 </body>
 
 </html>

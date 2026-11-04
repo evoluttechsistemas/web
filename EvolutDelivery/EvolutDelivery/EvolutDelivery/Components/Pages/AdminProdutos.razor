@@ -1,8 +1,13 @@
 @page "/admin-produtos"
 @rendermode InteractiveServer
 @layout AdminLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using EvolutDelivery.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@inject ILogger<AdminProdutos> Logger
 @inject ProdutoService ProdutoService
 @inject IJSRuntime JS
 
@@ -148,13 +153,27 @@
     <input type="text" placeholder="🔍 Buscar produto..." @bind="filtro" @bind:after="Filtrar" />
     <select @bind="filtroCategoria" @bind:after="Filtrar">
         <option value="">Todas as Categorias</option>
-        <option value="1">Lanches</option>
-        <option value="2">Bebidas</option>
-        <option value="3">Sobremesas</option>
+        @foreach (var s in secoes)
+        {
+            <option value="@s.Codigo">@s.Descricao</option>
+        }
     </select>
 </div>
 
-@if (!produtos.Any())
+@if (!string.IsNullOrWhiteSpace(mensagemErro))
+{
+    <div style="background:#fef2f2; color:#dc2626; padding:16px; border-radius:12px; margin-bottom:16px; font-weight:600;">
+        @mensagemErro
+    </div>
+}
+
+@if (carregando)
+{
+    <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
+        Carregando produtos...
+    </div>
+}
+else if (!produtos.Any())
 {
     <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
         📦 Nenhum produto cadastrado ainda.
@@ -180,13 +199,37 @@ else
                 {
                     <tr>
                         <td>
-                            <img src="@(produto.ImagemBase64 ?? "/imagens/sem-imagem.png")" 
+                            <img src="@(string.IsNullOrEmpty(produto.ImagemBase64) ? semImagem : produto.ImagemBase64)"
                                  class="produto-img" alt="@produto.Nome" />
                         </td>
                         <td><strong>@produto.Nome</strong></td>
-                        <td>Categoria</td>
-                        <td class="preco">R$ @produto.PrecoVenda.ToString("F2")</td>
-                        <td>Em estoque</td>
+                        <td>@(string.IsNullOrWhiteSpace(produto.NomeSecao) ? "-" : produto.NomeSecao)</td>
+                        <td class="preco">
+                            @if (produto.PrecoPromocao > 0 && produto.PrecoPromocao < produto.PrecoVenda)
+                            {
+                                <span style="text-decoration:line-through;color:#94a3b8;font-weight:400;font-size:.85em;">R$ @produto.PrecoVenda.ToString("F2")</span>
+                                <br />
+                                <span style="color:#dc2626;">R$ @produto.PrecoPromocao.ToString("F2")</span>
+                            }
+                            else
+                            {
+                                <text>R$ @produto.PrecoVenda.ToString("F2")</text>
+                            }
+                        </td>
+                        <td>
+                            @if (produto.EstoqueAtual == null)
+                            {
+                                <span style="color:#94a3b8;" title="O ERP ainda não informa estoque para este produto: vende sem controle">Sem controle</span>
+                            }
+                            else if (produto.EstoqueAtual <= 0)
+                            {
+                                <span style="color:#dc2626;font-weight:700;">0 (indisponível)</span>
+                            }
+                            else
+                            {
+                                @produto.EstoqueAtual.Value.ToString("0.###")
+                            }
+                        </td>
                         <td>
                             <span class="badge-status ativo">Ativo</span>
                         </td>
@@ -205,29 +248,52 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private const string semImagem = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Crect width='60' height='60' fill='%23f1f5f9'/%3E%3C/svg%3E";
+
     private List<Produto> produtos = new();
     private List<Produto> produtosFiltrados = new();
+    private List<SecaoModel> secoes = new();
     private string filtro = "";
     private string filtroCategoria = "";
+    private string mensagemErro = "";
+    private bool carregando = true;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         try
         {
-            produtos = ProdutoService.BuscarProdutos("%", "39.397.657/0001-70");
+            var user = (await AuthState).User;
+            if (!EmpresaLogadaHelper.TryObter(user, out _, out var cnpj))
+            {
+                mensagemErro = "Sessão inválida. Saia e faça login novamente.";
+                return;
+            }
+
+            produtos = await Task.Run(() => ProdutoService.BuscarProdutos("", cnpj));
+            secoes = await Task.Run(() => ProdutoService.BuscarSecoes(cnpj));
             produtosFiltrados = produtos;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Erro ao carregar produtos: {ex.Message}");
+            mensagemErro = "Erro ao carregar produtos.";
+            Logger.LogError(ex, "Erro ao carregar produtos do admin");
+        }
+        finally
+        {
+            carregando = false;
         }
     }
 
     private void Filtrar()
     {
+        int.TryParse(filtroCategoria, out var codSecao);
+
         produtosFiltrados = produtos
-            .Where(p => string.IsNullOrEmpty(filtro) || 
+            .Where(p => string.IsNullOrEmpty(filtro) ||
                        p.Nome.Contains(filtro, StringComparison.OrdinalIgnoreCase))
+            .Where(p => codSecao <= 0 || p.CodSecao == codSecao)
             .ToList();
     }
 
@@ -241,4 +307,3 @@ else
         await JS.InvokeVoidAsync("alert", $"Editar produto #{codigo} - Em desenvolvimento!");
     }
 }
-

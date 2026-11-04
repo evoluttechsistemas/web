@@ -1,4 +1,5 @@
 @page "/agendas"
+@implements IAsyncDisposable
 @using EvolutCRM.Models
 @using System
 @using System.Linq
@@ -518,6 +519,11 @@
         line-height: 1.2;
         margin-top: 3px;
         word-break: break-word;
+        /* no máximo 2 linhas: a caixa cabe na hora; o texto inteiro aparece ao passar o mouse */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
     }
 
     .ag-event-client {
@@ -525,7 +531,79 @@
         font-weight: 500;
         opacity: .82;
         margin-top: 2px;
-        word-break: break-word;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ag-event-resolvido {
+        font-size: .64rem;
+        font-weight: 600;
+        opacity: .9;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .ag-excluir-box {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px;
+        margin-bottom: 12px;
+        border: 1px solid #fecaca;
+        background: #fff1f2;
+        border-radius: var(--radius-sm);
+    }
+
+        .ag-excluir-box .ag-btn {
+            justify-content: flex-start;
+            text-align: left;
+        }
+
+    .ag-excluir-titulo {
+        font-size: .76rem;
+        font-weight: 700;
+        color: #991b1b;
+    }
+
+    .ag-btn-excluir {
+        margin-right: auto;
+        color: var(--red);
+    }
+
+    .ag-toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 3000;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        max-width: calc(100vw - 32px);
+        padding: 10px 14px;
+        border-radius: var(--radius);
+        background: #1f2937;
+        color: #fff;
+        font-size: .80rem;
+        box-shadow: var(--shadow-md);
+    }
+
+    .ag-toast-btn {
+        border: 0;
+        background: transparent;
+        color: #93c5fd;
+        font-weight: 700;
+        cursor: pointer;
+        font-size: .80rem;
+    }
+
+    .ag-toast-close {
+        border: 0;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
     }
 
     .ag-event-actions {
@@ -900,6 +978,86 @@
             background: #fff;
         }
 
+    .ag-modal-textarea {
+        height: auto;
+        min-height: 72px;
+        padding: 8px 10px;
+        line-height: 1.4;
+        resize: vertical;
+    }
+
+    .ag-contador {
+        text-align: right;
+        font-size: .68rem;
+        color: var(--text-2);
+        margin-top: 2px;
+    }
+
+    .ag-usuarios-topo {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-top: 12px;
+    }
+
+        .ag-usuarios-topo .ag-field-label {
+            margin: 0 0 4px 0;
+        }
+
+    .ag-usuarios-todos {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: .76rem;
+        font-weight: 700;
+        color: var(--blue);
+        cursor: pointer;
+        margin-bottom: 4px;
+    }
+
+    .ag-usuarios {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-height: 150px;
+        overflow-y: auto;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+    }
+
+    .ag-usuario {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 9px;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--surface);
+        font-size: .74rem;
+        font-weight: 600;
+        color: var(--text-2);
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .ag-usuario input {
+            margin: 0;
+        }
+
+        .ag-usuario.sel {
+            border-color: var(--blue);
+            color: var(--blue);
+            background: rgba(59,130,246,.08);
+        }
+
+    .ag-usuarios-info {
+        font-size: .70rem;
+        color: var(--text-2);
+        margin-top: 4px;
+    }
+
     .ag-modal-2col {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -926,6 +1084,17 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
+    }
+
+    .ag-repetir-aviso {
+        font-size: .76rem;
+        color: var(--text-2);
+        line-height: 1.4;
+    }
+
+    .ag-btn-encerrar {
+        align-self: flex-start;
+        color: var(--red);
     }
 
     .ag-radio-group {
@@ -1302,19 +1471,16 @@
         <div class="ag-filters">
             <div class="ag-filter-group">
                 <span class="ag-filter-label">Status</span>
-                <select class="ag-select" @bind="filtroStatus">
+                <select class="ag-select" @bind="filtroStatus" @bind:after="AtualizarAgendasExpandidas">
                     <option value="PENDENTE">Em aberto</option>
                     <option value="RESOLVIDO">Resolvidos</option>
-                    @if (PodeVerTodasAgendas)
-                    {
-                        <option value="TODOS">Todos</option>
-                    }
+                    <option value="TODOS">Todos</option>
                 </select>
             </div>
 
             <div class="ag-filter-group">
                 <span class="ag-filter-label">Usuário</span>
-                <select class="ag-select" @bind="filtroUsuario">
+                <select class="ag-select" @bind="filtroUsuario" @bind:after="AtualizarAgendasExpandidas">
                     <option value="">Meu usuário</option>
                     @if (PodeVerTodasAgendas)
                     {
@@ -1329,15 +1495,14 @@
 
             <div class="ag-filter-group">
                 <span class="ag-filter-label">De</span>
-                <input type="date" class="ag-input-date" @bind="filtroDataInicio" />
+                <input type="date" class="ag-input-date" @bind="filtroDataInicio" @bind:after="RecarregarAsync" />
             </div>
 
             <div class="ag-filter-group">
                 <span class="ag-filter-label">Até</span>
-                <input type="date" class="ag-input-date" @bind="filtroDataFim" />
+                <input type="date" class="ag-input-date" @bind="filtroDataFim" @bind:after="RecarregarAsync" />
             </div>
 
-            <button class="ag-btn ghost" @onclick="AplicarFiltro">🔍 Filtrar</button>
         </div>
     </div>
 
@@ -1380,7 +1545,7 @@
 
                         @foreach (var dia in diasGrade)
                         {
-                            <div class="ag-col-day @(dia.Date == DateTime.Today ? "is-today" : "")">
+                            <div class="ag-col-day @(dia.Date == DateTime.Today ? "is-today" : "")" style="min-height:@(QtdHorasGrade * pixelsPorHora)px;">
                                 @foreach (var grupo in GruposAgendaDoDia(dia))
                                 {
                                     var lista = grupo.OrderBy(a => a.HoraAgendamento)
@@ -1407,6 +1572,16 @@
                                                 @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
                                             </div>
 
+                                            @if (ag.Status == "RESOLVIDO")
+                                            {
+                                                <div class="ag-event-resolvido">@TextoResolvido(ag)</div>
+                                                <div class="ag-event-actions" @onclick:stopPropagation="true">
+                                                    @if (PodeFinalizarAgendas)
+                                                    {
+                                                        <button class="ag-mini-btn" title="Reabrir" @onclick="() => ReabrirAgenda(ag)">↩</button>
+                                                    }
+                                                </div>
+                                            }
                                             @if (ag.Status != "RESOLVIDO")
                                             {
                                                 <div class="ag-event-actions" @onclick:stopPropagation="true">
@@ -1429,7 +1604,7 @@
                                     else
                                     {
                                         <div class="ag-event is-group"
-                                             style="@GetGroupStyle(grupo.Key)"
+                                             style="@GetGroupStyle(dia, grupo.Key)"
                                              @onclick="() => AbrirGrupoAgenda(lista)">
                                             <div class="ag-event-time">@grupo.Key.ToString("00"):00</div>
                                             <div class="ag-event-title">📌 @lista.Count agendamentos</div>
@@ -1471,6 +1646,16 @@
                                             <div class="ag-mobile-event-client">
                                                 @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
                                             </div>
+                                            @if (ag.Status == "RESOLVIDO")
+                                            {
+                                                <div class="ag-mobile-event-client">@TextoResolvido(ag)</div>
+                                                <div class="ag-mobile-event-acts" @onclick:stopPropagation="true">
+                                                    @if (PodeFinalizarAgendas)
+                                                    {
+                                                        <button class="ag-mini-btn" @onclick="() => ReabrirAgenda(ag)">↩</button>
+                                                    }
+                                                </div>
+                                            }
                                             @if (ag.Status != "RESOLVIDO")
                                             {
                                                 <div class="ag-mobile-event-acts" @onclick:stopPropagation="true">
@@ -1590,6 +1775,36 @@
                         <div class="ag-modal-error">@mensagemErro</div>
                     }
 
+                    @if (_confirmarExclusao && PodeExcluir)
+                    {
+                        var qtdGrupo = QtdGrupoAtual;
+                        <div class="ag-excluir-box">
+                            <div class="ag-excluir-titulo">🗑 O que você quer excluir?</div>
+                            @if (EhOcorrenciaDeRepeticao)
+                            {
+                                <button type="button" class="ag-btn ghost" @onclick="() => ExcluirAsync(TipoExclusao.Dia)">
+                                    Só este dia (@_dataOcorrenciaOriginal.ToString("dd/MM"))
+                                </button>
+                                <button type="button" class="ag-btn ghost" @onclick="() => ExcluirAsync(TipoExclusao.Repeticao)">
+                                    A repetição inteira
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="ag-btn ghost" @onclick="() => ExcluirAsync(TipoExclusao.Agenda)">
+                                    Esta agenda
+                                </button>
+                            }
+                            @if (qtdGrupo > 1)
+                            {
+                                <button type="button" class="ag-btn ghost" @onclick="() => ExcluirAsync(TipoExclusao.Todos)">
+                                    @(EhOcorrenciaDeRepeticao ? "A repetição" : "A agenda") de todos que receberam (@qtdGrupo pessoas)
+                                </button>
+                            }
+                            <button type="button" class="ag-btn ghost" @onclick="() => _confirmarExclusao = false">Cancelar</button>
+                        </div>
+                    }
+
                     <label class="ag-field-label">Tipo de Agendamento</label>
                     <select class="ag-modal-input" @bind="tipoAgendamento">
                         <option value="">Selecione...</option>
@@ -1599,7 +1814,10 @@
                     </select>
 
                     <label class="ag-field-label">Descrição</label>
-                    <input class="ag-modal-input" @bind="agendaModel.Descricao" placeholder="Descreva o agendamento..." />
+                    <textarea class="ag-modal-input ag-modal-textarea" rows="3" maxlength="@DescricaoMax"
+                              @bind="agendaModel.Descricao"
+                              placeholder="Escreva o que precisa sobre a agenda..."></textarea>
+                    <div class="ag-contador">Até @DescricaoMax caracteres</div>
 
                     <div class="ag-modal-2col">
                         <div>
@@ -1612,14 +1830,45 @@
                         </div>
                     </div>
 
-                    <label class="ag-field-label">Responsável</label>
-                    <select class="ag-modal-input" @bind="agendaModel.Usuario">
-                        <option value="">Selecione...</option>
-                        @foreach (var u in usuarios)
-                        {
-                            <option value="@u.Username">@u.Username</option>
-                        }
-                    </select>
+                    @if (modoEdicao)
+                    {
+                        <label class="ag-field-label">Responsável</label>
+                        <select class="ag-modal-input" @bind="agendaModel.Usuario">
+                            <option value="">Selecione...</option>
+                            @foreach (var u in usuarios)
+                            {
+                                <option value="@u.Username">@u.Username</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <div class="ag-usuarios-topo">
+                            <label class="ag-field-label">Para quem</label>
+                            <label class="ag-usuarios-todos">
+                                <input type="checkbox" checked="@TodosUsuariosSelecionados" @onchange="AlternarTodosUsuarios" />
+                                Todos
+                            </label>
+                        </div>
+                        <div class="ag-usuarios">
+                            @foreach (var u in usuarios)
+                            {
+                                var nome = u.Username;
+                                var marcado = usuariosSelecionados.Contains(nome);
+                                <label class="ag-usuario @(marcado ? "sel" : "")">
+                                    <input type="checkbox" checked="@marcado" @onchange="e => AlternarUsuario(nome, e)" />
+                                    @nome
+                                </label>
+                            }
+                        </div>
+                        <div class="ag-usuarios-info">
+                            @(usuariosSelecionados.Count == 0
+                                ? "Nenhum usuário selecionado"
+                                : usuariosSelecionados.Count == 1
+                                    ? "1 usuário selecionado"
+                                    : $"{usuariosSelecionados.Count} usuários selecionados — cada um recebe a sua agenda")
+                        </div>
+                    }
 
                     @if (tipoAgendamento == "CRM")
                     {
@@ -1661,7 +1910,24 @@
                         </div>
                     }
 
-                    @if (tipoAgendamento == "Evolut")
+                    @if (EhOcorrenciaDeRepeticao)
+                    {
+                        <div class="ag-repetir">
+                            <div class="ag-repetir-aviso">
+                                🔁 Este dia faz parte de uma agenda repetitiva. O que você alterar aqui vale só para
+                                @_dataOcorrenciaOriginal.ToString("dd/MM/yyyy").
+                            </div>
+                            @if (PodeCriarAgendas)
+                            {
+                                <button type="button" class="ag-btn ghost ag-btn-encerrar" @onclick="EncerrarRepeticao">
+                                    @(_confirmarEncerrar
+                                        ? "Confirmar: encerrar a repetição depois deste dia"
+                                        : "⏹ Encerrar a repetição depois deste dia")
+                                </button>
+                            }
+                        </div>
+                    }
+                    else if (tipoAgendamento == "Evolut")
                     {
                         <div class="ag-repetir">
                             <div class="ag-radio-group">
@@ -1708,10 +1974,26 @@
                     }
                 </div>
                 <div class="ag-modal-footer">
+                    @if (PodeExcluir)
+                    {
+                        <button class="ag-btn ghost ag-btn-excluir" @onclick="() => _confirmarExclusao = !_confirmarExclusao">🗑 Excluir</button>
+                    }
                     <button class="ag-btn ghost" @onclick="FecharModal">Cancelar</button>
                     <button class="ag-btn primary" @onclick="SalvarAgenda">💾 Salvar</button>
                 </div>
             </div>
+        </div>
+    }
+
+    @if (_toast != null)
+    {
+        <div class="ag-toast">
+            <span>@_toast</span>
+            @if (_desfazer != null)
+            {
+                <button class="ag-toast-btn" @onclick="DesfazerAsync">Desfazer</button>
+            }
+            <button class="ag-toast-close" @onclick="FecharToast">✕</button>
         </div>
     }
 
@@ -1736,10 +2018,20 @@
                             <div class="ag-group-item-client">
                                 @(string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente)
                             </div>
+                            @if (ag.Status == "RESOLVIDO")
+                            {
+                                <div class="ag-group-item-client">@TextoResolvido(ag)</div>
+                                <div class="ag-group-item-actions" @onclick:stopPropagation="true">
+                                    @if (PodeFinalizarAgendas)
+                                    {
+                                        <button class="ag-mini-btn" title="Reabrir" @onclick="() => ReabrirAgendaDoGrupo(ag)">↩</button>
+                                    }
+                                </div>
+                            }
                             @if (ag.Status != "RESOLVIDO")
                             {
                                 <div class="ag-group-item-actions" @onclick:stopPropagation="true">
-                                    @if (PodeCriarAgendas)
+                                    @if (PodeCriarAgendas && ag.Origem != "TICKET")
                                     {
                                         <button class="ag-mini-btn" title="Editar" @onclick="() => EditarAgendaDoGrupo(ag)">✏️</button>
                                     }
@@ -1807,20 +2099,74 @@
     private string mensagemErro;
 
     private AgendaModel agendaModel = new();
+
+    // Edição de um dia de agenda repetitiva
+    private DateTime _dataOcorrenciaOriginal;
+    private bool _confirmarEncerrar;
+    private bool EhOcorrenciaDeRepeticao =>
+        modoEdicao && agendaModel.AgendaPaiCodigo > 0 && agendaModel.Origem != "TICKET";
+
+    private async Task EncerrarRepeticao()
+    {
+        if (!EhOcorrenciaDeRepeticao || !PodeCriarAgendas) return;
+        if (!_confirmarEncerrar) { _confirmarEncerrar = true; return; }   // segundo clique confirma
+
+        try
+        {
+            await CardService.EncerrarRepeticaoAgendaAsync(
+                agendaModel.AgendaPaiCodigo!.Value, UserState.CurrentCompanyId, _dataOcorrenciaOriginal);
+            await RecarregarAsync();
+            FecharModal();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao encerrar a repetição: {ex.Message}";
+        }
+    }
+
+    // Novo agendamento: a mesma agenda para vários usuários (cada um recebe a sua)
+    private const int DescricaoMax = 200;
+    private readonly HashSet<string> usuariosSelecionados = new(StringComparer.OrdinalIgnoreCase);
+
+    private bool TodosUsuariosSelecionados =>
+        usuarios.Count > 0 && usuarios.All(u => usuariosSelecionados.Contains(u.Username));
+
+    private void AlternarTodosUsuarios(ChangeEventArgs e)
+    {
+        usuariosSelecionados.Clear();
+        if (e.Value is true)
+            foreach (var u in usuarios) usuariosSelecionados.Add(u.Username);
+    }
+
+    private void AlternarUsuario(string nome, ChangeEventArgs e)
+    {
+        if (e.Value is true) usuariosSelecionados.Add(nome);
+        else usuariosSelecionados.Remove(nome);
+    }
     private DateTime agendaData = DateTime.Today;
     private TimeOnly agendaHora = new(9, 0);
     string NumeroTelefone = "";
     string Mensagem = "";
     bool Sucesso;
 
-    private readonly int horaInicioGrade = 8;
-    private readonly int horaFimGrade = 18;
+    // Horas da grade: 8h–18h, abrindo mais cedo/mais tarde quando tem agenda fora desse horário
+    private int horaInicioGrade = 8;
+    private int horaFimGrade = 18;
     private readonly int pixelsPorHora = 68;
+    private int QtdHorasGrade => horaFimGrade - horaInicioGrade + 1;
+
+    // Posição e altura de cada caixa (dia, hora) — calculadas junto com a lista, sem sobrepor a próxima
+    private readonly Dictionary<(DateTime Dia, int Hora), (double Top, int Altura)> _posicaoGrupo = new();
 
     private List<DateTime> diasGrade => GerarDiasGrade();
 
-    private List<AgendaModel> agendasFiltradas =>
-        todasAgendasTela
+    // Calculadas só quando os dados ou os filtros mudam (AtualizarAgendasExpandidas), não a cada desenho da tela
+    private List<AgendaModel> todasAgendasTela = new();
+    private List<AgendaModel> agendasFiltradas = new();
+    private Dictionary<DateTime, List<AgendaModel>> _agendasPorDia = new();
+
+    private List<AgendaModel> FiltrarAgendas(List<AgendaModel> origem) =>
+        origem
             .Where(a =>
                 (filtroUsuario == "TODOS"
                  || (string.IsNullOrEmpty(filtroUsuario) && (a.Usuario ?? "").ToUpper() == UserState.CurrentUser.ToUpper())
@@ -1830,9 +2176,9 @@
                  || (filtroStatus == "PENDENTE" && a.Status != "RESOLVIDO")
                  || (filtroStatus == "RESOLVIDO" && a.Status == "RESOLVIDO"))
                 &&
-                (!filtroDataInicio.HasValue || a.DataAgendamento.Date >= filtroDataInicio.Value.Date)
+                a.DataAgendamento.Date >= PeriodoTela().De
                 &&
-                (!filtroDataFim.HasValue || a.DataAgendamento.Date <= filtroDataFim.Value.Date)
+                a.DataAgendamento.Date <= PeriodoTela().Ate
             )
             .OrderBy(a => a.DataAgendamento)
             .ThenBy(a => a.HoraAgendamento)
@@ -1845,10 +2191,18 @@
     {
         try
         {
-            await AgendaService.FinalizarAgendaAsync(agenda, agendas);
-            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
-            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
-            AtualizarAgendasExpandidas();
+            var codigo = await AgendaService.FinalizarAgendaAsync(agenda, agendas, UserState.CurrentUser);
+            await RecarregarAsync();
+            if (codigo > 0)
+            {
+                var origem = agenda.Origem;
+                MostrarToast("Agenda finalizada.", async () =>
+                {
+                    await AgendaService.ReabrirAgendaAsync(origem, codigo);
+                    await RecarregarAsync();
+                    MostrarToast("Agenda reaberta.");
+                });
+            }
             StateHasChanged();
         }
         catch (Exception ex)
@@ -1864,8 +2218,7 @@
             try
             {
                 agenda = await AgendaService.MaterializarOcorrenciaSeNecessarioAsync(agenda, agendas);
-                agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
-                AtualizarAgendasExpandidas();
+                await RecarregarAsync();
                 if (agenda == null) return;
             }
             catch (Exception ex)
@@ -1887,6 +2240,7 @@
             CodCliente = agenda.CodCliente,
             NomeCliente = agenda.NomeCliente,
             ApelidoCliente = agenda.ApelidoCliente,
+            GrupoAgenda = agenda.GrupoAgenda,
             Origem = agenda.Origem,
             Status = agenda.Status,
             TipoRepeticao = agenda.TipoRepeticao,
@@ -1900,6 +2254,18 @@
         agendaData = agenda.DataAgendamento;
         agendaHora = TimeOnly.FromTimeSpan(agenda.HoraAgendamento);
         tipoAgendamento = agenda.Origem;
+        _dataOcorrenciaOriginal = agenda.DataAgendamento.Date;
+        _confirmarEncerrar = false;
+        _confirmarExclusao = false;
+        mensagemErro = "";
+
+        // Mostra o cliente / card já vinculado (antes o campo vinha vazio)
+        clientesEncontrados.Clear();
+        cardsEncontrados.Clear();
+        buscaCliente = string.IsNullOrWhiteSpace(agenda.ApelidoCliente) ? (agenda.NomeCliente ?? "") : agenda.ApelidoCliente;
+        buscaCard = agenda.CodCRMC > 0
+            ? (string.IsNullOrWhiteSpace(agenda.NomeCliente) ? $"Card #{agenda.CodCRMC}" : $"#{agenda.CodCRMC} - {agenda.NomeCliente}")
+            : "";
 
         tipoRepeticao = TipoRepeticao.UmaVez;
         frequenciaRepeticao = "DIARIO";
@@ -1955,11 +2321,8 @@
             DefinirSemanaAtual();
 
             usuarios = await CardService.GetUsuariosAsync(UserState.CurrentCompanyId);
-            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
-            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
-            agendas = await AgendaService.MaterializarOcorrenciasHojeAsync(agendas, UserState.CurrentCompanyId);
-
-            AtualizarAgendasExpandidas();
+            await RecarregarAsync();
+            _ = AtualizarSozinhoAsync();
         }
         catch (Exception ex)
         {
@@ -1977,14 +2340,97 @@
         frequenciaRepeticao = "DIARIO"; dataFimRepeticao = null;
         repetirSegunda = repetirTerca = repetirQuarta = repetirQuinta = repetirSexta = repetirSabado = repetirDomingo = false;
         agendaModel = new AgendaModel { Usuario = UserState.CurrentUser, CodEmp = UserState.CurrentCompanyId };
+        usuariosSelecionados.Clear();
+        var eu = usuarios.FirstOrDefault(u => string.Equals(u.Username, UserState.CurrentUser, StringComparison.OrdinalIgnoreCase));
+        if (eu != null) usuariosSelecionados.Add(eu.Username);   // começa marcado só quem está criando
         agendaData = DateTime.Today;
         agendaHora = new TimeOnly(9, 0);
         mostrarModal = true;
     }
 
+    /// <summary>Período da tela (o mesmo da grade: até 31 dias).</summary>
+    private (DateTime De, DateTime Ate) PeriodoTela()
+    {
+        var de = (filtroDataInicio ?? DateTime.Today).Date;
+        var ate = (filtroDataFim ?? de.AddDays(6)).Date;
+        if (ate < de) (de, ate) = (ate, de);   // datas trocadas: vale o período entre elas
+        if ((ate - de).Days > 30) ate = de.AddDays(30);
+        return (de, ate);
+    }
+
+    /// <summary>Busca no banco só o período da tela (e as agendas de ticket pendentes) e recalcula.</summary>
+    private async Task RecarregarAsync()
+    {
+        var (de, ate) = PeriodoTela();
+        agendas = await AgendaService.CarregarAgendasPeriodoAsync(UserState.CurrentCompanyId, de, ate);
+        agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser, de, ate);
+        AtualizarAgendasExpandidas();
+    }
+
+    /// <summary>Monta os dias das repetições do período, aplica os filtros e separa por dia (uma vez só).</summary>
     private void AtualizarAgendasExpandidas()
     {
-        agendasExpandidas = AgendaService.ExpandirAgendasRepetitivas(agendas);
+        var (de, ate) = PeriodoTela();
+        agendasExpandidas = EvolutCRM.Services.AgendaService.ExpandirAgendas(agendas, de, ate);
+        todasAgendasTela = AgendaService.MontarTodasAgendasTela(agendasExpandidas, agendasTickets);
+        agendasFiltradas = FiltrarAgendas(todasAgendasTela);
+        _agendasPorDia = agendasFiltradas
+            .GroupBy(a => a.DataAgendamento.Date)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        CalcularGrade();
+    }
+
+    /// <summary>Abre a grade para as horas que têm agenda e calcula as caixas sem uma cobrir a outra.</summary>
+    private void CalcularGrade()
+    {
+        var horas = agendasFiltradas.Select(a => a.HoraAgendamento.Hours).ToList();
+        horaInicioGrade = horas.Count > 0 ? Math.Min(8, horas.Min()) : 8;
+        horaFimGrade = horas.Count > 0 ? Math.Max(18, horas.Max()) : 18;
+
+        var fimGrade = QtdHorasGrade * pixelsPorHora;
+        _posicaoGrupo.Clear();
+
+        foreach (var (dia, lista) in _agendasPorDia)
+        {
+            var grupos = lista.GroupBy(a => a.HoraAgendamento.Hours).OrderBy(g => g.Key).ToList();
+            var tops = grupos
+                .Select(g => g.Count() == 1 ? TopDaAgenda(g.First()) : (g.Key - horaInicioGrade) * (double)pixelsPorHora)
+                .ToList();
+
+            for (var i = 0; i < grupos.Count; i++)
+            {
+                var proximo = i + 1 < grupos.Count ? tops[i + 1] : fimGrade;
+                var altura = (int)Math.Floor(proximo - tops[i] - 3);
+                altura = Math.Clamp(altura, 30, grupos[i].Count() == 1 ? 130 : 86);
+                _posicaoGrupo[(dia, grupos[i].Key)] = (tops[i], altura);
+            }
+        }
+    }
+
+    private double TopDaAgenda(AgendaModel ag)
+    {
+        var minutos = (ag.HoraAgendamento.Hours - horaInicioGrade) * 60 + ag.HoraAgendamento.Minutes;
+        return Math.Max(0, minutos) / 60.0 * pixelsPorHora;
+    }
+
+    private string TextoResolvido(AgendaModel ag)
+    {
+        if (string.IsNullOrWhiteSpace(ag.ResolvidoPor)) return "✔ Resolvido";
+        return $"✔ {ag.ResolvidoPor}" + (ag.ResolvidoEm.HasValue ? $" · {ag.ResolvidoEm:dd/MM HH:mm}" : "");
+    }
+
+    /// <summary>Agendas do dia para conferir conflito de horário (busca no banco se o dia está fora da tela).</summary>
+    private async Task<List<AgendaModel>> AgendasParaConflitoAsync(DateTime dia)
+    {
+        var (de, ate) = PeriodoTela();
+        var agendasDoDia = dia.Date >= de && dia.Date <= ate
+            ? agendasExpandidas
+            : EvolutCRM.Services.AgendaService.ExpandirAgendas(
+                await AgendaService.CarregarAgendasPeriodoAsync(UserState.CurrentCompanyId, dia, dia), dia, dia);
+
+        // Agendas de ticket de TODOS os usuários (só para conferir; não aparecem na tela de quem não pode ver)
+        var tickets = await AgendaService.CarregarAgendasTicketsAsync(true, UserState.CurrentUser, dia, dia);
+        return AgendaService.MontarTodasAgendasTela(agendasDoDia, tickets);
     }
 
     private async Task SalvarAgenda()
@@ -1994,17 +2440,45 @@
             mensagemErro = "";
             if (string.IsNullOrWhiteSpace(agendaModel.Descricao)) { mensagemErro = "Descrição é obrigatória"; return; }
             if (string.IsNullOrWhiteSpace(tipoAgendamento)) { mensagemErro = "Tipo de agendamento é obrigatório"; return; }
-            if (string.IsNullOrWhiteSpace(agendaModel.Usuario)) { mensagemErro = "Responsável é obrigatório"; return; }
+            if (modoEdicao && string.IsNullOrWhiteSpace(agendaModel.Usuario)) { mensagemErro = "Responsável é obrigatório"; return; }
+
+            // Novo: um ou mais usuários (na ordem da lista)
+            var destinos = modoEdicao
+                ? new List<string> { agendaModel.Usuario }
+                : usuarios.Select(u => u.Username).Where(usuariosSelecionados.Contains).ToList();
+            if (destinos.Count == 0) { mensagemErro = "Selecione pelo menos um usuário"; return; }
 
             agendaModel.DataAgendamento = agendaData.Date;
             agendaModel.HoraAgendamento = new TimeSpan(agendaHora.Hour, agendaHora.Minute, 0);
             agendaModel.Origem = tipoAgendamento;
             agendaModel.CodEmp = UserState.CurrentCompanyId;
 
-            var conflito = AgendaService.ValidarConflitoAgenda(agendaModel, todasAgendasTela, modoEdicao);
-            if (!string.IsNullOrWhiteSpace(conflito)) { mensagemErro = conflito; return; }
+            var baseConflito = await AgendasParaConflitoAsync(agendaModel.DataAgendamento);
 
-            if (tipoAgendamento == "Evolut")
+            if (destinos.Count == 1)
+            {
+                agendaModel.Usuario = destinos[0];
+                var conflito = AgendaService.ValidarConflitoAgenda(agendaModel, baseConflito, modoEdicao);
+                if (!string.IsNullOrWhiteSpace(conflito)) { mensagemErro = conflito; return; }
+            }
+            else
+            {
+                var emConflito = new List<string>();
+                foreach (var usuario in destinos)
+                {
+                    agendaModel.Usuario = usuario;
+                    if (!string.IsNullOrWhiteSpace(AgendaService.ValidarConflitoAgenda(agendaModel, baseConflito, false)))
+                        emConflito.Add(usuario);
+                }
+                if (emConflito.Count > 0)
+                {
+                    mensagemErro = $"Já existe agenda a menos de 30 minutos desse horário para: {string.Join(", ", emConflito)}. " +
+                                   "Desmarque esses usuários ou escolha outro horário.";
+                    return;
+                }
+            }
+
+            if (tipoAgendamento == "Evolut" && !EhOcorrenciaDeRepeticao)
             {
                 agendaModel.TipoRepeticao = tipoRepeticao.ToString();
                 agendaModel.FrequenciaRepeticao = frequenciaRepeticao;
@@ -2028,11 +2502,34 @@
                 agendaModel.DiasRepeticao = null;
             }
 
-            await AgendaService.SalvarAgendaAsync(agendaModel, modoEdicao);
-            agendas = await AgendaService.CarregarAgendasAsync(UserState.CurrentCompanyId);
-            agendasTickets = await AgendaService.CarregarAgendasTicketsAsync(PodeVerTodasAgendas, UserState.CurrentUser);
-            AtualizarAgendasExpandidas();
+            // Criada para vários de uma vez: o mesmo grupo, para poder excluir de todos
+            if (!modoEdicao)
+                agendaModel.GrupoAgenda = destinos.Count > 1 ? Guid.NewGuid() : null;
+
+            var jaExistiam = new List<string>();
+            foreach (var usuario in destinos)
+            {
+                agendaModel.Usuario = usuario;
+                if (!await AgendaService.SalvarAgendaAsync(agendaModel, modoEdicao))
+                    jaExistiam.Add(usuario);
+            }
+
+            if (jaExistiam.Count == destinos.Count)
+            {
+                mensagemErro = destinos.Count == 1
+                    ? "Essa agenda já existe (mesma descrição, data e hora). Não foi criada de novo."
+                    : $"Essa agenda já existe (mesma descrição, data e hora) para: {string.Join(", ", jaExistiam)}. Nada foi criado.";
+                return;
+            }
+
+            await RecarregarAsync();
             FecharModal();
+
+            var criadas = destinos.Count - jaExistiam.Count;
+            MostrarToast(modoEdicao ? "Agenda atualizada."
+                : jaExistiam.Count > 0 ? $"Agenda criada para {criadas} usuário(s). Já existia para: {string.Join(", ", jaExistiam)}."
+                : criadas > 1 ? $"Agenda criada para {criadas} usuários."
+                : "Agenda criada.");
         }
         catch (Exception ex)
         {
@@ -2041,17 +2538,6 @@
     }
 
     private void FecharModal() { mostrarModal = false; mensagemErro = ""; }
-
-    private void AplicarFiltro()
-    {
-        if (filtroDataInicio.HasValue && filtroDataFim.HasValue && filtroDataInicio.Value.Date > filtroDataFim.Value.Date)
-        {
-            var tmp = filtroDataInicio.Value;
-            filtroDataInicio = filtroDataFim;
-            filtroDataFim = tmp;
-        }
-        filtroManualAplicado = true;
-    }
 
     private void DefinirSemanaAtual()
     {
@@ -2062,21 +2548,27 @@
         filtroManualAplicado = true;
     }
 
-    private void SemanaAnterior()
+    private async Task SemanaAnterior()
     {
         filtroDataInicio = (filtroDataInicio ?? DateTime.Today).AddDays(-7);
         filtroDataFim = (filtroDataFim ?? filtroDataInicio.Value.AddDays(6)).AddDays(-7);
         filtroManualAplicado = true;
+        await RecarregarAsync();
     }
 
-    private void ProximaSemana()
+    private async Task ProximaSemana()
     {
         filtroDataInicio = (filtroDataInicio ?? DateTime.Today).AddDays(7);
         filtroDataFim = (filtroDataFim ?? filtroDataInicio.Value.AddDays(6)).AddDays(7);
         filtroManualAplicado = true;
+        await RecarregarAsync();
     }
 
-    private void IrParaHoje() { DefinirSemanaAtual(); }
+    private async Task IrParaHoje()
+    {
+        DefinirSemanaAtual();
+        await RecarregarAsync();
+    }
 
     private List<DateTime> GerarDiasGrade()
     {
@@ -2091,24 +2583,13 @@
         Enumerable.Range(horaInicioGrade, horaFimGrade - horaInicioGrade + 1);
 
     private List<AgendaModel> AgendasDoDia(DateTime dia) =>
-        agendasFiltradas
-            .Where(a => a.DataAgendamento.Date == dia.Date)
-            .OrderBy(a => a.HoraAgendamento)
-            .ToList();
+        _agendasPorDia.TryGetValue(dia.Date, out var lista) ? lista : new List<AgendaModel>();
 
     private string GetEventStyle(AgendaModel ag)
     {
-        var hora = ag.HoraAgendamento;
-        var minutosDesdeInicio = ((int)hora.TotalHours - horaInicioGrade) * 60 + hora.Minutes;
-        if (minutosDesdeInicio < 0) minutosDesdeInicio = 0;
-        var top = (minutosDesdeInicio / 60.0) * pixelsPorHora;
-
-        var cliente = string.IsNullOrWhiteSpace(ag.ApelidoCliente) ? ag.NomeCliente : ag.ApelidoCliente;
-        var linhasDesc = Math.Max(1, (int)Math.Ceiling((ag.Descricao?.Length ?? 0) / 18.0));
-        var linhasClient = Math.Max(1, (int)Math.Ceiling((cliente?.Length ?? 0) / 15.0));
-        var height = Math.Min(Math.Max(52 + linhasDesc * 11 + linhasClient * 11, 86), 180);
-
-        return $"top:{top:0}px;height:{height}px;";
+        if (_posicaoGrupo.TryGetValue((ag.DataAgendamento.Date, ag.HoraAgendamento.Hours), out var p))
+            return $"top:{p.Top:0}px;height:{p.Altura}px;";
+        return $"top:{TopDaAgenda(ag):0}px;height:64px;";
     }
 
     private string GetClasseOrigem(AgendaModel ag)
@@ -2148,10 +2629,22 @@
     private void AbrirCard(int codigo) => Nav.NavigateTo($"/card/{codigo}");
     private void AbrirTicket(int codigo) => Nav.NavigateTo($"/ticket/{codigo}");
 
+    // Busca só depois de 300ms sem digitar (não consulta o banco a cada tecla)
+    private CancellationTokenSource? _buscaCts;
+
+    private async Task<bool> AguardarDigitacaoAsync()
+    {
+        _buscaCts?.Cancel();
+        var cts = _buscaCts = new CancellationTokenSource();
+        try { await Task.Delay(300, cts.Token); return true; }
+        catch (TaskCanceledException) { return false; }
+    }
+
     private async Task BuscarCards(ChangeEventArgs e)
     {
         buscaCard = e.Value?.ToString() ?? "";
         if (buscaCard.Length < 3) { cardsEncontrados.Clear(); return; }
+        if (!await AguardarDigitacaoAsync()) return;
         try { cardsEncontrados = await CardService.BuscarCardsAsync(buscaCard, UserState.CurrentUser, UserState.CurrentCompanyId); }
         catch (Exception ex) { Console.WriteLine($"ERRO: {ex.Message}"); }
     }
@@ -2160,6 +2653,7 @@
     {
         buscaCliente = e.Value?.ToString() ?? "";
         if (buscaCliente.Length < 3) { clientesEncontrados.Clear(); return; }
+        if (!await AguardarDigitacaoAsync()) return;
         try { clientesEncontrados = await CardService.BuscarClientesAsync(buscaCliente, UserState.CurrentCompanyId); }
         catch (Exception ex) { ClienteMsg = $"ERRO: {ex.Message}"; }
     }
@@ -2192,8 +2686,6 @@
         await JS.InvokeVoidAsync("open", $"https://wa.me/55{numero}", "_blank");
     }
 
-    private List<AgendaModel> todasAgendasTela =>
-        AgendaService.MontarTodasAgendasTela(agendasExpandidas, agendasTickets);
 
     private List<IGrouping<int, AgendaModel>> GruposAgendaDoDia(DateTime dia) =>
         AgendasDoDia(dia)
@@ -2201,12 +2693,12 @@
             .OrderBy(g => g.Key)
             .ToList();
 
-    private string GetGroupStyle(int hora)
+    private string GetGroupStyle(DateTime dia, int hora)
     {
-        var min = (hora - horaInicioGrade) * 60;
-        if (min < 0) min = 0;
-        var top = (min / 60.0) * pixelsPorHora;
-        return $"top:{top:0}px;height:86px;";
+        if (_posicaoGrupo.TryGetValue((dia.Date, hora), out var p))
+            return $"top:{p.Top:0}px;height:{p.Altura}px;";
+        var top = Math.Max(0, hora - horaInicioGrade) * pixelsPorHora;
+        return $"top:{top}px;height:64px;";
     }
 
     private void AbrirGrupoAgenda(List<AgendaModel> lista)
@@ -2237,6 +2729,153 @@
             "CLIENTE" => "Cliente",
             _ => "Agenda"
         };
+
+    private async Task ReabrirAgenda(AgendaModel ag)
+    {
+        try
+        {
+            await AgendaService.ReabrirAgendaAsync(ag.Origem, ag.Codigo);
+            await RecarregarAsync();
+            MostrarToast("Agenda reaberta.");
+        }
+        catch (Exception ex)
+        {
+            MostrarToast($"Erro ao reabrir: {ex.Message}");
+        }
+    }
+
+    private async Task ReabrirAgendaDoGrupo(AgendaModel ag)
+    {
+        await ReabrirAgenda(ag);
+        FecharModalGrupoAgenda();
+    }
+
+    // ─────────────── Mensagem rápida (com desfazer) ───────────────
+    private string? _toast;
+    private Func<Task>? _desfazer;
+    private CancellationTokenSource? _toastCts;
+
+    private void MostrarToast(string mensagem, Func<Task>? desfazer = null)
+    {
+        _toast = mensagem;
+        _desfazer = desfazer;
+        _toastCts?.Cancel();
+        var cts = _toastCts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            try { await Task.Delay(TimeSpan.FromSeconds(desfazer != null ? 8 : 4), cts.Token); }
+            catch (TaskCanceledException) { return; }
+            await InvokeAsync(() =>
+            {
+                if (_toastCts != cts) return;
+                _toast = null;
+                _desfazer = null;
+                StateHasChanged();
+            });
+        });
+    }
+
+    private async Task DesfazerAsync()
+    {
+        var acao = _desfazer;
+        _toast = null;
+        _desfazer = null;
+        if (acao != null)
+        {
+            try { await acao(); }
+            catch (Exception ex) { MostrarToast($"Não foi possível desfazer: {ex.Message}"); }
+        }
+    }
+
+    private void FecharToast()
+    {
+        _toastCts?.Cancel();
+        _toast = null;
+        _desfazer = null;
+    }
+
+    // ─────────────── Excluir ───────────────
+    private enum TipoExclusao { Agenda, Dia, Repeticao, Todos }
+    private bool _confirmarExclusao;
+
+    private bool PodeExcluir => modoEdicao && PodeCriarAgendas && agendaModel.Origem != "TICKET";
+
+    /// <summary>Grupo da agenda aberta (criada para vários usuários de uma vez); num dia de repetição, o do mestre.</summary>
+    private Guid? GrupoAtual =>
+        EhOcorrenciaDeRepeticao
+            ? agendas.FirstOrDefault(a => a.Codigo == agendaModel.AgendaPaiCodigo)?.GrupoAgenda
+            : agendaModel.GrupoAgenda;
+
+    private int QtdGrupoAtual =>
+        GrupoAtual is Guid g ? agendas.Count(a => a.GrupoAgenda == g && !(a.AgendaPaiCodigo > 0)) : 0;
+
+    private async Task ExcluirAsync(TipoExclusao tipo)
+    {
+        if (!PodeExcluir) return;
+        try
+        {
+            var emp = UserState.CurrentCompanyId;
+            switch (tipo)
+            {
+                case TipoExclusao.Dia:
+                    await CardService.ExcluirDiaRepeticaoAsync(agendaModel.Codigo, emp);
+                    break;
+                case TipoExclusao.Repeticao:
+                    await CardService.ExcluirAgendaAsync(agendaModel.AgendaPaiCodigo!.Value, emp);
+                    break;
+                case TipoExclusao.Todos:
+                    if (GrupoAtual is Guid g) await CardService.ExcluirGrupoAgendaAsync(g, emp);
+                    break;
+                default:
+                    await CardService.ExcluirAgendaAsync(agendaModel.Codigo, emp);
+                    break;
+            }
+
+            _confirmarExclusao = false;
+            await RecarregarAsync();
+            FecharModal();
+            MostrarToast(tipo == TipoExclusao.Dia ? "Dia excluído da repetição."
+                : tipo == TipoExclusao.Todos ? "Agenda excluída de todos."
+                : "Agenda excluída.");
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = $"Erro ao excluir: {ex.Message}";
+        }
+    }
+
+    // ─────────────── Atualizar sozinho (agenda criada por outra pessoa) ───────────────
+    private readonly CancellationTokenSource _ctsPagina = new();
+
+    private async Task AtualizarSozinhoAsync()
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_ctsPagina.Token))
+            {
+                if (mostrarModal || mostrarModalGrupoAgenda) continue;   // não mexe na tela enquanto alguém edita
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await RecarregarAsync();
+                        StateHasChanged();
+                    }
+                    catch { /* tenta de novo no próximo minuto */ }
+                });
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        _ctsPagina.Cancel();
+        _buscaCts?.Cancel();
+        _toastCts?.Cancel();
+        return ValueTask.CompletedTask;
+    }
 
     private async Task ResolverAgendaDoGrupo(AgendaModel ag)
     {

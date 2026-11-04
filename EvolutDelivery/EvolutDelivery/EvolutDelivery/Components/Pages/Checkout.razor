@@ -1,11 +1,14 @@
 @page "/delivery/{slug}/checkout"
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@using EvolutDelivery.Helpers
 @inject StorageService Storage
-@inject CheckoutService CheckoutService
+@inject CarrinhoService CarrinhoService
 @inject ClienteService ClienteService
 @inject PedidoService PedidoService
+@inject PedidoLinkService PedidoLink
 @inject EmpresaService EmpresaService
+@inject LojaStatusService LojaStatusService
 @inject FormaPagamentoService FormaPagamentoService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -825,11 +828,12 @@ else
 
                 @if (clienteEncontrado && clienteAtual != null)
                 {
+                    @* Por privacidade, NÃO exibimos nome/e-mail do cadastro encontrado pelo telefone *@
                     <div class="client-found">
-                        <div class="client-found-avatar">@(clienteAtual.Nome.Substring(0, 1).ToUpper())</div>
+                        <div class="client-found-avatar">✓</div>
                         <div>
-                            <div>Olá, @clienteAtual.Nome.Split(' ')[0]!</div>
-                            <div style="font-weight:400;font-size:.8rem;margin-top:1px;color:var(--green-dark)">Seus dados foram preenchidos automaticamente</div>
+                            <div>Cadastro encontrado!</div>
+                            <div style="font-weight:400;font-size:.8rem;margin-top:1px;color:var(--green-dark)">Seus endereços salvos aparecem na etapa de entrega</div>
                         </div>
                     </div>
                 }
@@ -894,7 +898,7 @@ else
                                     <div class="addr-item-radio"></div>
                                     <div>
                                         <div class="addr-item-label">@item.Descricao</div>
-                                        <div class="addr-item-text">@item.EnderecoCompleto</div>
+                                        <div class="addr-item-text">@PrivacidadeHelper.MascararEndereco(item.Rua)</div>
                                     </div>
                                 </div>
                             }
@@ -992,6 +996,7 @@ else
             </div>
             <div class="co-card-body">
                 <textarea class="f-textarea" rows="3"
+                          maxlength="@MaxObservacaoPedido"
                           @bind="observacao"
                           placeholder="Ex: sem cebola, troco para R$ 50..."></textarea>
             </div>
@@ -1025,7 +1030,7 @@ else
                     </div>
                     <div class="resumo-linha">
                         <span>Entrega</span>
-                        <span>@(tipoEntrega == "ENTREGA" ? $"R$ {taxaEntrega:F2}" : "Grátis")</span>
+                        <span>@(tipoEntrega == "ENTREGA" && taxaEntrega > 0 ? $"R$ {taxaEntrega:F2}" : "Grátis")</span>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(observacao))
                     {
@@ -1135,11 +1140,15 @@ else
 
     // Valores
     private decimal subtotal = 0;
-    private decimal taxaEntrega = 5.00m;
+    // Vem da coluna Empresa.TaxaEntrega (carregada junto com a empresa)
+    private decimal taxaEntrega = 0m;
     private decimal total => subtotal + (tipoEntrega == "ENTREGA" ? taxaEntrega : 0);
 
     // Carrinho
     private List<ItemCarrinho> carrinho = new();
+
+    // Limite de segurança
+    private const int MaxObservacaoPedido = 300;
 
     // Estado
     private int stepAtual = 1;
@@ -1201,8 +1210,11 @@ else
     {
         get
         {
-            var end = DeveUsarNovoEndereco ? novoEndereco : enderecoSelecionado;
-            return end.EnderecoCompleto;
+            // Endereço digitado agora: mostra completo.
+            // Endereço salvo (achado pelo telefone): mostra mascarado.
+            return DeveUsarNovoEndereco
+                ? novoEndereco.EnderecoCompleto
+                : PrivacidadeHelper.MascararEndereco(enderecoSelecionado.Rua);
         }
     }
 
@@ -1219,6 +1231,17 @@ else
             return;
         }
 
+        taxaEntrega = empresaAtual.TaxaEntrega;
+
+        // Loja fechada pelo painel admin: mostra o aviso (o Finalizar confere de novo)
+        try
+        {
+            var status = await LojaStatusService.ObterAsync(empresaAtual.Codigo);
+            if (status.Fechada)
+                mensagemErro = MensagemLojaFechada(status.Mensagem);
+        }
+        catch { /* se não der para consultar, o Finalizar confere */ }
+
         formasPagamento = await FormaPagamentoService.ListarDescricoesAtivasAsync(empresaAtual.Codigo, empresaAtual.CNPJ);
         if (formasPagamento.Any())
             formaPagamento = formasPagamento.First();
@@ -1228,15 +1251,43 @@ else
     {
         if (!firstRender) return;
 
-        carrinho = await Storage.ObterCarrinhoAsync() ?? new();
+        var carrinhoNavegador = await Storage.ObterCarrinhoAsync(slug);
 
-        if (!carrinho.Any())
+        if (!carrinhoNavegador.Any())
         {
             Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}");
             return;
         }
 
-        subtotal = carrinho.Sum(x => x.Preco * x.Quantidade);
+        try
+        {
+            // Preços, nomes e quantidades SEMPRE conferidos no banco
+            var (itensValidados, avisos) = await CarrinhoService.ValidarAsync(slug, carrinhoNavegador);
+
+            if (!itensValidados.Any())
+            {
+                await Storage.LimparCarrinhoAsync(slug);
+                Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}");
+                return;
+            }
+
+            carrinho = itensValidados;
+            subtotal = CarrinhoService.CalcularSubtotal(carrinho);
+
+            if (avisos.Any())
+            {
+                // Grava a versão corrigida para o carrinho ficar igual ao checkout
+                await Storage.SalvarCarrinhoAsync(slug, carrinho);
+                mensagemErro = string.Join(" ", avisos);
+            }
+        }
+        catch (Exception ex)
+        {
+            carrinho = new();
+            subtotal = 0;
+            mensagemErro = $"Não foi possível carregar o carrinho: {ex.Message}";
+        }
+
         StateHasChanged();
     }
 
@@ -1268,8 +1319,8 @@ else
             if (clienteAtual == null) return;
 
             clienteEncontrado = true;
-            nomeCliente = clienteAtual.Nome;
-            emailCliente = clienteAtual.Email;
+            // Não preenche nome/e-mail: quem digitar um telefone qualquer
+            // não pode ver os dados de outra pessoa.
 
             enderecosCliente = await ClienteService.BuscarEnderecosAsync(clienteAtual.Codigo, CodEmp);
 
@@ -1298,6 +1349,10 @@ else
     }
 
     // ── finalizar ──
+    private static string MensagemLojaFechada(string? mensagem) =>
+        "A loja está fechada no momento e não está recebendo pedidos. " +
+        (string.IsNullOrWhiteSpace(mensagem) ? "Volte mais tarde!" : mensagem);
+
     private async Task FinalizarPedido()
     {
         mensagemErro = "";
@@ -1305,6 +1360,44 @@ else
 
         try
         {
+            // ── 0) A loja precisa estar aberta (pode ter sido fechada pelo painel) ──
+            var statusLoja = await LojaStatusService.ObterAsync(CodEmp);
+            if (statusLoja.Fechada)
+            {
+                mensagemErro = MensagemLojaFechada(statusLoja.Mensagem);
+                stepAtual = 4;
+                return;
+            }
+
+            // ── 1) Revalida o carrinho no banco ANTES de gravar qualquer coisa ──
+            var carrinhoNavegador = await Storage.ObterCarrinhoAsync(slug);
+
+            var (itensValidados, avisos) = await CarrinhoService.ValidarAsync(slug, carrinhoNavegador);
+
+            if (!itensValidados.Any())
+                throw new Exception("Seu carrinho está vazio ou os produtos não estão mais disponíveis.");
+
+            decimal subtotalValidado = CarrinhoService.CalcularSubtotal(itensValidados);
+
+            // Se algo mudou desde que o cliente viu o resumo, mostra o valor
+            // correto e pede para confirmar de novo (não grava o pedido agora).
+            if (avisos.Any() || subtotalValidado != subtotal || itensValidados.Count != carrinho.Count)
+            {
+                carrinho = itensValidados;
+                subtotal = subtotalValidado;
+                await Storage.SalvarCarrinhoAsync(slug, carrinho);
+                mensagemErro = string.Join(" ", avisos.Append("Confira o resumo e confirme o pedido novamente."));
+                stepAtual = 4;
+                return;
+            }
+
+            carrinho = itensValidados;
+            subtotal = subtotalValidado;
+
+            var observacaoPedido = (observacao ?? "").Trim();
+            if (observacaoPedido.Length > MaxObservacaoPedido)
+                observacaoPedido = observacaoPedido[..MaxObservacaoPedido];
+
             // Garante cliente
             if (clienteAtual == null)
                 clienteAtual = await ClienteService.BuscarPorTelefoneAsync(telefoneCliente, CodEmp, empresaAtual!.CNPJ);
@@ -1312,7 +1405,7 @@ else
             if (clienteAtual == null)
             {
                 var endCadastro = tipoEntrega == "ENTREGA" ? (DeveUsarNovoEndereco ? novoEndereco : enderecoSelecionado) : new Endereco();
-                var novoId = await CheckoutService.CriarClienteDeliveryAsync(nomeCliente, telefoneCliente, emailCliente, empresaAtual!.CNPJ, endCadastro);
+                var novoId = await ClienteService.CriarClienteDeliveryAsync(nomeCliente, telefoneCliente, emailCliente, empresaAtual!.CNPJ, endCadastro);
                 clienteAtual = await ClienteService.BuscarPorCodigoAsync(novoId, CodEmp, empresaAtual!.CNPJ);
                 if (clienteAtual == null) throw new Exception("Não foi possível localizar o cliente criado.");
             }
@@ -1331,7 +1424,7 @@ else
                 CodCliente = clienteAtual.Codigo,
                 NomeCliente = nomeCliente,
                 TelefoneCliente = telefoneCliente,
-                EmailCliente = emailCliente,
+                EmailCliente = string.IsNullOrWhiteSpace(emailCliente) ? (clienteAtual.Email ?? "") : emailCliente,
                 EnderecoCompleto = tipoEntrega == "ENTREGA" ? endFinal.EnderecoCompleto : "RETIRADA NO LOCAL",
                 Bairro = endFinal.Bairro ?? "",
                 Cidade = endFinal.Cidade ?? "",
@@ -1345,22 +1438,24 @@ else
                 ValorTotal = total,
                 FormaPagamento = formaPagamento,
                 TipoEntrega = tipoEntrega,
-                Observacao = observacao + "Pagamento: " + formaPagamento + " Tipo: " + tipoEntrega,
+                Observacao = observacaoPedido + "Pagamento: " + formaPagamento + " Tipo: " + tipoEntrega,
                 Usuario = "SITE",
                 CodEmp = CodEmp,
                 Status = "PENDENTE",
                 CNPJ = empresaAtual!.CNPJ
             };
 
-            var codPedido = await PedidoService.CriarPedidoAsync(pedido, carrinho);
+            var codPedido = await PedidoService.CriarPedidoAsync(pedido, itensValidados);
 
-            await Storage.LimparCarrinhoAsync();
+            await Storage.LimparCarrinhoAsync(slug);
 
             sucesso = true;
             StateHasChanged();
 
             await Task.Delay(1800);
-            Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}/pedido-confirmado/{codPedido}");
+            // Link com token assinado (não usa mais o número sequencial do pedido)
+            var tokenPedido = PedidoLink.GerarToken(codPedido, CodEmp);
+            Nav.NavigateTo($"/EvolutDelivery/delivery/{slug}/pedido-confirmado/{tokenPedido}");
         }
         catch (Exception ex)
         {

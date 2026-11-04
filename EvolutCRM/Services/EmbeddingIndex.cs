@@ -11,19 +11,18 @@ public sealed class EmbeddingIndex
     private volatile List<DocVec> _docs = new();
     public DateTime CarregadoEm { get; private set; }
 
+    /// <summary>Casos que estão no índice agora (para a curadoria agrupar repetidos sem consultar o banco).</summary>
+    public IReadOnlyList<InsightVec> InsightsCarregados => _insights;
+
     public EmbeddingIndex(IConfiguration config) => _cs = config.GetConnectionString("Connection")!;
 
     public sealed record InsightVec(int TicketId, int TopicoIndex, string? Resumo,
-        string? Tags, string? Solucao, DateTime CriadoEm, float[] Vec, int CodEmp = 0);
+        string? Tags, string? Solucao, DateTime CriadoEm, float[] Vec, int CodEmp = 0,
+        int CodInsight = 0, int QtdPositivos = 0, int QtdNegativos = 0, string? Versao = null);
     public sealed record DocVec(int CodDoc, string Slug, string Titulo, string Texto, float[] Vec, int CodEmp = 0);
 
-    // Mesmo critério em todo lugar: só casos que ajudam a responder
-    private const string FiltroInsights = @"
-          I.Embedding IS NOT NULL
-          AND ISNULL(LTRIM(RTRIM(I.Resumo)), '')  <> ''
-          -- só casos que ajudam a responder: com solução e (confirmada ou confiança alta)
-          AND ISNULL(LTRIM(RTRIM(I.Solucao)), '') <> ''
-          AND (I.SolucaoConfirmada = 1 OR ISNULL(I.Confianca, 0) >= 70)";
+    // Critério de quais casos a IA usa: IaCuradoriaSchema.FiltroUsavel
+    // (só confirmados pelo cliente ou aprovados na curadoria; descartados e suspensos ficam fora)
 
     private readonly object _trava = new();
 
@@ -79,13 +78,17 @@ public sealed class EmbeddingIndex
 
     private static async Task<List<InsightVec>> CarregarInsightsAsync(SqlConnection conn, int? codTicket)
     {
+        var colunas = await IaCuradoriaSchema.GarantirAsync(conn);
+        var contadores = colunas ? "I.QtdPositivos, I.QtdNegativos" : "0 AS QtdPositivos, 0 AS QtdNegativos";
+
         var ins = new List<InsightVec>();
         await using var cmd = new SqlCommand($@"
-        SELECT I.CodTicketChamadoC, I.TopicoIndex, I.Resumo, I.Tags, I.Solucao, I.CriadoEm, I.Embedding,
-               ISNULL(T.CodEmp, 0) AS CodEmp
+        SELECT I.Codigo, I.CodTicketChamadoC, I.TopicoIndex, I.Resumo, I.Tags, I.Solucao, I.CriadoEm, I.Embedding,
+               ISNULL(T.CodEmp, 0) AS CodEmp, ISNULL(T.Versao, '') AS Versao, {contadores}
         FROM dbo.AiTicketInsights I
         LEFT JOIN TicketChamadoC T ON T.Codigo = I.CodTicketChamadoC
-        WHERE {FiltroInsights}
+        WHERE I.Embedding IS NOT NULL
+          AND {IaCuradoriaSchema.Filtro(colunas)}
           AND (@Ticket IS NULL OR I.CodTicketChamadoC = @Ticket);", conn);
         cmd.Parameters.Add("@Ticket", System.Data.SqlDbType.Int).Value = (object?)codTicket ?? DBNull.Value;
 
@@ -94,10 +97,14 @@ public sealed class EmbeddingIndex
         {
             var vec = JsonSerializer.Deserialize<float[]>(rd["Embedding"]!.ToString()!)!;
             ins.Add(new InsightVec(
-                rd.GetInt32(0), rd["TopicoIndex"] is int t ? t : 1,
+                Convert.ToInt32(rd["CodTicketChamadoC"]), rd["TopicoIndex"] is int t ? t : 1,
                 rd["Resumo"] as string, rd["Tags"] as string, rd["Solucao"] as string,
                 rd["CriadoEm"] is DateTime dt ? dt : DateTime.MinValue, vec,
-                Convert.ToInt32(rd["CodEmp"])));
+                Convert.ToInt32(rd["CodEmp"]),
+                Convert.ToInt32(rd["Codigo"]),
+                rd["QtdPositivos"] is DBNull ? 0 : Convert.ToInt32(rd["QtdPositivos"]),
+                rd["QtdNegativos"] is DBNull ? 0 : Convert.ToInt32(rd["QtdNegativos"]),
+                rd["Versao"] as string));
         }
         return ins;
     }
@@ -131,8 +138,9 @@ public sealed class EmbeddingIndex
     //  - no máximo N pedaços por documentação / N casos por ticket, para variar o contexto
 
     // codEmp > 0: só itens da empresa do ticket (itens sem empresa conhecida continuam valendo)
+    // versaoCliente: casos de versão igual/próxima e recentes ganham uma leve preferência (AjusteTempoVersao)
     public List<(InsightVec Item, float Score)> SearchInsights(float[] q, string query, int top, int codEmp = 0,
-        string? sinonimos = null, int maxPorTicket = 2)
+        string? sinonimos = null, int maxPorTicket = 2, string? versaoCliente = null)
     {
         var lista = _insights;
         var idf = Idf();
@@ -142,7 +150,8 @@ public sealed class EmbeddingIndex
 
         return Diversificar(
             lista.Where(x => codEmp <= 0 || x.CodEmp <= 0 || x.CodEmp == codEmp)
-                 .Select(x => (x, Score: Hybrid(q, x.Vec, TokensDoItem(x), $"{x.Resumo} {x.Tags} {x.Solucao}", toks, sin, idf, query)))
+                 .Select(x => (x, Score: Hybrid(q, x.Vec, TokensDoItem(x), $"{x.Resumo} {x.Tags} {x.Solucao}", toks, sin, idf, query)
+                                        + AjusteFeedback(x) + AjusteTempoVersao(x, versaoCliente)))
                  .OrderByDescending(r => r.Score),
             r => r.x.TicketId, maxPorTicket, top);
     }
@@ -162,6 +171,58 @@ public sealed class EmbeddingIndex
                  .OrderByDescending(r => r.Score),
             r => r.x.CodDoc, maxPorDoc, top);
     }
+
+    /// <summary>
+    /// Peso do feedback dos atendentes: caso que vira resposta enviada quase igual (similaridade >= 80)
+    /// sobe um pouco na busca (até +0,06); caso com um 👎 desce 0,03 (com 2 👎 ele sai do índice).
+    /// </summary>
+    private static float AjusteFeedback(InsightVec x)
+        => Math.Min(0.06f, 0.015f * Math.Max(0, x.QtdPositivos)) - (x.QtdNegativos >= 1 ? 0.03f : 0f);
+
+    /// <summary>
+    /// Preferência leve por casos recentes e da mesma versão do cliente (a versão do caso é a do ticket de origem).
+    /// Fica entre -0,05 e +0,05: desempata e derruba solução velha de tela que mudou, mas não esconde
+    /// um caso antigo que responde direto a dúvida.
+    /// </summary>
+    private static float AjusteTempoVersao(InsightVec x, string? versaoCliente)
+    {
+        float a = 0;
+        if (x.CriadoEm > DateTime.MinValue)
+        {
+            var dias = (DateTime.Now - x.CriadoEm).TotalDays;
+            a += dias <= 180 ? 0.02f : dias <= 365 ? 0f : dias <= 730 ? -0.02f : -0.03f;
+        }
+        a += ProximidadeVersao(versaoCliente, x.Versao) switch
+        {
+            2 => 0.03f,    // mesma versão
+            1 => 0.01f,    // mesmo major.minor
+            -1 => -0.02f,  // major diferente
+            _ => 0f        // não dá para comparar
+        };
+        return a;
+    }
+
+    /// <summary>
+    /// Compara versões pelos números ("4.12.3", "2025.10.1", "v4.12"): 2 = mesma versão (3 primeiros números),
+    /// 1 = mesmo major.minor, 0 = só o major igual ou não dá para comparar, -1 = major diferente.
+    /// </summary>
+    public static int ProximidadeVersao(string? a, string? b)
+    {
+        var va = NumerosVersao(a);
+        var vb = NumerosVersao(b);
+        if (va.Count == 0 || vb.Count == 0) return 0;
+        if (va[0] != vb[0]) return -1;
+
+        int limite = Math.Min(3, Math.Min(va.Count, vb.Count));
+        int iguais = 1;
+        while (iguais < limite && va[iguais] == vb[iguais]) iguais++;
+
+        if (iguais >= 3 || (iguais == limite && limite >= 2)) return 2;
+        return iguais >= 2 ? 1 : 0;
+    }
+
+    private static List<long> NumerosVersao(string? v)
+        => Regex.Matches(v ?? "", @"\d+").Select(m => long.TryParse(m.Value, out var n) ? n : 0).Take(4).ToList();
 
     private static List<(T Item, float Score)> Diversificar<T>(IEnumerable<(T x, float Score)> ordenados,
         Func<(T x, float Score), int> chave, int maxPorChave, int top)

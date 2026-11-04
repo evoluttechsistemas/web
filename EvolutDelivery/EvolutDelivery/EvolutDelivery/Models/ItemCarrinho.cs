@@ -10,6 +10,10 @@
         public string ImagemBase64 { get; set; } // base64 da imagem do produto
         public string Observacao { get; set; }
 
+        // Estoque disponível do produto (preenchido pelo CarrinhoService, não é salvo no navegador).
+        // null = produto sem controle de estoque.
+        public decimal? EstoqueDisponivel { get; set; }
+
     }
 
 }

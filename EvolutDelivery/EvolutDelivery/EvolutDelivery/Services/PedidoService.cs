@@ -8,9 +8,11 @@ namespace EvolutDelivery.Services
     public class PedidoService
     {
         private readonly string _connectionString;
+        private readonly ILogger<PedidoService> _logger;
 
-        public PedidoService(IConfiguration config)
+        public PedidoService(IConfiguration config, ILogger<PedidoService> logger)
         {
+            _logger = logger;
             _connectionString = config.GetConnectionString("ConnectionComercial")
                 ?? throw new ArgumentNullException("ConnectionString não configurada");
         }
@@ -40,8 +42,7 @@ namespace EvolutDelivery.Services
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                Console.WriteLine("Erro ao criar pedido: " + ex.Message);
-                Console.WriteLine(ex.StackTrace);
+                _logger.LogError(ex, "Erro ao criar pedido da empresa {CodEmp}", pedido.CodEmp);
                 throw;
             }
         }
@@ -282,14 +283,12 @@ namespace EvolutDelivery.Services
             vd.Quantidade,
             vd.PrecoUnitario,
             vd.PrecoTotal,
-            CAST(NULL AS NVARCHAR(300)) AS Observacao,
-            prod.Imagem
+            CAST(NULL AS NVARCHAR(300)) AS Observacao
         FROM VendaDAFV vd
         OUTER APPLY
         (
             SELECT TOP 1
-                p.Descricao,
-                p.Imagem
+                p.Descricao
             FROM ProdutoAFV p
             WHERE p.Codigo = vd.CodProduto
               AND p.CNPJ = vd.CNPJ
@@ -313,8 +312,7 @@ namespace EvolutDelivery.Services
                     Quantidade = Convert.ToDecimal(reader["Quantidade"]),
                     PrecoUnitario = Convert.ToDecimal(reader["PrecoUnitario"]),
                     PrecoTotal = Convert.ToDecimal(reader["PrecoTotal"]),
-                    Observacao = reader.GetStringOrEmpty("Observacao"),
-                    ImagemProduto = reader["Imagem"] == DBNull.Value ? null : (byte[])reader["Imagem"]
+                    Observacao = reader.GetStringOrEmpty("Observacao")
                 });
             }
 
@@ -421,19 +419,6 @@ namespace EvolutDelivery.Services
         // =========================
         // MÉTODOS PRIVADOS
         // =========================
-        private async Task<int> GerarNovoCodigoVendaAsync(SqlConnection conn, SqlTransaction transaction, int codEmp)
-        {
-            var sql = @"
-                SELECT ISNULL(MAX(Codigo), 0) + 1
-                FROM VendaCAFV
-                WHERE CodEmp = @CodEmp";
-
-            using var cmd = new SqlCommand(sql, conn, transaction);
-            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
-
-            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
-        }
-
         private async Task<int> InserirVendaCAFVAsync(SqlConnection conn, SqlTransaction transaction, Pedido pedido)
         {
             var sql = @"

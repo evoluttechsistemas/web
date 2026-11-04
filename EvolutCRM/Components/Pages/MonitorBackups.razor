@@ -1,6 +1,7 @@
 ﻿@page "/admin/monitor-backups"
 @using EvolutCRM.Services
 @inject MonitorBackupService MonitorBackupService
+@inject MonitorServidorService MonitorServidor
 @inject IJSRuntime JS
 @implements IDisposable
 @inject UserState UserState
@@ -858,6 +859,96 @@
         font-weight: 700;
     }
 
+    /* ── Servidor de backup (FTP) ─────────────────────────── */
+    .mb-srv {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+        background: var(--mb-card);
+        border: 1px solid var(--mb-line);
+        border-left: 5px solid var(--mb-soft);
+        border-radius: var(--mb-rad);
+        padding: 14px 18px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+    }
+
+        .mb-srv.on { border-left-color: var(--mb-green); }
+        .mb-srv.off {
+            border-left-color: var(--mb-red);
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
+    .mb-srv-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--mb-soft);
+        flex-shrink: 0;
+    }
+
+        .mb-srv.on .mb-srv-dot {
+            background: var(--mb-green);
+            box-shadow: 0 0 0 4px rgba(22,163,74,.15);
+        }
+
+        .mb-srv.off .mb-srv-dot {
+            background: var(--mb-red);
+            box-shadow: 0 0 0 4px rgba(220,38,38,.18);
+            animation: mb-srv-pulsa 1.2s ease-in-out infinite;
+        }
+
+    @@keyframes mb-srv-pulsa {
+        50% { box-shadow: 0 0 0 8px rgba(220,38,38,.05); }
+    }
+
+    .mb-srv-info {
+        flex: 1;
+        min-width: 220px;
+    }
+
+    .mb-srv-nome {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--mb-ink);
+    }
+
+    .mb-srv-sub {
+        font-size: 12px;
+        color: var(--mb-muted);
+        margin-top: 2px;
+    }
+
+    .mb-srv.off .mb-srv-sub { color: #b91c1c; font-weight: 600; }
+
+    .mb-srv-badge {
+        font-size: 11.5px;
+        font-weight: 800;
+        padding: 5px 11px;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: var(--mb-ink2);
+        white-space: nowrap;
+    }
+
+        .mb-srv.on .mb-srv-badge { background: #dcfce7; color: #15803d; }
+        .mb-srv.off .mb-srv-badge { background: #fee2e2; color: #b91c1c; }
+
+    .mb-srv-quedas {
+        flex-basis: 100%;
+        font-size: 11.5px;
+        color: var(--mb-muted);
+        border-top: 1px dashed var(--mb-line);
+        padding-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+    }
+
+        .mb-srv-quedas strong { color: var(--mb-ink2); }
+
     .mb-pg-info {
         font-size: 11.5px;
         color: var(--mb-muted);
@@ -897,6 +988,53 @@
             </button>
         </div>
     </div>
+
+    @foreach (var srv in MonitorServidor.Status)
+    {
+        var classe = srv.Online switch { true => "on", false => "off", _ => "" };
+        <div class="mb-srv @classe">
+            <span class="mb-srv-dot"></span>
+            <div class="mb-srv-info">
+                <div class="mb-srv-nome">@srv.Nome <span style="font-weight:500;color:var(--mb-muted);font-size:12px;">· @srv.Host:@srv.Porta</span></div>
+                <div class="mb-srv-sub">
+                    @if (srv.Online == false)
+                    {
+                        <text>Sem resposta desde @srv.ForaDesde?.ToString("dd/MM HH:mm") (@MonitorServidorService.FormatarDuracao(DateTime.Now - (srv.ForaDesde ?? DateTime.Now))) — @srv.UltimoErro</text>
+                    }
+                    else if (srv.Online == true)
+                    {
+                        <text>Respondendo em @(srv.LatenciaMs) ms · verificado @TempoAtras(srv.UltimaVerificacao)</text>
+                    }
+                    else if (srv.FalhasSeguidas > 0)
+                    {
+                        <text>Falhou @srv.FalhasSeguidas vez(es), confirmando... — @srv.UltimoErro</text>
+                    }
+                    else
+                    {
+                        <text>Aguardando a primeira verificação...</text>
+                    }
+                </div>
+            </div>
+            <span class="mb-srv-badge">
+                @(srv.Online switch { true => "● Online", false => "● FORA DO AR", _ => "○ Verificando" })
+            </span>
+
+            @if (srv.UltimasQuedas.Any())
+            {
+                <div class="mb-srv-quedas">
+                    <strong>Últimas quedas:</strong>
+                    @foreach (var q in srv.UltimasQuedas.Take(5))
+                    {
+                        <span>
+                            @q.Inicio.ToString("dd/MM HH:mm") →
+                            @(q.Fim.HasValue ? q.Fim.Value.ToString("HH:mm") : "agora")
+                            (@MonitorServidorService.FormatarDuracao(q.Duracao))
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+    }
 
     @if (!string.IsNullOrEmpty(_erroDebug))
     {
@@ -1327,8 +1465,21 @@
 
     protected override async Task OnInitializedAsync()
     {
+        MonitorServidor.OnVerificado += AoVerificarServidor;
         await AtualizarAsync();
         IniciarTimer();
+    }
+
+    private void AoVerificarServidor()
+    {
+        if (!_disposed) _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static string TempoAtras(DateTime? quando)
+    {
+        if (quando == null) return "-";
+        var s = (int)(DateTime.Now - quando.Value).TotalSeconds;
+        return s < 60 ? $"há {Math.Max(s, 0)}s" : $"há {s / 60} min";
     }
 
     private void IniciarTimer()
@@ -1590,6 +1741,7 @@
     public void Dispose()
     {
         _disposed = true;
+        MonitorServidor.OnVerificado -= AoVerificarServidor;
         try { _cts?.Cancel(); } catch { }
         try { _timer?.Dispose(); } catch { }
         try { _cts?.Dispose(); } catch { }

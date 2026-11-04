@@ -10,6 +10,7 @@
 @using System.IO
 @inject AbaService Abas
 @inject IConfiguration Config
+@inject EvolutCRM.Services.ImagemArmazenamentoService Imagens
 
 <style>
     * {
@@ -1680,7 +1681,7 @@
         // Placeholder
         editor.addEventListener('input', () => {
             editor.classList.toggle('be-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
-            dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+            // Não envia o HTML ao servidor a cada tecla: o salvar lê o conteúdo direto do editor.
         });
         editor.classList.toggle('be-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
 
@@ -1691,11 +1692,13 @@
                 if (item.type.startsWith('image/')) {
                     e.preventDefault();
                     const file = item.getAsFile();
+                    const sel = window.getSelection();
+                    const posicao = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
                     const reader = new FileReader();
                     reader.onload = async () => {
                         const base64 = reader.result.split(',')[1];
                         const url = await dotnetRef.invokeMethodAsync('SalvarImagemBase64JS', base64, item.type);
-                        if (url) window.beInsertImage(url);
+                        if (url) window.beInsertImage(url, '', posicao);
                     };
                     reader.readAsDataURL(file);
                     return;
@@ -1855,7 +1858,6 @@
             const onUp = () => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
-                dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
             };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
@@ -1878,9 +1880,14 @@
         document.execCommand(cmd, false, value ?? null);
     };
 
-    window.beInsertImage = function(url, altText) {
+    window.beInsertImage = function(url, altText, posicao) {
         const editor = document.getElementById('be-editor');
         editor.focus();
+        if (posicao && editor.contains(posicao.startContainer)) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(posicao);
+        }
         const wrap = document.createElement('div');
         wrap.className = 'be-img-wrap';
         wrap.contentEditable = 'false';
@@ -1907,7 +1914,7 @@
         const btnDel = document.createElement('button');
         btnDel.className = 'be-img-ctrl-btn';
         btnDel.textContent = '✕ Remover';
-        btnDel.onclick = () => { wrap.remove(); window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML); };
+        btnDel.onclick = () => { wrap.remove(); };
 
         ctrls.appendChild(btnFloat);
         ctrls.appendChild(btnDel);
@@ -1916,7 +1923,6 @@
         wrap.appendChild(handle);
 
         document.execCommand('insertHTML', false, wrap.outerHTML);
-        window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
     };
 
     window.beInsertVideo = function(url) {
@@ -1933,7 +1939,6 @@
             html = `<div class="be-video-wrap" contenteditable="false"><div class="be-video-controls"><button class="be-video-ctrl-btn" onclick="this.closest('.be-video-wrap').remove()">✕ Remover</button></div><video controls src="${url}"></video></div><p><br></p>`;
         }
         document.execCommand('insertHTML', false, html);
-        window._beRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
     };
 
     window.beInsertBlockquote = function() {
@@ -2685,8 +2690,19 @@
     public void OnEditorInput(string html) => _htmlCorpo = html;
 
     [JSInvokable]
-    public Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
-        => Task.FromResult<string?>($"data:{mimeType};base64,{base64}");
+    public async Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
+    {
+        // Print colado: grava em /uploads/blog e devolve a URL completa (o site do blog é outro domínio)
+        try
+        {
+            return await Imagens.SalvarAsync(Convert.FromBase64String(base64), mimeType, "blog", Imagens.UrlBase);
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() => MostrarMensagem($"Erro ao salvar imagem: {ex.Message}", "error"));
+            return null;
+        }
+    }
 
     [JSInvokable]
     public void AbrirModalVideoJS()
@@ -2723,11 +2739,18 @@
     {
         var arquivo = e.File;
         if (arquivo == null || arquivo.Size > MaxImagemBytes) { MostrarMensagem("Imagem muito grande (máx 8 MB).", "error"); return; }
-        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms);
-        var url = $"data:{arquivo.ContentType};base64,{Convert.ToBase64String(ms.ToArray())}";
-        await JS.InvokeVoidAsync("beInsertImage", url, arquivo.Name);
+        try
+        {
+            await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var url = await Imagens.SalvarAsync(ms.ToArray(), arquivo.ContentType, "blog", Imagens.UrlBase);
+            await JS.InvokeVoidAsync("beInsertImage", url, arquivo.Name);
+        }
+        catch (Exception ex)
+        {
+            MostrarMensagem($"Erro ao salvar imagem: {ex.Message}", "error");
+        }
     }
 
     private async Task UploadCover(InputFileChangeEventArgs e)
@@ -2780,6 +2803,14 @@
         mensagem = "";
 
         _htmlCorpo = await JS.InvokeAsync<string>("beGetContent");
+
+        // Imagens ainda em base64 (coladas de outro lugar ou de posts antigos) viram arquivo
+        var (htmlLimpo, trocouImagens) = await Imagens.ExtrairBase64Async(_htmlCorpo, "blog", Imagens.UrlBase);
+        if (trocouImagens)
+        {
+            _htmlCorpo = htmlLimpo;
+            await JS.InvokeVoidAsync("beSetContent", _htmlCorpo);
+        }
 
         if (string.IsNullOrWhiteSpace(titulo))
         {
@@ -2965,6 +2996,8 @@
             _layout.AtualizadoEm = DateTime.Now;
             json = System.Text.Json.JsonSerializer.Serialize(_layout);
             _layout.HtmlRenderizado = null;
+            // imagens do montador que ficaram em base64 (envio falhou) viram arquivo
+            json = (await Imagens.ExtrairBase64Async(json, "blog", Imagens.UrlBase)).Texto;
         }
         await BlogRepo.SalvarLayoutAsync(idPost, json);
         _layoutSujo = false;

@@ -20,6 +20,7 @@ namespace EvolutCRM.Services
         private readonly IHttpClientFactory _httpFactory;
         private readonly OpenAiClient _openAiClient;
         private readonly EmbeddingIndex _index;
+        private readonly TreinamentoClienteService _treinos;
 
         public AiService(
             IConfiguration config,
@@ -27,8 +28,10 @@ namespace EvolutCRM.Services
             AiTicketInsightsRepository insights,
             IHttpClientFactory httpFactory,
             OpenAiClient openAiClient,
-            EmbeddingIndex index)
+            EmbeddingIndex index,
+            TreinamentoClienteService treinos)
         {
+            _treinos = treinos;
             _config = config;
             _docs = docs;
             _insights = insights;
@@ -394,15 +397,22 @@ namespace EvolutCRM.Services
             {
                 var apiKey = _config["OpenAI:ApiKey"];
                 var model = _config["OpenAI:Model"] ?? "gpt-4.1-mini";
-                // Modelo da resposta final (opcional): permite usar um modelo maior só aqui
+                // Modelo da resposta final: um modelo maior só aqui (segue melhor as regras: não inventar
+                // caminho, não negar sem base). Entendimento e reordenação continuam no modelo leve (OpenAI:Model).
                 var modeloResposta = _config["OpenAI:ModeloResposta"];
-                if (string.IsNullOrWhiteSpace(modeloResposta)) modeloResposta = model;
+                if (string.IsNullOrWhiteSpace(modeloResposta)) modeloResposta = "gpt-4.1";
 
                 if (string.IsNullOrWhiteSpace(apiKey))
                     return Falha("API KEY não configurada.");
 
                 var mensagens = (pedido.MensagensCliente ?? "").Trim();
                 var imagens = await CarregarImagensAsync(pedido.CodTicket, pedido.CodigosImagens, ct);
+
+                // Quem é o cliente: módulos que aparecem nos atendimentos dele, últimos tickets e treinamentos
+                // (só na tela do ticket; a avaliação automática testa sem isso)
+                var contextoCliente = pedido.Origem == "ticket" && pedido.CodTicket > 0
+                    ? await MontarContextoClienteAsync(pedido.CodTicket, ct)
+                    : "";
 
                 if (mensagens.Length == 0 && imagens.Count == 0)
                     return Falha("Pergunta vazia.");
@@ -424,84 +434,19 @@ namespace EvolutCRM.Services
                     pergunta = string.IsNullOrWhiteSpace(textoImagens) ? (pedido.Assunto ?? "") : textoImagens;
 
                 var textoBusca = string.IsNullOrWhiteSpace(textoImagens) ? pergunta : pergunta + "\n" + textoImagens;
-                // Sinônimos (PDV = frente de caixa etc.) entram na busca por palavras com peso menor
-                var sinonimos = Sinonimos(textoBusca);
-
                 LogHelper.Log("PERGUNTA ENTENDIDA: " + pergunta);
                 if (!string.IsNullOrWhiteSpace(textoImagens))
                     LogHelper.Log("TEXTO DOS PRINTS: " + textoImagens);
 
-                // 2) Buscar por embeddings (candidatos: até 2 pedaços por documentação e 2 casos por ticket)
-                float[] qVec;
-                try { qVec = await _openAiClient.GetEmbeddingAsync(textoBusca); }
-                catch { qVec = Array.Empty<float>(); }
-
-                var docHits = qVec.Length > 0 ? _index.SearchDocs(qVec, textoBusca, 12, pedido.CodEmp, sinonimos) : new();
-                var insHits = qVec.Length > 0 ? _index.SearchInsights(qVec, textoBusca, 14, pedido.CodEmp, sinonimos) : new();
-
-                // Avaliação automática: tira os casos do próprio ticket testado
-                if (pedido.IgnorarTicketNaBusca > 0)
-                    insHits = insHits.Where(h => h.Item.TicketId != pedido.IgnorarTicketNaBusca).ToList();
-                insHits = insHits.Take(12).ToList();
-
-                LogHelper.Log($"[BUSCA] Docs encontrados: {docHits.Count} | Insights encontrados: {insHits.Count}");
-                foreach (var d in docHits.Take(3))
-                    LogHelper.Log($"[DOCS] {d.Score:F2} {d.Item.Titulo}");
-                foreach (var i in insHits.Take(3))
-                    LogHelper.Log($"[INSIGHTS] {i.Score:F2} {i.Item.Resumo}");
-
-                // 3) Filtrar por relevância
-                //    Com reordenação (padrão): a IA dá nota 0-3 para os 20 melhores candidatos e só fica o que ajuda.
-                //    Sem ela (ou se falhar): corte pela pontuação da busca.
-                //    Ajustáveis no appsettings: IA:Rerank, IA:MinCandidato, IA:MinRelevante, IA:NivelAlto
-                float minCandidato = LerFloat("IA:MinCandidato", 0.22f);
-                float minRelevante = LerFloat("IA:MinRelevante", 0.30f);
-                float nivelAlto = LerFloat("IA:NivelAlto", 0.38f);
-                bool usarRerank = !string.Equals(_config["IA:Rerank"], "false", StringComparison.OrdinalIgnoreCase);
-
-                List<(EmbeddingIndex.DocVec Item, float Score)> docsBons;
-                List<(EmbeddingIndex.InsightVec Item, float Score)> insBons;
-                string nivel;
-
-                var candDocs = docHits.Where(h => h.Score >= minCandidato).Take(10).ToList();
-                var candIns = insHits.Where(h => h.Score >= minCandidato).Take(10).ToList();
-
-                Dictionary<string, int>? notas = null;
-                if (usarRerank && candDocs.Count + candIns.Count > 0)
-                    notas = await ReordenarAsync(textoBusca, candDocs, candIns, model, ct);
-
-                if (notas != null)
-                {
-                    int NotaD(int i) => notas.TryGetValue("D" + (i + 1), out var n) ? n : 0;
-                    int NotaC(int i) => notas.TryGetValue("C" + (i + 1), out var n) ? n : 0;
-
-                    var dOrd = candDocs.Select((h, i) => (h, nota: NotaD(i)))
-                        .Where(x => x.nota >= 2).OrderByDescending(x => x.nota).ThenByDescending(x => x.h.Score).ToList();
-                    var cOrd = candIns.Select((h, i) => (h, nota: NotaC(i)))
-                        .Where(x => x.nota >= 2).OrderByDescending(x => x.nota).ThenByDescending(x => x.h.Score).ToList();
-
-                    docsBons = dOrd.Take(4).Select(x => x.h).ToList();
-                    insBons = cOrd.Take(5).Select(x => x.h).ToList();
-
-                    bool temNota3 = dOrd.Any(x => x.nota == 3) || cOrd.Any(x => x.nota == 3);
-                    nivel = temNota3 ? "ALTO" : (docsBons.Count + insBons.Count > 0 ? "MEDIO" : "BAIXO");
-
-                    LogHelper.Log("[RERANK] " + string.Join(" ", notas.OrderBy(k => k.Key).Select(k => $"{k.Key}={k.Value}")));
-                }
-                else
-                {
-                    docsBons = docHits.Where(h => h.Score >= minRelevante).Take(5).ToList();
-                    insBons = insHits.Where(h => h.Score >= minRelevante).Take(6).ToList();
-                    float melhorBusca = Math.Max(
-                        docsBons.Count > 0 ? docsBons[0].Score : 0,
-                        insBons.Count > 0 ? insBons[0].Score : 0);
-                    nivel = melhorBusca >= nivelAlto ? "ALTO" : "BAIXO";
-                }
-
-                float melhor = Math.Max(
-                    docsBons.Count > 0 ? docsBons.Max(h => h.Score) : 0,
-                    insBons.Count > 0 ? insBons.Max(h => h.Score) : 0);
-
+                // 2) e 3) Buscar e selecionar o material (mesmo pipeline do assistente do atendente)
+                var selecao = await SelecionarBaseAsync(textoBusca, pedido.CodEmp, pedido.IgnorarTicketNaBusca, pedido.Versao, 4, 5, ct);
+                var docsBons = selecao.Docs;
+                var insBons = selecao.Casos;
+                var notaPorItem = selecao.Notas;
+                var nivel = selecao.Nivel;
+                float melhor = selecao.Melhor;
+                // "alta" só com busca forte: na prova, abaixo disso o acerto do "alta" caía para ~55%
+                float scoreAlta = LerFloat("IA:ScoreAlta", 0.58f);
                 // 4) Montar contexto — cada trecho com um id (D1, C1...) para a IA dizer o que usou
                 var fontesDisponiveis = new Dictionary<string, AiFonte>(StringComparer.OrdinalIgnoreCase);
                 var ctx = new StringBuilder();
@@ -524,7 +469,9 @@ namespace EvolutCRM.Services
                             fontesDisponiveis[idF] = new AiFonte
                             {
                                 Id = idF, Tipo = "doc", Titulo = d.Item.Titulo,
-                                CodDoc = d.Item.CodDoc, Score = d.Score
+                                CodDoc = d.Item.CodDoc, Slug = d.Item.Slug, Score = d.Score,
+                                Nota = notaPorItem.TryGetValue(d.Item, out var nd) ? nd : -1,
+                                Texto = Cut(d.Item.Texto, 3000)
                             };
                             ctx.AppendLine("-----");
                             ctx.AppendLine($"[{idF}] TÍTULO: {d.Item.Titulo}");
@@ -542,11 +489,14 @@ namespace EvolutCRM.Services
                             fontesDisponiveis[idF] = new AiFonte
                             {
                                 Id = idF, Tipo = "caso", Titulo = Cut(it.Item.Resumo ?? "", 140),
-                                CodTicket = it.Item.TicketId, Score = it.Score
+                                CodTicket = it.Item.TicketId, CodInsight = it.Item.CodInsight, Score = it.Score,
+                                Nota = notaPorItem.TryGetValue(it.Item, out var nc) ? nc : -1,
+                                Texto = "Caso: " + (it.Item.Resumo ?? "") + "\n\nSolução: " + (it.Item.Solucao ?? "")
                             };
                             ctx.AppendLine("-----");
                             ctx.AppendLine($"[{idF}] PERGUNTA: {Cut(it.Item.Resumo ?? "", 300)}");
                             ctx.AppendLine($"SOLUÇÃO: {Cut(it.Item.Solucao ?? "", 600)}");
+                            ctx.AppendLine("CASO DE: " + DescreverOrigemCaso(it.Item));
                         }
                     }
                 }
@@ -564,6 +514,11 @@ namespace EvolutCRM.Services
                 if (!string.IsNullOrWhiteSpace(pedido.Versao))
                 {
                     conteudoUsuario.AppendLine("Versão do sistema do cliente: " + pedido.Versao.Trim());
+                    conteudoUsuario.AppendLine();
+                }
+                if (!string.IsNullOrWhiteSpace(contextoCliente))
+                {
+                    conteudoUsuario.AppendLine(contextoCliente);
                     conteudoUsuario.AppendLine();
                 }
                 if (!string.IsNullOrWhiteSpace(pedido.Conversa))
@@ -638,7 +593,7 @@ namespace EvolutCRM.Services
                     .Select(x => fontesDisponiveis[x])
                     .ToList();
 
-                var confianca = CalcularConfianca(confiancaIa, nivel, fontes.Count);
+                var confianca = CalcularConfianca(confiancaIa, nivel, fontes.Count, melhor, scoreAlta);
                 relogio.Stop();
 
                 long codLog = await GravarLogAsync(pedido, pergunta, reply, confianca, nivel, melhor,
@@ -662,6 +617,281 @@ namespace EvolutCRM.Services
                 System.Diagnostics.Debug.WriteLine("[AI] Erro COMPLETO: " + ex);
                 LogHelper.Log("[AI] ERRO COMPLETO: " + ex);
                 return Falha("ERRO IA: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Bloco "SOBRE ESTE CLIENTE" para a resposta: observação do cadastro, módulos/assuntos que mais aparecem
+        /// nos atendimentos dele, os 3 últimos tickets (com o caso e a solução quando já validados) e os
+        /// treinamentos que ele recebeu. Vazio quando o ticket não tem cliente ou se der erro (a sugestão segue sem).
+        /// </summary>
+        private async Task<string> MontarContextoClienteAsync(int codTicket, CancellationToken ct)
+        {
+            try
+            {
+                await using var conn = new SqlConnection(_config.GetConnectionString("Connection"));
+                await conn.OpenAsync(ct);
+
+                int codCliente = 0, codEmp = 0;
+                string nome = "", obs = "", cidade = "";
+                await using (var cmd = new SqlCommand(@"
+SELECT TOP 1 ISNULL(T.CodCliente, 0), T.CodEmp,
+       ISNULL(NULLIF(LTRIM(RTRIM(C.Apelido)), ''), ISNULL(C.Nome, '')),
+       ISNULL(C.Observacao, ''),
+       LTRIM(RTRIM(ISNULL(C.NomeCidade, '') + CASE WHEN ISNULL(C.UF, '') <> '' THEN '/' + C.UF ELSE '' END))
+FROM TicketChamadoC T
+LEFT JOIN Cliente C ON C.CodEmp = T.CodEmp AND C.Codigo = T.CodCliente
+WHERE T.Codigo = @t;", conn))
+                {
+                    cmd.Parameters.AddWithValue("@t", codTicket);
+                    await using var rd = await cmd.ExecuteReaderAsync(ct);
+                    if (!await rd.ReadAsync(ct)) return "";
+                    codCliente = Convert.ToInt32(rd.GetValue(0));
+                    codEmp = rd.GetInt32(1);
+                    nome = rd.GetString(2).Trim();
+                    obs = rd.GetString(3).Trim();
+                    cidade = rd.GetString(4).Trim().Trim('/');
+                }
+                if (codCliente <= 0) return "";
+
+                var colunas = await IaCuradoriaSchema.GarantirAsync(conn);
+
+                // Módulos/assuntos que mais aparecem nos atendimentos dele (categoria dos casos aprendidos)
+                var modulos = new List<string>();
+                await using (var cmd = new SqlCommand(@"
+SELECT TOP 6 I.Categoria, COUNT(DISTINCT I.CodTicketChamadoC) AS Qtd
+FROM dbo.AiTicketInsights I
+JOIN TicketChamadoC T ON T.Codigo = I.CodTicketChamadoC
+WHERE T.CodCliente = @cli AND T.CodEmp = @emp AND T.Codigo <> @t
+  AND ISNULL(I.Categoria, '') NOT IN ('', 'outro')
+GROUP BY I.Categoria
+ORDER BY Qtd DESC;", conn))
+                {
+                    cmd.Parameters.AddWithValue("@cli", codCliente);
+                    cmd.Parameters.AddWithValue("@emp", codEmp);
+                    cmd.Parameters.AddWithValue("@t", codTicket);
+                    await using var rd = await cmd.ExecuteReaderAsync(ct);
+                    while (await rd.ReadAsync(ct))
+                    {
+                        var q = rd.GetInt32(1);
+                        modulos.Add($"{rd.GetString(0)} ({q} {(q == 1 ? "ticket" : "tickets")})");
+                    }
+                }
+
+                // Últimos 3 atendimentos (180 dias); caso + solução só quando já validados
+                var ultimos = new List<string>();
+                await using (var cmd = new SqlCommand($@"
+SELECT TOP 3 T.Codigo, ISNULL(T.Assunto, ''), U.Ultima, ISNULL(S.Descricao, ''), X.Resumo, X.Solucao
+FROM TicketChamadoC T
+CROSS APPLY (SELECT MAX(D.DataHora) AS Ultima FROM TicketChamadoD D WHERE D.CodTicketChamadoC = T.Codigo) U
+LEFT JOIN TicketSituacaoCRM S ON S.CodEmp = T.CodEmp AND S.Codigo = T.CodSituacao
+OUTER APPLY (SELECT TOP 1 I.Resumo, I.Solucao FROM dbo.AiTicketInsights I
+             WHERE I.CodTicketChamadoC = T.Codigo AND {IaCuradoriaSchema.Filtro(colunas)}
+             ORDER BY I.TopicoIndex) X
+WHERE T.CodCliente = @cli AND T.CodEmp = @emp AND T.Codigo <> @t
+  AND U.Ultima >= DATEADD(DAY, -180, GETDATE())
+ORDER BY U.Ultima DESC;", conn))
+                {
+                    cmd.Parameters.AddWithValue("@cli", codCliente);
+                    cmd.Parameters.AddWithValue("@emp", codEmp);
+                    cmd.Parameters.AddWithValue("@t", codTicket);
+                    await using var rd = await cmd.ExecuteReaderAsync(ct);
+                    while (await rd.ReadAsync(ct))
+                    {
+                        var data = rd.IsDBNull(2) ? "" : rd.GetDateTime(2).ToString("dd/MM/yyyy");
+                        var linha = $"- {data}: {Cut(rd.GetString(1).Trim(), 140)}";
+                        var situacao = rd.GetString(3).Trim();
+                        if (situacao.Length > 0) linha += $" ({situacao})";
+                        if (!rd.IsDBNull(4) && !rd.IsDBNull(5))
+                            linha += $" — caso: {Cut(rd.GetString(4), 200)} | solução: {Cut(rd.GetString(5), 300)}";
+                        ultimos.Add(linha);
+                    }
+                }
+
+                var treinos = await _treinos.ResumoParaIAAsync(codEmp, codCliente);
+
+                var sb = new StringBuilder();
+                sb.AppendLine("SOBRE ESTE CLIENTE (contexto interno: use para acertar a resposta, nunca cite estes dados):");
+                if (nome.Length > 0) sb.AppendLine("Cliente: " + nome + (cidade.Length > 0 ? $" ({cidade})" : ""));
+                if (obs.Length > 0) sb.AppendLine("Observação do cadastro: " + Cut(System.Text.RegularExpressions.Regex.Replace(obs, @"\s+", " "), 300));
+                if (modulos.Count > 0) sb.AppendLine("Módulos/assuntos que mais aparecem nos atendimentos dele: " + string.Join(", ", modulos));
+                if (ultimos.Count > 0)
+                {
+                    sb.AppendLine("Últimos atendimentos dele:");
+                    foreach (var l in ultimos) sb.AppendLine(l);
+                }
+                if (!string.IsNullOrWhiteSpace(treinos))
+                {
+                    sb.AppendLine("Treinamentos que ele já recebeu:");
+                    sb.AppendLine(Cut(treinos, 1500));
+                }
+
+                // Só o cabeçalho e o nome: não acrescenta nada
+                return modulos.Count == 0 && ultimos.Count == 0 && string.IsNullOrWhiteSpace(treinos) && obs.Length == 0
+                    ? ""
+                    : sb.ToString().TrimEnd();
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Log($"[CONTEXTO CLIENTE] Ticket #{codTicket}: {ex.Message}");
+                return "";
+            }
+        }
+
+        /// <summary>
+        /// Busca e seleciona o material de apoio para uma dúvida (o mesmo pipeline para a sugestão ao cliente
+        /// e para o assistente do atendente): sinônimos do suporte, busca híbrida (com preferência leve por
+        /// casos recentes e da versão do cliente), reordenação pela IA (nota 0-3) e corte por relevância.
+        /// </summary>
+        public async Task<AiSelecaoBase> SelecionarBaseAsync(string textoBusca, int codEmp, int ignorarTicket = 0,
+            string? versao = null, int maxDocs = 4, int maxCasos = 5, CancellationToken ct = default)
+        {
+            var modeloLeve = _config["OpenAI:Model"] ?? "gpt-4.1-mini";
+            // Sinônimos (PDV = frente de caixa etc.) entram na busca por palavras com peso menor
+            var sinonimos = Sinonimos(textoBusca);
+
+
+            // 2) Buscar por embeddings (candidatos: até 2 pedaços por documentação e 2 casos por ticket)
+            float[] qVec;
+            try { qVec = await _openAiClient.GetEmbeddingAsync(textoBusca); }
+            catch { qVec = Array.Empty<float>(); }
+
+            var docHits = qVec.Length > 0 ? _index.SearchDocs(qVec, textoBusca, 12, codEmp, sinonimos) : new();
+            var insHits = qVec.Length > 0 ? _index.SearchInsights(qVec, textoBusca, 14, codEmp, sinonimos, versaoCliente: versao) : new();
+
+            // Avaliação automática: tira os casos do próprio ticket testado
+            if (ignorarTicket > 0)
+                insHits = insHits.Where(h => h.Item.TicketId != ignorarTicket).ToList();
+            insHits = insHits.Take(12).ToList();
+
+            LogHelper.Log($"[BUSCA] Docs encontrados: {docHits.Count} | Insights encontrados: {insHits.Count}");
+            foreach (var d in docHits.Take(3))
+                LogHelper.Log($"[DOCS] {d.Score:F2} {d.Item.Titulo}");
+            foreach (var i in insHits.Take(3))
+                LogHelper.Log($"[INSIGHTS] {i.Score:F2} {i.Item.Resumo}");
+
+            // 3) Filtrar por relevância
+            //    Com reordenação (padrão): a IA dá nota 0-3 para os 20 melhores candidatos e só fica o que ajuda.
+            //    Sem ela (ou se falhar): corte pela pontuação da busca.
+            //    Ajustáveis no appsettings: IA:Rerank, IA:MinCandidato, IA:MinRelevante, IA:NivelAlto
+            float minCandidato = LerFloat("IA:MinCandidato", 0.22f);
+            float minRelevante = LerFloat("IA:MinRelevante", 0.30f);
+            float nivelAlto = LerFloat("IA:NivelAlto", 0.38f);
+            var notaPorItem = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+            bool usarRerank = !string.Equals(_config["IA:Rerank"], "false", StringComparison.OrdinalIgnoreCase);
+
+            List<(EmbeddingIndex.DocVec Item, float Score)> docsBons;
+            List<(EmbeddingIndex.InsightVec Item, float Score)> insBons;
+            string nivel;
+
+            var candDocs = docHits.Where(h => h.Score >= minCandidato).Take(10).ToList();
+            var candIns = insHits.Where(h => h.Score >= minCandidato).Take(10).ToList();
+
+            Dictionary<string, int>? notas = null;
+            if (usarRerank && candDocs.Count + candIns.Count > 0)
+                notas = await ReordenarAsync(textoBusca, candDocs, candIns, modeloLeve, ct);
+
+            if (notas != null)
+            {
+                int NotaD(int i) => notas.TryGetValue("D" + (i + 1), out var n) ? n : 0;
+                int NotaC(int i) => notas.TryGetValue("C" + (i + 1), out var n) ? n : 0;
+
+                var dOrd = candDocs.Select((h, i) => (h, nota: NotaD(i)))
+                    .Where(x => x.nota >= 2).OrderByDescending(x => x.nota).ThenByDescending(x => x.h.Score).ToList();
+                var cOrd = candIns.Select((h, i) => (h, nota: NotaC(i)))
+                    .Where(x => x.nota >= 2).OrderByDescending(x => x.nota).ThenByDescending(x => x.h.Score).ToList();
+
+                docsBons = dOrd.Take(maxDocs).Select(x => x.h).ToList();
+                insBons = cOrd.Take(maxCasos).Select(x => x.h).ToList();
+                foreach (var x in dOrd) notaPorItem[x.h.Item] = x.nota;
+                foreach (var x in cOrd) notaPorItem[x.h.Item] = x.nota;
+
+                bool temNota3 = dOrd.Any(x => x.nota == 3) || cOrd.Any(x => x.nota == 3);
+                nivel = temNota3 ? "ALTO" : (docsBons.Count + insBons.Count > 0 ? "MEDIO" : "BAIXO");
+
+                LogHelper.Log("[RERANK] " + string.Join(" ", notas.OrderBy(k => k.Key).Select(k => $"{k.Key}={k.Value}")));
+            }
+            else
+            {
+                docsBons = docHits.Where(h => h.Score >= minRelevante).Take(maxDocs + 1).ToList();
+                insBons = insHits.Where(h => h.Score >= minRelevante).Take(maxCasos + 1).ToList();
+                float melhorBusca = Math.Max(
+                    docsBons.Count > 0 ? docsBons[0].Score : 0,
+                    insBons.Count > 0 ? insBons[0].Score : 0);
+                nivel = melhorBusca >= nivelAlto ? "ALTO" : "BAIXO";
+            }
+
+            float melhor = Math.Max(
+                docsBons.Count > 0 ? docsBons.Max(h => h.Score) : 0,
+                insBons.Count > 0 ? insBons.Max(h => h.Score) : 0);
+
+            return new AiSelecaoBase
+            {
+                Docs = docsBons,
+                Casos = insBons,
+                Notas = notaPorItem,
+                Nivel = nivel,
+                Melhor = melhor
+            };
+        }
+
+        /// <summary>"03/2025, versão 4.12.3" — para a IA pesar casos antigos ou de outra versão.</summary>
+        public static string DescreverOrigemCaso(EmbeddingIndex.InsightVec c)
+        {
+            var partes = new List<string>();
+            if (c.CriadoEm > DateTime.MinValue) partes.Add(c.CriadoEm.ToString("MM/yyyy"));
+            if (!string.IsNullOrWhiteSpace(c.Versao)) partes.Add("versão " + c.Versao.Trim());
+            return partes.Count == 0 ? "data e versão desconhecidas" : string.Join(", ", partes);
+        }
+
+        /// <summary>
+        /// Transforma a pergunta do atendente ("e isso aqui?", "como resolvo?") numa consulta de busca
+        /// autocontida, usando o assunto e o fim da conversa. Se falhar, devolve a pergunta como veio.
+        /// </summary>
+        public async Task<string> ReescreverParaBuscaAsync(string pergunta, string? contexto, CancellationToken ct = default)
+        {
+            pergunta = (pergunta ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(_config["OpenAI:ApiKey"]) || pergunta.Length == 0) return pergunta;
+
+            try
+            {
+                var body = new
+                {
+                    model = _config["OpenAI:Model"] ?? "gpt-4.1-mini",
+                    temperature = 0,
+                    response_format = new { type = "json_object" },
+                    messages = new object[]
+                    {
+                        new { role = "system", content = @"Você prepara buscas na base de conhecimento do suporte do sistema Evolut (ERP para varejo: PDV/frente de caixa, fiscal NF-e/NFC-e/SEFAZ, financeiro, estoque, etiquetas, balança, impressoras).
+Recebe a pergunta de um atendente e o contexto do atendimento. Escreva UMA consulta de busca autocontida, em português,
+com o problema real: módulo/tela, ação, mensagem ou código de erro. Resolva referências como ""isso"", ""esse erro"", ""aqui"" usando o contexto.
+Não responda a pergunta. Não inclua nomes, CNPJ, telefone ou dados do cliente.
+Responda só JSON: { ""consulta"": ""..."" }" },
+                        new { role = "user", content = "CONTEXTO DO ATENDIMENTO:\n" + Cut(contexto ?? "(sem contexto)", 3000) +
+                                                       "\n\nPERGUNTA DO ATENDENTE:\n" + Cut(pergunta, 1500) }
+                    }
+                };
+
+                var http = _httpFactory.CreateClient("openai");
+                using var req = new HttpRequestMessage(HttpMethod.Post, "v1/chat/completions")
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+                };
+                using var resp = await http.SendAsync(req, ct);
+                var raw = await resp.Content.ReadAsStringAsync(ct);
+                if (!resp.IsSuccessStatusCode) return pergunta;
+
+                using var doc = JsonDocument.Parse(raw);
+                var conteudo = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+                using var j = JsonDocument.Parse(conteudo);
+                var consulta = j.RootElement.TryGetProperty("consulta", out var c) && c.ValueKind == JsonValueKind.String
+                    ? (c.GetString() ?? "").Trim() : "";
+                return consulta.Length >= 4 ? consulta : pergunta;
+            }
+            catch (Exception ex)
+            {
+                LogHelper.Log("[REESCREVER BUSCA] " + ex.Message);
+                return pergunta;
             }
         }
 
@@ -827,14 +1057,16 @@ Responda SOMENTE com um JSON neste formato:
         }
 
         /// <summary>
-        /// Junta a opinião da IA com a força da busca: "alta" só quando a busca achou base forte
-        /// e a IA usou alguma fonte. Sem fonte usada, é sempre "baixa".
+        /// Junta a opinião da IA com a força da busca. "alta" só quando: a IA diz alta, a reordenação
+        /// achou trecho que responde direto (ALTO) e a pontuação da busca é forte (IA:ScoreAlta).
+        /// Sem fonte usada, é sempre "baixa". Calibrado com /api/ia/avaliar.
         /// </summary>
-        private static string CalcularConfianca(string confiancaIa, string nivel, int qtdFontes)
+        private static string CalcularConfianca(string confiancaIa, string nivel, int qtdFontes,
+            float melhorScore, float scoreAlta)
         {
             var c = (confiancaIa ?? "").Replace("é", "e").ToLowerInvariant();
             if (qtdFontes == 0 || c.StartsWith("baix")) return "baixa";
-            if (c.StartsWith("alt") && nivel == "ALTO") return "alta";
+            if (c.StartsWith("alt") && nivel == "ALTO" && melhorScore >= scoreAlta) return "alta";
             return "media";
         }
 
@@ -869,7 +1101,7 @@ VALUES
                 cmd.Parameters.AddWithValue("@score", Math.Round((decimal)melhorScore, 3));
                 cmd.Parameters.AddWithValue("@fontes", JsonSerializer.Serialize(fontes.Select(f => new
                 {
-                    f.Id, f.Tipo, f.Titulo, f.CodDoc, f.CodTicket, Score = Math.Round(f.Score, 3)
+                    f.Id, f.Tipo, f.Titulo, f.CodDoc, f.CodTicket, f.CodInsight, f.Nota, Score = Math.Round(f.Score, 3)
                 })));
                 cmd.Parameters.AddWithValue("@modelo", Cut(modelo ?? "", 60));
                 cmd.Parameters.AddWithValue("@duracao", duracaoMs);
@@ -894,16 +1126,18 @@ VALUES
             try
             {
                 var sugestao = "";
+                string? fontesJson = null;
                 await using var conn = new SqlConnection(_config.GetConnectionString("Connection"));
                 await conn.OpenAsync();
 
                 await using (var sel = new SqlCommand(
-                    "SELECT RespostaIA FROM AiSugestaoLog WHERE CodAiSugestaoLog = @c AND DataHoraEnvio IS NULL", conn))
+                    "SELECT RespostaIA, Fontes FROM AiSugestaoLog WHERE CodAiSugestaoLog = @c AND DataHoraEnvio IS NULL", conn))
                 {
                     sel.Parameters.AddWithValue("@c", codLog);
-                    var r = await sel.ExecuteScalarAsync();
-                    if (r == null || r == DBNull.Value) return; // já registrado ou não existe
-                    sugestao = r.ToString() ?? "";
+                    await using var rd = await sel.ExecuteReaderAsync();
+                    if (!await rd.ReadAsync()) return; // já registrado ou não existe
+                    sugestao = rd["RespostaIA"] as string ?? "";
+                    fontesJson = rd["Fontes"] as string;
                 }
 
                 var enviado = (textoEnviado ?? "").Trim();
@@ -916,7 +1150,14 @@ UPDATE AiSugestaoLog
                 upd.Parameters.AddWithValue("@texto", enviado);
                 upd.Parameters.AddWithValue("@sim", sim);
                 upd.Parameters.AddWithValue("@c", codLog);
-                await upd.ExecuteNonQueryAsync();
+                var gravou = await upd.ExecuteNonQueryAsync();
+
+                // Enviada quase igual: os casos usados ajudaram de verdade → ganham peso na busca
+                if (gravou > 0 && sim >= 80)
+                {
+                    var tickets = await AjustarContadorCasosAsync(conn, fontesJson, "QtdPositivos", +1);
+                    await AtualizarIndiceAsync(tickets);
+                }
             }
             catch (Exception ex)
             {
@@ -924,23 +1165,123 @@ UPDATE AiSugestaoLog
             }
         }
 
-        /// <summary>👍 = 1, 👎 = -1.</summary>
+        /// <summary>
+        /// 👍 = 1, 👎 = -1. O 👎 conta nos casos (C1, C2...) usados na sugestão; caso com 2 ou mais 👎
+        /// fica suspenso (sai da IA) até alguém revisar em Configurações › Curadoria da IA.
+        /// </summary>
         public async Task RegistrarFeedbackAsync(long codLog, int valor)
         {
             if (codLog <= 0) return;
             try
             {
+                var novo = valor > 0 ? 1 : -1;
                 await using var conn = new SqlConnection(_config.GetConnectionString("Connection"));
                 await conn.OpenAsync();
-                await using var cmd = new SqlCommand(
-                    "UPDATE AiSugestaoLog SET Feedback = @v, DataHoraFeedback = GETDATE() WHERE CodAiSugestaoLog = @c", conn);
-                cmd.Parameters.AddWithValue("@v", valor > 0 ? 1 : -1);
-                cmd.Parameters.AddWithValue("@c", codLog);
-                await cmd.ExecuteNonQueryAsync();
+
+                int? anterior = null;
+                string? fontesJson = null;
+                await using (var sel = new SqlCommand(
+                    "SELECT Feedback, Fontes FROM AiSugestaoLog WHERE CodAiSugestaoLog = @c", conn))
+                {
+                    sel.Parameters.AddWithValue("@c", codLog);
+                    await using var rd = await sel.ExecuteReaderAsync();
+                    if (!await rd.ReadAsync()) return;
+                    anterior = rd["Feedback"] is DBNull ? null : Convert.ToInt32(rd["Feedback"]);
+                    fontesJson = rd["Fontes"] as string;
+                }
+
+                await using (var cmd = new SqlCommand(
+                    "UPDATE AiSugestaoLog SET Feedback = @v, DataHoraFeedback = GETDATE() WHERE CodAiSugestaoLog = @c", conn))
+                {
+                    cmd.Parameters.AddWithValue("@v", novo);
+                    cmd.Parameters.AddWithValue("@c", codLog);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                // Só conta a mudança (trocar 👍 por 👎 soma; trocar 👎 por 👍 desconta)
+                var delta = novo == -1 && anterior != -1 ? +1 : anterior == -1 && novo != -1 ? -1 : 0;
+                if (delta == 0) return;
+
+                var tickets = await AjustarContadorCasosAsync(conn, fontesJson, "QtdNegativos", delta);
+                if (delta > 0 && tickets.Count > 0)
+                {
+                    await using var sus = new SqlCommand($@"
+UPDATE dbo.AiTicketInsights
+   SET StatusRevisao = 'suspenso',
+       MotivoRevisao = N'Recebeu ' + CAST(QtdNegativos AS NVARCHAR(10)) + N' 👎 nas sugestões da IA'
+ WHERE QtdNegativos >= 2
+   AND ISNULL(StatusRevisao, '') NOT IN ('descartado', 'suspenso')
+   AND CodTicketChamadoC IN ({string.Join(",", tickets)});", conn);
+                    var suspensos = await sus.ExecuteNonQueryAsync();
+                    if (suspensos > 0)
+                        LogHelper.Log($"[AI CURADORIA] {suspensos} caso(s) suspenso(s) por 👎 (log {codLog}).");
+                }
+                await AtualizarIndiceAsync(tickets);
             }
             catch (Exception ex)
             {
                 LogHelper.Log("[AI LOG] RegistrarFeedback: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Soma (ou desconta) 1 no contador dos casos usados na sugestão. Fontes antigas, sem CodInsight,
+        /// são achadas pelo ticket + início do resumo. Devolve os tickets afetados.
+        /// </summary>
+        private static async Task<List<int>> AjustarContadorCasosAsync(SqlConnection conn, string? fontesJson, string coluna, int delta)
+        {
+            var tickets = new List<int>();
+            if (coluna is not ("QtdPositivos" or "QtdNegativos") || string.IsNullOrWhiteSpace(fontesJson)) return tickets;
+            if (!await IaCuradoriaSchema.GarantirAsync(conn)) return tickets;
+
+            List<(int CodInsight, int CodTicket, string Titulo)> casos = new();
+            try
+            {
+                using var doc = JsonDocument.Parse(fontesJson);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array) return tickets;
+                foreach (var f in doc.RootElement.EnumerateArray())
+                {
+                    if (!f.TryGetProperty("Tipo", out var tp) || tp.GetString() != "caso") continue;
+                    int cod = f.TryGetProperty("CodInsight", out var ci) && ci.ValueKind == JsonValueKind.Number ? ci.GetInt32() : 0;
+                    int tk = f.TryGetProperty("CodTicket", out var ct) && ct.ValueKind == JsonValueKind.Number ? ct.GetInt32() : 0;
+                    var tit = f.TryGetProperty("Titulo", out var ti) ? ti.GetString() ?? "" : "";
+                    if (cod > 0 || tk > 0) casos.Add((cod, tk, tit));
+                }
+            }
+            catch
+            {
+                return tickets;
+            }
+
+            foreach (var c in casos)
+            {
+                await using var cmd = new SqlCommand($@"
+UPDATE dbo.AiTicketInsights
+   SET {coluna} = CASE WHEN {coluna} + @d < 0 THEN 0 ELSE {coluna} + @d END
+OUTPUT INSERTED.CodTicketChamadoC
+ WHERE (@cod > 0 AND Codigo = @cod)
+    OR (@cod = 0 AND CodTicketChamadoC = @tk AND LEFT(ISNULL(Resumo, ''), 140) = @tit);", conn);
+                cmd.Parameters.AddWithValue("@d", delta);
+                cmd.Parameters.AddWithValue("@cod", c.CodInsight);
+                cmd.Parameters.AddWithValue("@tk", c.CodTicket);
+                cmd.Parameters.AddWithValue("@tit", c.Titulo);
+                await using var rd = await cmd.ExecuteReaderAsync();
+                while (await rd.ReadAsync())
+                {
+                    var t = rd.GetInt32(0);
+                    if (!tickets.Contains(t)) tickets.Add(t);
+                }
+            }
+            return tickets;
+        }
+
+        /// <summary>Recarrega no índice os casos desses tickets (peso novo, suspenso sai).</summary>
+        private async Task AtualizarIndiceAsync(IEnumerable<int> tickets)
+        {
+            foreach (var t in tickets.Distinct())
+            {
+                try { await _index.AtualizarInsightsDoTicketAsync(t); }
+                catch (Exception ex) { LogHelper.Log($"[AI CURADORIA] Índice do ticket #{t}: {ex.Message}"); }
             }
         }
 
@@ -1239,8 +1580,16 @@ NÍVEL DE CONTEXTO (vem marcado no início do contexto)
 
 NÃO INVENTAR
 - Só cite menus, telas, botões, opções, caminhos, teclas ou códigos que aparecem no CONTEXTO.
-- Nunca afirme que algo ""não existe"" no sistema.
 - Se a informação não está no contexto, não complete com suposição.
+- Teclas de atalho: use exatamente a tecla do CONTEXTO para aquela ação. Confira se é a ação certa (ex.: cancelar ITEM é diferente de cancelar VENDA).
+
+NUNCA RESPONDA NO NEGATIVO SEM BASE
+- Nunca diga que algo ""não existe"", ""não tem opção"", ""não é possível"", ""o sistema não faz"", ""não é importado/automático"" ou ""não precisa"", a não ser que o CONTEXTO diga isso com essas palavras.
+- Se o CONTEXTO não mostra como fazer, diga de forma humana que vai verificar a configuração certa para o caso dele, em vez de negar.
+
+QUANDO PRECISA MEXER NA MÁQUINA DO CLIENTE
+- Se o problema é o sistema não abrir, travar, dar erro depois de atualização, banco/conexão, impressora ou equipamento que parou, ou algo que só se resolve olhando o computador do cliente, e o CONTEXTO não traz um passo simples que o próprio cliente resolva: ofereça acesso remoto. Peça o código do acesso remoto (AnyDesk/TeamViewer, o que o cliente usa) para verificar.
+- Não invente passo a passo técnico para esses casos.
 
 TOM E TAMANHO
 - Curto: 2 a 5 linhas na maioria das vezes. Passo a passo só se o cliente pedir ou o caso exigir, e com poucos passos.
@@ -1249,6 +1598,12 @@ TOM E TAMANHO
 - NÃO termine a resposta com pergunta quando a resposta já está completa. Se você deu o caminho e a explicação, pare ali.
 - Nunca use ""Quer que eu te explique..."", ""Quer que eu te ajude..."", ""Precisa de mais alguma coisa?"" ou variações. O cliente pergunta se precisar.
 - Pergunta no final só quando o assunto realmente tem variações e você precisa saber qual caminho seguir (ex.: ""qual desses relatórios você precisa?""). Fora isso, encerre com a informação.
+
+CONTEXTO DO CLIENTE (quando vier o bloco ""SOBRE ESTE CLIENTE"")
+- Use para entender o cenário dele: módulos que usa, problemas recentes e o que já aprendeu. Ex.: se ele só aparece com NF-e, não responda sobre NFC-e.
+- Se a dúvida for a mesma de um atendimento recente dele, considere a mesma causa e solução, mas confira se a situação bate antes de afirmar.
+- Se ele já recebeu treinamento daquele assunto, responda normalmente; pode lembrar de forma leve (""é aquele mesmo caminho que vimos no treinamento"").
+- Nunca cite número de ticket, observação do cadastro nem que você tem esse histórico.
 
 Prioridade final: 1) correto  2) humano  3) curto  4) útil.
 ";
@@ -1369,5 +1724,19 @@ Prioridade final: 1) correto  2) humano  3) curto  4) útil.
                 i++;
             }
         }
+    }
+
+    /// <summary>Material escolhido para responder: documentações, casos, nota da reordenação e força da busca.</summary>
+    public sealed class AiSelecaoBase
+    {
+        public List<(EmbeddingIndex.DocVec Item, float Score)> Docs { get; init; } = new();
+        public List<(EmbeddingIndex.InsightVec Item, float Score)> Casos { get; init; } = new();
+
+        /// <summary>Nota 0-3 da reordenação por item (chave = o próprio item).</summary>
+        public Dictionary<object, int> Notas { get; init; } = new(ReferenceEqualityComparer.Instance);
+
+        /// <summary>ALTO, MEDIO ou BAIXO.</summary>
+        public string Nivel { get; init; } = "BAIXO";
+        public float Melhor { get; init; }
     }
 }

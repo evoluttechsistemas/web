@@ -20,11 +20,72 @@
 
     <script src="/js/crm-notify.js?v=3"></script>
     <script src="/js/ticket-audio.js"></script>
-    <script src="/js/paste-image.js"></script>
+    <script src="/js/paste-image.js?v=2"></script>
+    <script src="/js/assistente-ia.js?v=1"></script>
     <script src="_framework/blazor.web.js" autostart="false"></script>
     <script src="/js/screen-recorder.js"></script>
     <script src="js/ticketAudio.js"></script>
     <script src="/js/Acesso-Remoto.js"></script>
+    <script src="/js/respostas-rapidas.js?v=1"></script>
+
+    <script>
+        // Visibilidade da página: usadas pela tela do ticket, pela lista de Tickets e pelos avisos do MainLayout.
+        // Ficam aqui (carregadas desde o início) porque antes só existiam depois de abrir a lista de Tickets:
+        // abrir um ticket direto do Dashboard (aviso, modal de finalização) quebrava a página.
+        window.isPageVisible = () => document.visibilityState === 'visible';
+
+        // A pessoa está olhando para o HELP: aba do navegador visível E janela com foco
+        // (outra janela/programa na frente conta como "não está olhando").
+        window.crmPaginaEmUso = () => document.visibilityState === 'visible' && document.hasFocus();
+
+        // Com o HELP aberto em mais de uma aba do navegador, cada aba verifica os tickets sozinha.
+        // Beep, pop-up do Windows e piscar do título saem só na primeira aba que pegar o aviso
+        // (as outras veem a mesma chave gravada há pouco e não repetem).
+        window.crmAvisoUnico = (chave, segundos) => {
+            try {
+                const k = 'crm_aviso_' + chave;
+                const agora = Date.now();
+                const antes = parseInt(localStorage.getItem(k) || '0', 10);
+                if (antes && agora - antes < (segundos || 30) * 1000) return false;
+                localStorage.setItem(k, String(agora));
+
+                // limpeza das chaves velhas (de vez em quando)
+                if (Math.random() < 0.05) {
+                    for (let i = localStorage.length - 1; i >= 0; i--) {
+                        const kk = localStorage.key(i);
+                        if (kk && kk.startsWith('crm_aviso_') && agora - parseInt(localStorage.getItem(kk) || '0', 10) > 3600000)
+                            localStorage.removeItem(kk);
+                    }
+                }
+                return true;
+            } catch (e) {
+                return true;   // sem localStorage: avisa normalmente
+            }
+        };
+
+        window.registerVisibilityChange = (dotNetRef) => {
+            if (!window._visibilityRefs) window._visibilityRefs = [];
+            window._visibilityRefs = window._visibilityRefs.filter(r => r != null);
+            if (!window._visibilityRefs.includes(dotNetRef))
+                window._visibilityRefs.push(dotNetRef);
+
+            if (!window._visibilityListenerRegistered) {
+                window._visibilityListenerRegistered = true;
+                document.addEventListener('visibilitychange', () => {
+                    const visible = document.visibilityState === 'visible';
+                    (window._visibilityRefs || []).forEach(ref => {
+                        try { ref.invokeMethodAsync('OnVisibilityChanged', visible); }
+                        catch (e) { /* componente já descartado */ }
+                    });
+                });
+            }
+        };
+
+        window.unregisterVisibilityChange = (dotNetRef) => {
+            if (!window._visibilityRefs) return;
+            window._visibilityRefs = window._visibilityRefs.filter(r => r !== dotNetRef);
+        };
+    </script>
 
     <script>
             window._ticketF3Ref = null;
@@ -89,32 +150,6 @@
             };
     </script>
 
-    <script>
-        window.chatInternoRef = null;
-        window.setChatInternoRef = (ref) => { window.chatInternoRef = ref; };
-
-        document.addEventListener('paste', async function (e) {
-        if (!window.chatInternoRef) return;
-        const items = e.clipboardData?.items;
-        if (!items) return;
-
-        for (const item of items) {
-        if (item.type.startsWith('image/')) {
-        const blob = item.getAsFile();
-        const reader = new FileReader();
-        reader.onload = async function () {
-        const base64 = reader.result.split(',')[1];
-        await window.chatInternoRef.invokeMethodAsync(
-        'ReceberImagemColada', base64, item.type
-        );
-        };
-        reader.readAsDataURL(blob);
-        e.preventDefault();
-        break;
-        }
-        }
-        });
-    </script>
 
     <script>
             (function() {

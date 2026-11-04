@@ -369,10 +369,12 @@ VALUES
             return TelefoneBR.Normalizar(telefone);
         }
 
-        public async Task SalvarAgendaAsync(AgendaModel agenda)
+        /// <summary>Grava a agenda. Devolve false quando já existe uma igual pendente (e não grava de novo).</summary>
+        public async Task<bool> SalvarAgendaAsync(AgendaModel agenda)
         {
             using var conn = new SqlConnection(_connection);
             await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
 
             // ✅ Verificar se já existe agenda neste dia (EVITAR DUPLICATAS)
             var sqlVerifica = @"
@@ -394,8 +396,8 @@ WHERE CodEmp = @Empresa
             var count = (int)await cmdVerifica.ExecuteScalarAsync();
             if (count > 0)
             {
-                // ✅ Já existe, não salva duplicada
-                return;
+                // ✅ Já existe, não salva duplicada (quem chamou avisa o usuário)
+                return false;
             }
 
             var sql = @"
@@ -417,7 +419,8 @@ INSERT INTO Agenda
     FrequenciaRepeticao,
     DataFimRepeticao,
     DiasRepeticao,
-    Origem
+    Origem,
+    GrupoAgenda
 )
 VALUES
 (
@@ -437,7 +440,8 @@ VALUES
     @FrequenciaRepeticao,
     @DataFimRepeticao,
     @DiasRepeticao,
-    @Origem
+    @Origem,
+    @GrupoAgenda
 )";
 
             using var cmd = new SqlCommand(sql, conn);
@@ -500,7 +504,11 @@ VALUES
             cmd.Parameters.Add("@Origem", SqlDbType.NVarChar, 50)
                 .Value = (object?)agenda.Origem ?? DBNull.Value;
 
+            cmd.Parameters.Add("@GrupoAgenda", SqlDbType.UniqueIdentifier)
+                .Value = agenda.GrupoAgenda.HasValue ? agenda.GrupoAgenda.Value : DBNull.Value;
+
             await cmd.ExecuteNonQueryAsync();
+            return true;
         }
 
         public async Task<List<AgendaModel>> GetAgendasAsync(int codCrmc)
@@ -535,23 +543,89 @@ VALUES
             return list;
         }
 
-        public async Task ResolverAgendaAsync(int codigo)
+        public async Task ResolverAgendaAsync(int codigo, string? usuario = null)
         {
             using var conn = new SqlConnection(_connection);
             await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
 
-            var sql = @"
+            using var cmd = new SqlCommand(@"
 UPDATE Agenda
 SET Status = 'RESOLVIDO',
+    ResolvidoPor = @Por,
+    ResolvidoEm = GETDATE(),
     DataHoraUltimaGravacao = GETDATE()
-WHERE Codigo = @Codigo";
-
-            using var cmd = new SqlCommand(sql, conn);
+WHERE Codigo = @Codigo", conn);
             cmd.Parameters.AddWithValue("@Codigo", codigo);
+            cmd.Parameters.Add("@Por", SqlDbType.NVarChar, 100).Value =
+                string.IsNullOrWhiteSpace(usuario) ? DBNull.Value : usuario.Trim().ToUpperInvariant();
 
             await cmd.ExecuteNonQueryAsync();
             _monitor.Log(LogCategory.CRM, LogSeverity.Info,
                 $"Agenda #{codigo} resolvida");
+        }
+
+        /// <summary>Volta a agenda para pendente (desfazer o finalizar).</summary>
+        public async Task ReabrirAgendaAsync(int codigo)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
+
+            using var cmd = new SqlCommand(@"
+UPDATE Agenda
+SET Status = 'AGENDADO', ResolvidoPor = NULL, ResolvidoEm = NULL, DataHoraUltimaGravacao = GETDATE()
+WHERE Codigo = @Codigo", conn);
+            cmd.Parameters.AddWithValue("@Codigo", codigo);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        /// <summary>Exclui a agenda. Se for uma agenda repetitiva, exclui a repetição inteira (com os dias gravados).</summary>
+        public async Task ExcluirAgendaAsync(int codigo, int codEmp)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(@"
+DELETE FROM Agenda
+WHERE CodEmp = @Empresa AND (Codigo = @Codigo OR AgendaPaiCodigo = @Codigo);", conn);
+            cmd.Parameters.Add("@Codigo", SqlDbType.Int).Value = codigo;
+            cmd.Parameters.Add("@Empresa", SqlDbType.Int).Value = codEmp;
+            await cmd.ExecuteNonQueryAsync();
+            _monitor.Log(LogCategory.CRM, LogSeverity.Info, $"Agenda #{codigo} excluída");
+        }
+
+        /// <summary>
+        /// Exclui só um dia de uma agenda repetitiva. O dia fica gravado como EXCLUIDO para a repetição
+        /// não voltar a mostrar ele.
+        /// </summary>
+        public async Task ExcluirDiaRepeticaoAsync(int codigoDia, int codEmp)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(@"
+UPDATE Agenda SET Status = 'EXCLUIDO', DataHoraUltimaGravacao = GETDATE()
+WHERE Codigo = @Codigo AND CodEmp = @Empresa AND AgendaPaiCodigo IS NOT NULL;", conn);
+            cmd.Parameters.Add("@Codigo", SqlDbType.Int).Value = codigoDia;
+            cmd.Parameters.Add("@Empresa", SqlDbType.Int).Value = codEmp;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        /// <summary>Exclui a agenda de todos que receberam (criada para vários usuários de uma vez).</summary>
+        public async Task ExcluirGrupoAgendaAsync(Guid grupo, int codEmp)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
+            using var cmd = new SqlCommand(@"
+DELETE FROM Agenda
+WHERE CodEmp = @Empresa
+  AND AgendaPaiCodigo IN (SELECT Codigo FROM Agenda WHERE GrupoAgenda = @Grupo AND CodEmp = @Empresa);
+
+DELETE FROM Agenda WHERE GrupoAgenda = @Grupo AND CodEmp = @Empresa;", conn);
+            cmd.Parameters.Add("@Grupo", SqlDbType.UniqueIdentifier).Value = grupo;
+            cmd.Parameters.Add("@Empresa", SqlDbType.Int).Value = codEmp;
+            await cmd.ExecuteNonQueryAsync();
+            _monitor.Log(LogCategory.CRM, LogSeverity.Info, $"Agenda do grupo {grupo} excluída de todos");
         }
 
         public async Task AtualizarAgendaAsync(AgendaModel agenda)
@@ -603,14 +677,7 @@ WHERE Codigo = @Codigo;";
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public async Task<List<AgendaModel>> GetAgendasEmpresaAsync(int empresa)
-        {
-            var list = new List<AgendaModel>();
-
-            using var conn = new SqlConnection(_connection);
-            await conn.OpenAsync();
-
-            var sql = @"
+        private const string SqlSelectAgenda = @"
 SELECT 
     a.Codigo,
     a.Descricao,
@@ -618,8 +685,8 @@ SELECT
     a.HoraAgendamento,
     a.CodCliente,
     a.NomeCliente,
-ISNULL(c.Apelido, '') AS ApelidoCliente,
-a.EmailCliente,
+    ISNULL(c.Apelido, '') AS ApelidoCliente,
+    a.EmailCliente,
     a.UsuarioUltimaGravacao AS Usuario,
     a.Status,
     a.CodEmp,
@@ -630,94 +697,163 @@ a.EmailCliente,
     a.DiasRepeticao,
     a.Origem,
     a.AgendaPaiCodigo,
-    ISNULL(c.Celular,'') AS NumeroTelefone
+    ISNULL(c.Celular,'') AS NumeroTelefone,
+    a.GrupoAgenda,
+    a.ResolvidoPor,
+    a.ResolvidoEm
 FROM Agenda a
-LEFT JOIN Cliente c ON c.Codigo = a.CodCliente
-WHERE a.CodEmp = @Empresa
+LEFT JOIN Cliente c ON c.Codigo = a.CodCliente";
+
+        // Colunas novas da Agenda (criadas na primeira vez)
+        private static volatile bool _colunasAgendaOk;
+
+        private static async Task GarantirColunasAgendaAsync(SqlConnection conn)
+        {
+            if (_colunasAgendaOk) return;
+            using var cmd = new SqlCommand(@"
+IF COL_LENGTH('dbo.Agenda', 'GrupoAgenda') IS NULL
+    ALTER TABLE dbo.Agenda ADD GrupoAgenda UNIQUEIDENTIFIER NULL;
+IF COL_LENGTH('dbo.Agenda', 'ResolvidoPor') IS NULL
+    ALTER TABLE dbo.Agenda ADD ResolvidoPor NVARCHAR(100) NULL;
+IF COL_LENGTH('dbo.Agenda', 'ResolvidoEm') IS NULL
+    ALTER TABLE dbo.Agenda ADD ResolvidoEm DATETIME NULL;", conn);
+            await cmd.ExecuteNonQueryAsync();
+            _colunasAgendaOk = true;
+        }
+
+        private const string SqlOrdemAgenda = @"
 ORDER BY 
     CASE WHEN a.Status = 'AGENDADO' THEN 0 ELSE 1 END,
     a.DataAgendamento,
     a.HoraAgendamento";
 
-            using var cmd = new SqlCommand(sql, conn);
+        private static AgendaModel LerAgenda(SqlDataReader rd) => new()
+        {
+            Codigo = rd.GetInt32(0),
+            Descricao = rd.GetString(1),
+            DataAgendamento = rd.GetDateTime(2),
+            HoraAgendamento = TimeSpan.Parse(rd["HoraAgendamento"].ToString()!),
+            CodCliente = rd.IsDBNull(4) ? 0 : rd.GetInt32(4),
+            NomeCliente = rd["NomeCliente"]?.ToString() ?? "",
+            ApelidoCliente = rd["ApelidoCliente"]?.ToString() ?? "",
+            EmailCliente = rd["EmailCliente"]?.ToString() ?? "",
+            Usuario = rd["Usuario"]?.ToString() ?? "",
+            Status = rd["Status"]?.ToString() ?? "AGENDADO",
+            CodEmp = Convert.ToInt32(rd["CodEmp"]),
+            CodCRMC = rd["CodCRMC"] == DBNull.Value ? 0 : Convert.ToInt32(rd["CodCRMC"]),
+            TipoRepeticao = rd["TipoRepeticao"] == DBNull.Value ? null : rd["TipoRepeticao"]?.ToString(),
+            FrequenciaRepeticao = rd["FrequenciaRepeticao"] == DBNull.Value ? null : rd["FrequenciaRepeticao"]?.ToString(),
+            DataFimRepeticao = rd["DataFimRepeticao"] == DBNull.Value ? null : Convert.ToDateTime(rd["DataFimRepeticao"]),
+            DiasRepeticao = rd["DiasRepeticao"] == DBNull.Value ? null : rd["DiasRepeticao"]?.ToString(),
+            Origem = rd["Origem"] == DBNull.Value ? null : rd["Origem"]?.ToString(),
+            AgendaPaiCodigo = rd["AgendaPaiCodigo"] == DBNull.Value ? null : Convert.ToInt32(rd["AgendaPaiCodigo"]),
+            NumeroTelefone = rd["NumeroTelefone"]?.ToString() ?? "",
+            GrupoAgenda = rd["GrupoAgenda"] == DBNull.Value ? null : (Guid)rd["GrupoAgenda"],
+            ResolvidoPor = rd["ResolvidoPor"] == DBNull.Value ? null : rd["ResolvidoPor"].ToString(),
+            ResolvidoEm = rd["ResolvidoEm"] == DBNull.Value ? null : Convert.ToDateTime(rd["ResolvidoEm"])
+        };
+
+        /// <summary>Todas as agendas da empresa, desde sempre. Para telas use <see cref="GetAgendasPeriodoAsync"/>.</summary>
+        public async Task<List<AgendaModel>> GetAgendasEmpresaAsync(int empresa)
+        {
+            var list = new List<AgendaModel>();
+
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
+
+            using var cmd = new SqlCommand(SqlSelectAgenda + @"
+WHERE a.CodEmp = @Empresa" + SqlOrdemAgenda, conn);
             cmd.Parameters.AddWithValue("@Empresa", empresa);
 
             using var rd = await cmd.ExecuteReaderAsync();
             while (await rd.ReadAsync())
-            {
-                list.Add(new AgendaModel
-                {
-                    Codigo = rd.GetInt32(0),
-                    Descricao = rd.GetString(1),
-                    DataAgendamento = rd.GetDateTime(2),
-                    HoraAgendamento = TimeSpan.Parse(rd["HoraAgendamento"].ToString()!),
-                    CodCliente = rd.IsDBNull(4) ? 0 : rd.GetInt32(4),
-                    NomeCliente = rd["NomeCliente"]?.ToString() ?? "",
-                    ApelidoCliente = rd["ApelidoCliente"]?.ToString() ?? "",
-                    EmailCliente = rd["EmailCliente"]?.ToString() ?? "",
-                    Usuario = rd["Usuario"]?.ToString() ?? "",
-                    Status = rd["Status"]?.ToString() ?? "AGENDADO",
-                    CodEmp = Convert.ToInt32(rd["CodEmp"]),
-                    CodCRMC = rd["CodCRMC"] == DBNull.Value ? 0 : Convert.ToInt32(rd["CodCRMC"]),
-                    TipoRepeticao = rd["TipoRepeticao"] == DBNull.Value ? null : rd["TipoRepeticao"]?.ToString(),
-                    FrequenciaRepeticao = rd["FrequenciaRepeticao"] == DBNull.Value ? null : rd["FrequenciaRepeticao"]?.ToString(),
-                    DataFimRepeticao = rd["DataFimRepeticao"] == DBNull.Value ? null : Convert.ToDateTime(rd["DataFimRepeticao"]),
-                    DiasRepeticao = rd["DiasRepeticao"] == DBNull.Value ? null : rd["DiasRepeticao"]?.ToString(),
-                    Origem = rd["Origem"] == DBNull.Value ? null : rd["Origem"]?.ToString(),
-                    AgendaPaiCodigo = rd["AgendaPaiCodigo"] == DBNull.Value ? null : Convert.ToInt32(rd["AgendaPaiCodigo"]),
-                    NumeroTelefone = rd["NumeroTelefone"]?.ToString() ?? ""
-                });
-            }
+                list.Add(LerAgenda(rd));
 
             return list;
         }
 
+        /// <summary>
+        /// Agendas de um período (<paramref name="de"/> a <paramref name="ate"/>, inclusive) mais as regras das
+        /// agendas repetitivas em andamento (o mestre, para montar os dias). Com <paramref name="usuario"/>, só as dele.
+        /// </summary>
+        public async Task<List<AgendaModel>> GetAgendasPeriodoAsync(int empresa, DateTime de, DateTime ate, string? usuario = null)
+        {
+            var list = new List<AgendaModel>();
+            if (ate < de) ate = de;
+
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
+
+            using var cmd = new SqlCommand(SqlSelectAgenda + @"
+WHERE a.CodEmp = @Empresa
+  AND (@Usuario IS NULL OR UPPER(a.UsuarioUltimaGravacao) = @Usuario)
+  AND (
+        (a.DataAgendamento >= @De AND a.DataAgendamento < @AteMais1)
+     OR (a.AgendaPaiCodigo IS NULL
+         AND ISNULL(a.TipoRepeticao, '') NOT IN ('', 'UmaVez')
+         AND ISNULL(a.Status, '') <> 'RESOLVIDO')
+  )" + SqlOrdemAgenda, conn);
+            cmd.Parameters.Add("@Empresa", SqlDbType.Int).Value = empresa;
+            cmd.Parameters.Add("@De", SqlDbType.Date).Value = de.Date;
+            cmd.Parameters.Add("@AteMais1", SqlDbType.Date).Value = ate.Date.AddDays(1);
+            cmd.Parameters.Add("@Usuario", SqlDbType.NVarChar, 100).Value =
+                string.IsNullOrWhiteSpace(usuario) ? (object)DBNull.Value : usuario.Trim().ToUpperInvariant();
+
+            using var rd = await cmd.ExecuteReaderAsync();
+            while (await rd.ReadAsync())
+                list.Add(LerAgenda(rd));
+
+            return list;
+        }
+
+        /// <summary>
+        /// Grava o dia <paramref name="dataOcorrencia"/> de uma agenda repetitiva e devolve o código.
+        /// Se o dia já estiver gravado, devolve o que existe (não grava duas vezes, nem com duas pessoas ao mesmo tempo).
+        /// </summary>
         public async Task<int> MaterializarOcorrenciaAgendaAsync(AgendaModel agendaMestre, DateTime dataOcorrencia)
         {
             using var conn = new SqlConnection(_connection);
             await conn.OpenAsync();
 
             var sql = @"
-INSERT INTO Agenda
-(
-    Descricao,
-    DataAgendamento,
-    HoraAgendamento,
-    CodCliente,
-    NomeCliente,
-    EmailCliente,
-    DataHoraUltimaGravacao,
-    UsuarioUltimaGravacao,
-    Status,
-    CodEmp,
-    CodCRMC,
-    Usuario,
-    Origem,
-    AgendaPaiCodigo
-)
-OUTPUT INSERTED.Codigo
-VALUES
-(
-    @Descricao,
-    @Data,
-    @Hora,
-    @CodCliente,
-    @NomeCliente,
-    @EmailCliente,
-    GETDATE(),
-    @Usuario,
-    @Status,
-    @Empresa,
-    @CodCRMC,
-    @Usuario,
-    @Origem,
-    @AgendaPaiCodigo
-)";
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+DECLARE @Cod INT;
+
+BEGIN TRAN;
+
+SELECT TOP 1 @Cod = Codigo
+FROM Agenda WITH (UPDLOCK, HOLDLOCK)
+WHERE AgendaPaiCodigo = @AgendaPaiCodigo
+  AND CodEmp = @Empresa
+  AND CAST(DataAgendamento AS DATE) = @Data
+ORDER BY CASE WHEN Status = 'RESOLVIDO' THEN 0 ELSE 1 END, Codigo;
+
+IF @Cod IS NULL
+BEGIN
+    INSERT INTO Agenda
+    (
+        Descricao, DataAgendamento, HoraAgendamento, CodCliente, NomeCliente, EmailCliente,
+        DataHoraUltimaGravacao, UsuarioUltimaGravacao, Status, CodEmp, CodCRMC, Usuario, Origem, AgendaPaiCodigo
+    )
+    VALUES
+    (
+        @Descricao, @Data, @Hora, @CodCliente, @NomeCliente, @EmailCliente,
+        GETDATE(), @Usuario, @Status, @Empresa, @CodCRMC, @Usuario, @Origem, @AgendaPaiCodigo
+    );
+    SET @Cod = CAST(SCOPE_IDENTITY() AS INT);
+END
+
+COMMIT;
+
+SELECT @Cod;";
 
             using var cmd = new SqlCommand(sql, conn);
 
             cmd.Parameters.Add("@Descricao", SqlDbType.NVarChar, 200).Value = agendaMestre.Descricao ?? "";
-            cmd.Parameters.Add("@Data", SqlDbType.Date).Value = dataOcorrencia;
+            cmd.Parameters.Add("@Data", SqlDbType.Date).Value = dataOcorrencia.Date;
             cmd.Parameters.Add("@Hora", SqlDbType.Time).Value = agendaMestre.HoraAgendamento;
             cmd.Parameters.Add("@CodCliente", SqlDbType.Int).Value = agendaMestre.CodCliente > 0 ? agendaMestre.CodCliente : 0;
             cmd.Parameters.Add("@NomeCliente", SqlDbType.NVarChar, 200).Value = agendaMestre.NomeCliente ?? "";
@@ -729,8 +865,38 @@ VALUES
             cmd.Parameters.Add("@Origem", SqlDbType.NVarChar, 50).Value = (object?)agendaMestre.Origem ?? DBNull.Value;
             cmd.Parameters.Add("@AgendaPaiCodigo", SqlDbType.Int).Value = agendaMestre.Codigo;
 
-            var novoCodigo = await cmd.ExecuteScalarAsync();
-            return Convert.ToInt32(novoCodigo);
+            var codigo = await cmd.ExecuteScalarAsync();
+            return Convert.ToInt32(codigo);
+        }
+
+        /// <summary>
+        /// Encerra uma agenda repetitiva: <paramref name="ultimoDia"/> é o último dia que ainda acontece.
+        /// Os dias seguintes que já estavam gravados e não foram resolvidos são apagados.
+        /// </summary>
+        public async Task EncerrarRepeticaoAgendaAsync(int codMestre, int codEmp, DateTime ultimoDia)
+        {
+            using var conn = new SqlConnection(_connection);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+UPDATE Agenda
+SET TipoRepeticao = 'PorTempo',
+    DataFimRepeticao = @Dia,
+    DataHoraUltimaGravacao = GETDATE()
+WHERE Codigo = @Mestre AND CodEmp = @Empresa;
+
+DELETE FROM Agenda
+WHERE AgendaPaiCodigo = @Mestre
+  AND CodEmp = @Empresa
+  AND CAST(DataAgendamento AS DATE) > @Dia
+  AND ISNULL(Status, '') <> 'RESOLVIDO';", conn);
+            cmd.Parameters.Add("@Mestre", SqlDbType.Int).Value = codMestre;
+            cmd.Parameters.Add("@Empresa", SqlDbType.Int).Value = codEmp;
+            cmd.Parameters.Add("@Dia", SqlDbType.Date).Value = ultimoDia.Date;
+            await cmd.ExecuteNonQueryAsync();
+
+            _monitor.Log(LogCategory.CRM, LogSeverity.Info,
+                $"Repetição da agenda #{codMestre} encerrada em {ultimoDia:dd/MM/yyyy}");
         }
 
         public async Task<List<AgendaModel>> GetAgendasFiltradasAsync(

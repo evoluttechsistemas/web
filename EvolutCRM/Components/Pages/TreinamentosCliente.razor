@@ -1,0 +1,668 @@
+﻿@* ═══════════════════════════════════════════════════════════════════════
+   Histórico de treinamento do cliente (modal do botão "Treinamentos" no ticket).
+   - Treinamento inicial: itens fixos para marcar.
+   - Orientações: entram sozinhas quando o ticket é finalizado (IA) ou manual.
+   - Enviar para o cliente: monta um resumo do que foi treinado e coloca na resposta do ticket.
+   ═══════════════════════════════════════════════════════════════════════ *@
+@inject TreinamentoClienteService Treinos
+@inject IJSRuntime JS
+
+<style>
+.tr-box { --tr-azul:#1d4ed8; --tr-azul-50:#eff6ff; --tr-azul-100:#dbeafe; --tr-tinta:#0f172a; --tr-texto:#334155; --tr-mudo:#5b6779;
+    --tr-linha:#e2e8f0; --tr-fundo:#f8fbff; --tr-verde:#15803d; --tr-verde-50:#ecfdf3; --tr-ambar:#92400e; --tr-ambar-50:#fff7e6; --tr-verm:#b91c1c;
+    font-family:'IBM Plex Sans','Segoe UI',sans-serif; color:var(--tr-texto); font-size:13px; }
+.tr-topo { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-bottom:12px; }
+.tr-resumo { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.tr-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:999px; background:#eef2f8; color:#22324d; font-size:12px; font-weight:600; white-space:nowrap; }
+.tr-chip.ok { background:var(--tr-verde-50); color:var(--tr-verde); }
+.tr-chip.ia { background:var(--tr-azul-50); color:var(--tr-azul); }
+.tr-acoes { margin-left:auto; display:flex; flex-wrap:wrap; gap:6px; }
+.tr-btn { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 12px; border-radius:8px; border:1px solid #cbd5e1;
+    background:#fff; color:#22324d; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap; }
+.tr-btn:hover { background:#f5f8fc; }
+.tr-btn:disabled { opacity:.55; cursor:default; }
+.tr-btn.primario { background:var(--tr-azul); border-color:var(--tr-azul); color:#fff; }
+.tr-btn.primario:hover { background:#1e40af; }
+.tr-btn.perigo { color:var(--tr-verm); border-color:#f3c2c2; }
+.tr-btn.peq { min-height:28px; padding:0 8px; font-size:12px; }
+.tr-btn:focus-visible, .tr-check:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+
+.tr-secao { border:1px solid var(--tr-linha); border-radius:12px; background:#fff; margin-bottom:12px; overflow:hidden; }
+.tr-secao-tit { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--tr-fundo); border-bottom:1px solid var(--tr-linha);
+    font-weight:700; color:var(--tr-tinta); font-size:13px; }
+.tr-secao-tit small { font-weight:600; color:var(--tr-mudo); }
+.tr-barra { flex:0 0 90px; height:6px; border-radius:999px; background:#e5eaf2; overflow:hidden; margin-left:auto; }
+.tr-barra span { display:block; height:100%; background:var(--tr-verde); }
+.tr-vazio { padding:14px 12px; color:var(--tr-mudo); font-size:12.5px; }
+
+.tr-item { display:flex; gap:10px; align-items:flex-start; padding:9px 12px; border-bottom:1px solid #eef2f7; }
+.tr-item:last-child { border-bottom:0; }
+.tr-check { width:22px; height:22px; flex-shrink:0; margin-top:1px; border-radius:6px; border:2px solid #b8c4d6; background:#fff; cursor:pointer;
+    display:grid; place-items:center; color:#fff; padding:0; }
+.tr-check.on { background:var(--tr-verde); border-color:var(--tr-verde); }
+.tr-check:disabled { cursor:default; }
+.tr-ico { width:22px; height:22px; flex-shrink:0; margin-top:1px; border-radius:6px; background:var(--tr-verde-50); color:var(--tr-verde); display:grid; place-items:center; }
+.tr-corpo { flex:1; min-width:0; }
+.tr-titulo { font-weight:600; color:var(--tr-tinta); line-height:1.35; }
+.tr-titulo.pend { color:#475569; font-weight:500; }
+.tr-meta { display:flex; flex-wrap:wrap; gap:4px 10px; margin-top:3px; font-size:11.5px; color:var(--tr-mudo); }
+.tr-meta a { color:var(--tr-azul); text-decoration:none; font-weight:600; }
+.tr-meta a:hover { text-decoration:underline; }
+.tr-desc { margin-top:3px; font-size:12px; color:#475569; line-height:1.4; }
+.tr-mod { font-size:11px; padding:1px 7px; border-radius:999px; background:#f1f4f8; color:#3c4a60; }
+.tr-ia { font-size:11px; padding:1px 7px; border-radius:999px; background:var(--tr-azul-50); color:var(--tr-azul); font-weight:600; }
+.tr-item-acoes { display:flex; gap:4px; flex-shrink:0; }
+.tr-icone { width:30px; height:30px; border-radius:7px; border:1px solid var(--tr-linha); background:#fff; color:#475569; cursor:pointer; display:grid; place-items:center; padding:0; }
+.tr-icone:hover { background:#f5f8fc; }
+
+.tr-form { border:1px solid #bcd3f5; background:#f7faff; border-radius:12px; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:10px; }
+.tr-form h4 { margin:0; font-size:14px; color:var(--tr-tinta); }
+.tr-linha { display:flex; flex-wrap:wrap; gap:10px; }
+.tr-campo { display:flex; flex-direction:column; gap:4px; flex:1 1 160px; min-width:0; position:relative; }
+.tr-campo label { font-size:12px; font-weight:600; color:#3c4a60; }
+.tr-campo input, .tr-campo select, .tr-campo textarea { font-family:inherit; font-size:13px; padding:7px 9px; border:1px solid #c3cedd; border-radius:8px; color:var(--tr-tinta); background:#fff; }
+.tr-campo textarea { resize:vertical; }
+.tr-sug { position:absolute; top:100%; left:0; right:0; z-index:20; margin-top:2px; background:#fff; border:1px solid #c3cedd; border-radius:8px;
+    box-shadow:0 8px 20px rgba(15,23,42,.12); max-height:240px; overflow:auto; list-style:none; padding:4px; }
+.tr-sug button { display:block; width:100%; text-align:left; padding:7px 8px; border:0; background:none; border-radius:6px; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--tr-tinta); }
+.tr-sug button:hover, .tr-sug button:focus-visible { background:var(--tr-azul-50); }
+.tr-sug small { color:var(--tr-mudo); margin-left:6px; }
+.tr-doc { display:flex; align-items:center; gap:8px; font-size:12px; padding:6px 9px; border-radius:8px; background:#fff; border:1px solid var(--tr-linha); }
+.tr-aviso { padding:8px 10px; border-radius:8px; font-size:12.5px; font-weight:600; }
+.tr-aviso.ok { background:var(--tr-verde-50); color:var(--tr-verde); }
+.tr-aviso.erro { background:#fef2f2; color:var(--tr-verm); }
+.tr-envio { border:1px solid var(--tr-linha); border-radius:12px; background:#fff; padding:12px; margin-bottom:12px; display:flex; flex-direction:column; gap:8px; }
+.tr-envio textarea { width:100%; box-sizing:border-box; font-family:inherit; font-size:12.5px; padding:8px; border:1px solid #c3cedd; border-radius:8px; resize:vertical; }
+</style>
+
+<div class="tr-box">
+    @if (CodCliente <= 0)
+    {
+        <div class="tr-vazio">Salve ou selecione um cliente para ver os treinamentos.</div>
+    }
+    else if (_carregando)
+    {
+        <div class="tr-vazio">Carregando treinamentos...</div>
+    }
+    else if (_erroCarga != null)
+    {
+        <div class="tr-aviso erro">@_erroCarga</div>
+    }
+    else
+    {
+        <div class="tr-topo">
+            <div class="tr-resumo">
+                <span class="tr-chip @(IniciaisFeitos == Iniciais.Count && Iniciais.Count > 0 ? "ok" : "")">Inicial @IniciaisFeitos/@Iniciais.Count</span>
+                <span class="tr-chip">@Orientacoes.Count orientação(ões)</span>
+                @if (UltimoTreino.HasValue)
+                {
+                    <span class="tr-chip">Último em @UltimoTreino.Value.ToString("dd/MM/yyyy")</span>
+                }
+            </div>
+            <div class="tr-acoes">
+                @if (PodeEditar)
+                {
+                    <button type="button" class="tr-btn" @onclick="NovoItem">+ Adicionar</button>
+                }
+                <button type="button" class="tr-btn primario" disabled="@_montandoEnvio" @onclick="AbrirEnvio">@(_montandoEnvio ? "Montando mensagem..." : "Enviar para o cliente")</button>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_aviso))
+        {
+            <div class="tr-aviso @(_avisoErro ? "erro" : "ok")" role="status" style="margin-bottom:10px;">@_aviso</div>
+        }
+
+        @if (_envio != null)
+        {
+            <div class="tr-envio">
+                <strong style="color:var(--tr-tinta);">Mensagem para o cliente</strong>
+                <span style="font-size:12px; color:var(--tr-mudo);">Resumo do que já foi treinado. Revise e edite à vontade antes de usar.</span>
+                <label style="display:inline-flex; align-items:center; gap:6px; font-size:12.5px; cursor:pointer;">
+                    <input type="checkbox" checked="@_incluirTutoriais" @onchange="AlternarTutoriais" />
+                    Incluir os links dos tutoriais
+                </label>
+                <textarea rows="10" @bind="_envio" aria-label="Mensagem com o resumo dos treinamentos"></textarea>
+                <div class="tr-acoes" style="margin-left:0;">
+                    @if (OnUsarMensagem.HasDelegate)
+                    {
+                        <button type="button" class="tr-btn primario" @onclick="UsarMensagem">Usar na resposta do ticket</button>
+                    }
+                    <button type="button" class="tr-btn" @onclick="CopiarMensagem">@(_copiado ? "Copiado" : "Copiar mensagem")</button>
+                    <button type="button" class="tr-btn" @onclick="() => _envio = null">Fechar</button>
+                </div>
+            </div>
+        }
+
+        @if (_editando != null)
+        {
+            <div class="tr-form">
+                <h4>@(_editando.Codigo > 0 ? "Editar treinamento" : "Adicionar treinamento")</h4>
+                <div class="tr-linha">
+                    <div class="tr-campo" style="flex:3 1 260px;">
+                        <label for="tr-tit-@CodCliente">O que foi ensinado</label>
+                        <input id="tr-tit-@CodCliente" @bind="_editando.Titulo" @bind:event="oninput" @bind:after="BuscarSugestoes"
+                               maxlength="200" autocomplete="off" disabled="@_editando.Inicial"
+                               placeholder="Ex.: Entrada de mercadoria por XML" />
+                        @if (_sugestoes.Count > 0)
+                        {
+                            <div class="tr-sug" role="listbox">
+                                @foreach (var s in _sugestoes)
+                                {
+                                    var sug = s;
+                                    <button type="button" role="option" @onclick="() => EscolherSugestao(sug)">
+                                        @sug.Titulo<small>@(sug.SlugDoc != null ? "tutorial" : "já usado")</small>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="tr-campo">
+                        <label for="tr-mod-@CodCliente">Módulo</label>
+                        <select id="tr-mod-@CodCliente" @bind="_editando.Modulo">
+                            @foreach (var m in ClienteTreinamentoModulos.Lista)
+                            {
+                                <option value="@m.Codigo">@m.Nome</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="tr-linha">
+                    @if (!_editando.Inicial)
+                    {
+                        <div class="tr-campo">
+                            <label for="tr-ori-@CodCliente">Como foi ensinado</label>
+                            <select id="tr-ori-@CodCliente" @bind="_editando.Origem">
+                                @foreach (var o in ClienteTreinamentoModulos.Origens)
+                                {
+                                    <option value="@o.Codigo">@o.Nome</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="tr-campo">
+                            <label for="tr-st-@CodCliente">Situação</label>
+                            <select id="tr-st-@CodCliente" @bind="_editando.Status">
+                                <option value="pendente">Pendente</option>
+                                <option value="treinado">Treinado</option>
+                            </select>
+                        </div>
+                    }
+                    <div class="tr-campo">
+                        <label for="tr-dt-@CodCliente">Data</label>
+                        <input id="tr-dt-@CodCliente" type="date" @bind="_editando.DataTreinamento" />
+                    </div>
+                    <div class="tr-campo">
+                        <label for="tr-pes-@CodCliente">Quem foi treinado</label>
+                        <input id="tr-pes-@CodCliente" @bind="_editando.PessoaTreinada" maxlength="100" placeholder="Ex.: Maria (caixa)" />
+                    </div>
+                </div>
+                <div class="tr-campo">
+                    <label for="tr-obs-@CodCliente">Observação</label>
+                    <textarea id="tr-obs-@CodCliente" rows="2" maxlength="500" @bind="_editando.Observacao"
+                              placeholder="Ex.: ainda tem dúvida no fechamento, rever na próxima visita"></textarea>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_editando.SlugDoc))
+                {
+                    <div class="tr-doc">
+                        <span>Tutorial: <strong>@_editando.TituloDoc</strong></span>
+                        <a class="tr-btn peq" style="margin-left:auto; text-decoration:none;" href="@_editando.UrlTutorial" target="_blank" rel="noopener">Abrir</a>
+                        <button type="button" class="tr-btn peq" @onclick="RemoverTutorial">Trocar / remover</button>
+                    </div>
+                }
+                else
+                {
+                    <div class="tr-campo">
+                        <label for="tr-doc-@CodCliente">Tutorial (vai junto na mensagem para o cliente)</label>
+                        <input id="tr-doc-@CodCliente" @bind="_buscaTutorial" @bind:event="oninput" @bind:after="BuscarTutoriais"
+                               autocomplete="off" placeholder="Digite para procurar a documentação... (se deixar vazio, o sistema procura sozinho)" />
+                        @if (_sugTutoriais.Count > 0)
+                        {
+                            <div class="tr-sug" role="listbox">
+                                @foreach (var s in _sugTutoriais)
+                                {
+                                    var sug = s;
+                                    <button type="button" role="option" @onclick="() => EscolherTutorial(sug)">@sug.Titulo</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(_erroForm))
+                {
+                    <div class="tr-aviso erro">@_erroForm</div>
+                }
+                <div class="tr-acoes" style="margin-left:0; justify-content:flex-end;">
+                    <button type="button" class="tr-btn" disabled="@_salvando" @onclick="CancelarEdicao">Cancelar</button>
+                    <button type="button" class="tr-btn primario" disabled="@_salvando" @onclick="SalvarItem">@(_salvando ? "Salvando..." : "Salvar")</button>
+                </div>
+            </div>
+        }
+
+        <section class="tr-secao" aria-label="Treinamento inicial">
+            <div class="tr-secao-tit">
+                Treinamento inicial <small>@IniciaisFeitos de @Iniciais.Count</small>
+                @if (Iniciais.Count > 0)
+                {
+                    <span class="tr-barra" aria-hidden="true"><span style="width:@(IniciaisFeitos * 100 / Iniciais.Count)%;"></span></span>
+                }
+            </div>
+            @if (Iniciais.Count == 0)
+            {
+                <div class="tr-vazio">Sem itens de treinamento inicial.</div>
+            }
+            @foreach (var it in Iniciais)
+            {
+                var item = it;
+                <div class="tr-item">
+                    <button type="button" class="tr-check @(item.Treinado ? "on" : "")" role="checkbox"
+                            aria-checked="@(item.Treinado ? "true" : "false")" aria-label="@item.Titulo"
+                            disabled="@(!PodeEditar)" @onclick="() => AlternarInicial(item)">
+                        @if (item.Treinado)
+                        {
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>
+                        }
+                    </button>
+                    <div class="tr-corpo">
+                        <div class="tr-titulo @(item.Treinado ? "" : "pend")">@item.Titulo</div>
+                        <div class="tr-meta">
+                            <span class="tr-mod">@ClienteTreinamentoModulos.Nome(item.Modulo)</span>
+                            @if (item.Treinado)
+                            {
+                                <span>@Data(item) · @item.Atendente@(string.IsNullOrWhiteSpace(item.PessoaTreinada) ? "" : " → " + item.PessoaTreinada)</span>
+                            }
+                            else
+                            {
+                                <span>pendente</span>
+                            }
+                            @if (item.UrlTutorial != null)
+                            {
+                                <a href="@item.UrlTutorial" target="_blank" rel="noopener">Tutorial</a>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.Observacao))
+                        {
+                            <div class="tr-desc">@item.Observacao</div>
+                        }
+                    </div>
+                    @if (PodeEditar)
+                    {
+                        <div class="tr-item-acoes">
+                            <button type="button" class="tr-icone" title="Editar" aria-label="Editar @item.Titulo" @onclick="() => Editar(item)">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"></path></svg>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="tr-secao" aria-label="Orientações">
+            <div class="tr-secao-tit">Orientações <small>@Orientacoes.Count</small></div>
+            @if (Orientacoes.Count == 0)
+            {
+                <div class="tr-vazio">Nada registrado ainda. Ao finalizar um ticket, o que foi ensinado ao cliente entra aqui sozinho.</div>
+            }
+            @foreach (var it in Orientacoes)
+            {
+                var item = it;
+                <div class="tr-item">
+                    <span class="tr-ico" aria-hidden="true">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+                    </span>
+                    <div class="tr-corpo">
+                        <div class="tr-titulo">@item.Titulo</div>
+                        <div class="tr-meta">
+                            <span class="tr-mod">@ClienteTreinamentoModulos.Nome(item.Modulo)</span>
+                            <span>@Data(item) · @item.Atendente</span>
+                            <span>@ClienteTreinamentoModulos.NomeOrigem(item.Origem)</span>
+                            @if (item.CodTicketChamadoC > 0)
+                            {
+                                <a href="/ticket/@item.CodTicketChamadoC" target="_blank" rel="noopener">ticket #@item.CodTicketChamadoC</a>
+                            }
+                            @if (item.Vezes > 1)
+                            {
+                                <span title="Quantas vezes o cliente foi orientado sobre isso">orientado @(item.Vezes)x</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(item.PessoaTreinada))
+                            {
+                                <span>→ @item.PessoaTreinada</span>
+                            }
+                            @if (item.UrlTutorial != null)
+                            {
+                                <a href="@item.UrlTutorial" target="_blank" rel="noopener">Tutorial</a>
+                            }
+                            @if (item.IncluidoPorIA)
+                            {
+                                <span class="tr-ia" title="Registrado pela IA ao finalizar o ticket">IA</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(item.Descricao))
+                        {
+                            <div class="tr-desc">@item.Descricao</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(item.Observacao))
+                        {
+                            <div class="tr-desc"><em>@item.Observacao</em></div>
+                        }
+                    </div>
+                    @if (PodeEditar)
+                    {
+                        <div class="tr-item-acoes">
+                            @if (_confirmarExclusao == item.Codigo)
+                            {
+                                <button type="button" class="tr-btn peq perigo" @onclick="() => Excluir(item)">Excluir</button>
+                                <button type="button" class="tr-btn peq" @onclick="() => _confirmarExclusao = 0">Não</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="tr-icone" title="Editar" aria-label="Editar @item.Titulo" @onclick="() => Editar(item)">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"></path></svg>
+                                </button>
+                                <button type="button" class="tr-icone" title="Excluir" aria-label="Excluir @item.Titulo" @onclick="() => _confirmarExclusao = item.Codigo">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"></path></svg>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public int CodCliente { get; set; }
+    [Parameter] public int CodEmp { get; set; }
+    [Parameter] public string Usuario { get; set; } = "";
+    [Parameter] public bool PodeEditar { get; set; } = true;
+
+    /// <summary>Nome do cliente (para o "Olá, ..." da mensagem).</summary>
+    [Parameter] public string? NomeCliente { get; set; }
+
+    /// <summary>No ticket: coloca a mensagem com o resumo na caixa de resposta.</summary>
+    [Parameter] public EventCallback<string> OnUsarMensagem { get; set; }
+
+    private List<ClienteTreinamentoItem> _itens = new();
+    private int _clienteCarregado = -1;
+    private bool _carregando;
+    private string? _erroCarga;
+
+    private ClienteTreinamentoItem? _editando;
+    private List<TreinamentoSugestao> _sugestoes = new();
+    private List<TreinamentoSugestao> _sugTutoriais = new();
+    private string _buscaTutorial = "";
+    private bool _montandoEnvio;
+    private bool _salvando;
+    private string _erroForm = "";
+    private int _confirmarExclusao;
+
+    private string? _envio;
+    private bool _incluirTutoriais = true;
+    private bool _copiado;
+    private string _aviso = "";
+    private bool _avisoErro;
+
+    private List<ClienteTreinamentoItem> Iniciais => _itens.Where(i => i.Inicial).ToList();
+    private List<ClienteTreinamentoItem> Orientacoes => _itens.Where(i => !i.Inicial && i.Treinado)
+        .OrderByDescending(i => i.UltimaData ?? i.DataTreinamento).ToList();
+    private int IniciaisFeitos => _itens.Count(i => i.Inicial && i.Treinado);
+    private DateTime? UltimoTreino => _itens.Where(i => i.Treinado).Max(i => i.UltimaData ?? i.DataTreinamento);
+
+    private static string Data(ClienteTreinamentoItem i)
+        => (i.UltimaData ?? i.DataTreinamento)?.ToString("dd/MM/yyyy") ?? "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_clienteCarregado != CodCliente)
+        {
+            _clienteCarregado = CodCliente;
+            _editando = null; _envio = null; _aviso = "";
+            await CarregarAsync();
+        }
+    }
+
+    public async Task CarregarAsync()
+    {
+        _itens.Clear();
+        _erroCarga = null;
+        if (CodCliente <= 0) return;
+        _carregando = true;
+        try
+        {
+            _itens = await Treinos.ListarAsync(CodEmp, CodCliente, garantirIniciais: true, Usuario);
+        }
+        catch (Exception ex)
+        {
+            _erroCarga = ex.Message.Contains("Treinamento", StringComparison.OrdinalIgnoreCase)
+                ? "As tabelas de treinamento ainda não estão completas. Rode os scripts Scripts/2026-10-26_ClienteTreinamento.sql e Scripts/2026-10-26_TreinamentoTipo.sql."
+                : "Não foi possível carregar os treinamentos: " + ex.Message;
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task AlternarInicial(ClienteTreinamentoItem item)
+    {
+        var copia = Copiar(item);
+        if (item.Treinado)
+        {
+            copia.Status = "pendente";
+            copia.DataTreinamento = null;
+            copia.UltimaData = null;
+            copia.Vezes = 0;
+        }
+        else
+        {
+            copia.Status = "treinado";
+            copia.DataTreinamento = DateTime.Today;
+            copia.UltimaData = DateTime.Today;
+            copia.Atendente = Usuario;
+        }
+        await SalvarInterno(copia, "");
+    }
+
+    private void NovoItem()
+    {
+        _editando = new ClienteTreinamentoItem
+        {
+            CodEmp = CodEmp, CodCliente = CodCliente, Status = "treinado", Origem = "ligacao",
+            Modulo = "outro", DataTreinamento = DateTime.Today, Atendente = Usuario
+        };
+        _erroForm = ""; _sugestoes.Clear(); _sugTutoriais.Clear(); _buscaTutorial = ""; _envio = null;
+    }
+
+    private void Editar(ClienteTreinamentoItem item)
+    {
+        _editando = Copiar(item);
+        _editando.DataTreinamento ??= item.Inicial && !item.Treinado ? DateTime.Today : item.DataTreinamento;
+        _erroForm = ""; _sugestoes.Clear(); _sugTutoriais.Clear(); _buscaTutorial = ""; _envio = null;
+    }
+
+    private void CancelarEdicao()
+    {
+        _editando = null;
+        _sugestoes.Clear();
+    }
+
+    private async Task BuscarSugestoes()
+    {
+        if (_editando == null || _editando.Inicial) return;
+        var termo = _editando.Titulo ?? "";
+        if (termo.Trim().Length < 3) { _sugestoes.Clear(); return; }
+        try { _sugestoes = await Treinos.SugerirAsync(CodEmp, termo); }
+        catch { _sugestoes.Clear(); }
+    }
+
+    private void EscolherSugestao(TreinamentoSugestao s)
+    {
+        if (_editando == null) return;
+        _editando.Titulo = s.Titulo;
+        if (!string.IsNullOrWhiteSpace(s.Modulo)) _editando.Modulo = s.Modulo!;
+        if (!string.IsNullOrWhiteSpace(s.SlugDoc))
+        {
+            _editando.CodDoc = s.CodDoc;
+            _editando.SlugDoc = s.SlugDoc;
+            _editando.CodEmpDoc = s.CodEmpDoc;
+            _editando.TituloDoc = s.Titulo;
+        }
+        _sugestoes.Clear();
+    }
+
+    private void RemoverTutorial()
+    {
+        if (_editando == null) return;
+        _editando.CodDoc = null; _editando.SlugDoc = null; _editando.TituloDoc = null; _editando.CodEmpDoc = null;
+        _editando.SemTutorial = true;   // removido de propósito: não liga sozinho ao salvar
+        _buscaTutorial = "";
+    }
+
+    private async Task BuscarTutoriais()
+    {
+        if ((_buscaTutorial ?? "").Trim().Length < 3) { _sugTutoriais.Clear(); return; }
+        try { _sugTutoriais = await Treinos.SugerirTutoriaisAsync(CodEmp, _buscaTutorial!); }
+        catch { _sugTutoriais.Clear(); }
+    }
+
+    private void EscolherTutorial(TreinamentoSugestao s)
+    {
+        if (_editando == null) return;
+        _editando.CodDoc = s.CodDoc;
+        _editando.SlugDoc = s.SlugDoc;
+        _editando.CodEmpDoc = s.CodEmpDoc;
+        _editando.TituloDoc = s.Titulo;
+        _editando.SemTutorial = false;
+        _sugTutoriais.Clear();
+        _buscaTutorial = "";
+    }
+
+    private async Task SalvarItem()
+    {
+        if (_editando == null) return;
+        if (string.IsNullOrWhiteSpace(_editando.Titulo)) { _erroForm = "Informe o que foi ensinado."; return; }
+        if (!_editando.Inicial) _editando.Status = "treinado";
+        if (_editando.Treinado)
+        {
+            _editando.DataTreinamento ??= DateTime.Today;
+            // a data informada passa a ser a última vez, quando for posterior
+            if (!_editando.UltimaData.HasValue || _editando.DataTreinamento > _editando.UltimaData) _editando.UltimaData = _editando.DataTreinamento;
+            if (string.IsNullOrWhiteSpace(_editando.Atendente)) _editando.Atendente = Usuario;
+        }
+        else
+        {
+            _editando.DataTreinamento = null; _editando.UltimaData = null; _editando.Vezes = 0;
+        }
+        var ok = await SalvarInterno(_editando, "Treinamento salvo.");
+        if (ok) _editando = null;
+    }
+
+    private async Task<bool> SalvarInterno(ClienteTreinamentoItem item, string mensagemOk)
+    {
+        _salvando = true; _erroForm = "";
+        try
+        {
+            await Treinos.SalvarAsync(item, Usuario);
+            await CarregarAsync();
+            Avisar(mensagemOk, false);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _erroForm = "Não foi possível salvar: " + ex.Message;
+            if (_editando == null) Avisar(_erroForm, true);
+            return false;
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private async Task Excluir(ClienteTreinamentoItem item)
+    {
+        _confirmarExclusao = 0;
+        try
+        {
+            await Treinos.ExcluirAsync(item.Codigo, CodEmp, Usuario);
+            await CarregarAsync();
+            Avisar("Item excluído.", false);
+        }
+        catch (Exception ex)
+        {
+            Avisar("Não foi possível excluir: " + ex.Message, true);
+        }
+    }
+
+    private async Task AbrirEnvio()
+    {
+        if (!_itens.Any(i => i.Treinado))
+        {
+            Avisar("Ainda não há nada marcado como treinado para enviar.", true);
+            return;
+        }
+        if (_montandoEnvio) return;
+        _montandoEnvio = true;
+        try
+        {
+            // itens sem tutorial: procura a documentação do assunto antes de montar a mensagem
+            try { await Treinos.LigarTutoriaisFaltantesAsync(CodEmp, _itens); }
+            catch (Exception ex) { Console.WriteLine("[Treinamentos] Ligar tutoriais: " + ex.Message); }
+
+            _envio = Treinos.MontarMensagemResumo(NomeCliente, _itens, _incluirTutoriais);
+            _editando = null; _copiado = false;
+        }
+        finally
+        {
+            _montandoEnvio = false;
+        }
+    }
+
+    private void AlternarTutoriais(ChangeEventArgs e)
+    {
+        _incluirTutoriais = e.Value is bool b && b;
+        _envio = Treinos.MontarMensagemResumo(NomeCliente, _itens, _incluirTutoriais);
+        _copiado = false;
+    }
+
+    private async Task UsarMensagem()
+    {
+        if (string.IsNullOrWhiteSpace(_envio)) return;
+        await OnUsarMensagem.InvokeAsync(_envio);
+        _envio = null;
+    }
+
+    private async Task CopiarMensagem()
+    {
+        if (string.IsNullOrWhiteSpace(_envio)) return;
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _envio);
+            _copiado = true;
+        }
+        catch
+        {
+            Avisar("Não foi possível copiar. Selecione o texto e copie com Ctrl+C.", true);
+        }
+    }
+
+    private void Avisar(string texto, bool erro)
+    {
+        _aviso = texto;
+        _avisoErro = erro;
+        if (string.IsNullOrEmpty(texto)) return;
+        _ = Task.Delay(3500).ContinueWith(_ => InvokeAsync(() => { if (_aviso == texto) { _aviso = ""; StateHasChanged(); } }));
+    }
+
+    private static ClienteTreinamentoItem Copiar(ClienteTreinamentoItem i) => new()
+    {
+        Codigo = i.Codigo, CodEmp = i.CodEmp, CodCliente = i.CodCliente, Titulo = i.Titulo, Modulo = i.Modulo,
+        Descricao = i.Descricao, Status = i.Status, Inicial = i.Inicial, Origem = i.Origem, CodTicketChamadoC = i.CodTicketChamadoC,
+        DataTreinamento = i.DataTreinamento, UltimaData = i.UltimaData, Vezes = i.Vezes, Atendente = i.Atendente,
+        PessoaTreinada = i.PessoaTreinada, Observacao = i.Observacao, CodDoc = i.CodDoc, CodEmpDoc = i.CodEmpDoc,
+        SlugDoc = i.SlugDoc, TituloDoc = i.TituloDoc, IncluidoPorIA = i.IncluidoPorIA
+    };
+}

@@ -494,6 +494,35 @@
         padding: 0 12px;
     }
 
+    .rh-head-actions {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+        .rh-head-actions .rh-btn {
+            width: auto;
+        }
+
+    .rh-refresh-ico {
+        display: inline-block;
+        font-size: 17px;
+        line-height: 1;
+    }
+
+    .rh-refresh:disabled {
+        opacity: .55;
+        cursor: not-allowed;
+    }
+
+    .rh-refresh.girando .rh-refresh-ico {
+        animation: rh-girar .8s linear infinite;
+    }
+
+    @@keyframes rh-girar {
+        to { transform: rotate(360deg); }
+    }
+
     .rh-table-head,
     .rh-device {
         display: grid;
@@ -861,12 +890,22 @@
                             <span>Inventário de acesso remoto do cliente</span>
                         </div>
 
-                        <button type="button"
-                                class="rh-btn primary rh-add"
-                                title="Novo computador"
-                                @onclick="NovoAcessoRemoto">
-                            +
-                        </button>
+                        <div class="rh-head-actions">
+                            <button type="button"
+                                    class="rh-btn neutral rh-add rh-refresh @(AtualizandoStatus ? "girando" : "")"
+                                    title="Atualizar status dos computadores"
+                                    disabled="@(ClienteAcessoRemotoSelecionado == null || AtualizandoStatus)"
+                                    @onclick="AtualizarComputadores">
+                                <span class="rh-refresh-ico">⟳</span>
+                            </button>
+
+                            <button type="button"
+                                    class="rh-btn primary rh-add"
+                                    title="Novo computador"
+                                    @onclick="NovoAcessoRemoto">
+                                +
+                            </button>
+                        </div>
                     </div>
 
                     <div>
@@ -973,6 +1012,7 @@
 
     private bool CarregandoClientesAcessoRemoto = false;
     private bool CarregandoAcessosRemotos = false;
+    private bool AtualizandoStatus = false;
     private bool EditandoAcessoRemoto = false;
 
     private List<AcessoRemotoModel> AcessosRemotos = new();
@@ -1096,6 +1136,39 @@
         finally
         {
             CarregandoAcessosRemotos = false;
+        }
+    }
+
+    // Botão ⟳: busca de novo os computadores do cliente e se estão online,
+    // sem limpar a lista (não precisa buscar o cliente outra vez)
+    private async Task AtualizarComputadores()
+    {
+        if (ClienteAcessoRemotoSelecionado == null || AtualizandoStatus)
+            return;
+
+        try
+        {
+            AtualizandoStatus = true;
+
+            var lista = await TicketService.ListarAcessosRemotosClienteAsync(
+                ClienteAcessoRemotoSelecionado.Codigo
+            );
+
+            await AtualizarStatusOnlineAcessosAsync(lista);
+            AcessosRemotos = lista;
+
+            var online = lista.Count(x => x.Online);
+            Mensagem = $"Status atualizado: {online} de {lista.Count} computador(es) online.";
+            Sucesso = true;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro ao atualizar computadores: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            AtualizandoStatus = false;
         }
     }
 

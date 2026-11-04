@@ -8,9 +8,11 @@ namespace EvolutDelivery.Services
     {
         private readonly string _connectionString;
         private readonly EmpresaService _empresaService;
+        private readonly ILogger<LoginService> _logger;
 
-        public LoginService(IConfiguration config, EmpresaService empresaService)
+        public LoginService(IConfiguration config, EmpresaService empresaService, ILogger<LoginService> logger)
         {
+            _logger = logger;
             _connectionString = config.GetConnectionString("ConnectionComercial")
                 ?? throw new InvalidOperationException("Connection string 'ConnectionComercial' não encontrada.");
 
@@ -19,6 +21,13 @@ namespace EvolutDelivery.Services
 
         public async Task<UsuarioLoginModel?> ValidarLoginAsync(string cnpj, string usuario, string senha, int codigoEmpresa)
         {
+            if (codigoEmpresa <= 0 || string.IsNullOrWhiteSpace(cnpj) || string.IsNullOrWhiteSpace(usuario))
+                return null;
+
+            // A empresa escolhida precisa pertencer ao CNPJ do usuário
+            if (!await EmpresaPertenceAoCnpjAsync(codigoEmpresa, cnpj))
+                return null;
+
             const string query = @"
         SELECT TOP 1
             Codigo,
@@ -57,12 +66,38 @@ namespace EvolutDelivery.Services
 
                 reader.Close();
 
-                await _empresaService.GarantirSlugAsync(codigoEmpresa, cnpj);
+                try
+                {
+                    await _empresaService.GarantirSlugAsync(codigoEmpresa, cnpj);
+                }
+                catch (Exception ex)
+                {
+                    // O slug é só para o link da loja: não pode impedir o login
+                    _logger.LogWarning(ex, "Falha ao garantir o slug da empresa {CodEmp}", codigoEmpresa);
+                }
 
                 return usuarioLogado;
             }
 
             return null;
+        }
+
+        private async Task<bool> EmpresaPertenceAoCnpjAsync(int codigoEmpresa, string cnpj)
+        {
+            const string sql = @"
+        SELECT COUNT(1)
+        FROM Empresa
+        WHERE Codigo = @Codigo
+          AND CNPJ = @CNPJ";
+
+            using var conn = new SqlConnection(_connectionString);
+            using var cmd = new SqlCommand(sql, conn);
+
+            cmd.Parameters.Add("@Codigo", SqlDbType.Int).Value = codigoEmpresa;
+            cmd.Parameters.Add("@CNPJ", SqlDbType.VarChar).Value = cnpj;
+
+            await conn.OpenAsync();
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync()) > 0;
         }
     }
 }

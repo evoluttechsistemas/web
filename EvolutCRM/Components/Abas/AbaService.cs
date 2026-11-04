@@ -8,6 +8,28 @@ public class AbaService
 
     public event Action? OnMudanca;
 
+    // Telas com alterações não salvas podem segurar o fechamento da aba (ex.: editor de documentação)
+    private readonly Dictionary<string, Func<Task<bool>>> _guardasFechamento = new();
+
+    /// <summary>Registra uma verificação chamada antes de o usuário fechar a aba. Devolver false cancela.</summary>
+    public void RegistrarGuardaFechamento(string rota, Func<Task<bool>> podeFechar)
+        => _guardasFechamento[Normalizar(rota)] = podeFechar;
+
+    public void RemoverGuardaFechamento(string rota, Func<Task<bool>> podeFechar)
+    {
+        rota = Normalizar(rota);
+        if (_guardasFechamento.TryGetValue(rota, out var atual) && atual == podeFechar)
+            _guardasFechamento.Remove(rota);
+    }
+
+    /// <summary>Pergunta à tela da aba se pode fechar (se ela registrou uma verificação).</summary>
+    public async Task<bool> PodeFecharAsync(string rota)
+    {
+        if (!_guardasFechamento.TryGetValue(Normalizar(rota), out var podeFechar)) return true;
+        try { return await podeFechar(); }
+        catch { return true; }   // se a verificação falhar, não prende a aba
+    }
+
     private static readonly Dictionary<string, (string Titulo, string Icone, Type Tipo)> _meta = new();
     private static readonly Dictionary<string, Type> _rotaParaTipo = new();
 

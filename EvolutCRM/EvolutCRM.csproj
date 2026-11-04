@@ -13,6 +13,7 @@
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Dapper" Version="2.1.89" />
+    <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
     <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="mercadopago-sdk" Version="3.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.*" />
@@ -49,4 +50,10 @@
 	
   <ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="" /></VisualStudio></ProjectExtensions>
 
+	<ItemGroup>
+		<!-- Sobra de uma versão antiga da busca da IA (hoje os embeddings ficam no banco: DocChunk e AiTicketInsights).
+		     Nenhum código lê este arquivo; fica fora da publicação para não mandar 12 MB ao servidor a cada deploy. -->
+		<Content Remove="embedding_cache.json" />
+		<None Remove="embedding_cache.json" />
+	</ItemGroup>
 </Project>

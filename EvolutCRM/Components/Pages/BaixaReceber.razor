@@ -840,6 +840,76 @@
         touch-action: none;
     }
 
+    /* ── Lançamento rápido de parcelas ── */
+    .lr-fundo { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center;
+        padding:16px; background:rgba(15,23,42,.55); backdrop-filter:blur(4px); animation:lrFade .18s ease-out; }
+    .lr-modal { width:min(920px, 100%); max-height:calc(100dvh - 32px); display:flex; flex-direction:column;
+        background:var(--surface); border-radius:20px; box-shadow:0 24px 60px rgba(15,23,42,.35);
+        overflow:hidden; animation:lrSobe .22s cubic-bezier(.2,.8,.2,1); }
+    @@keyframes lrFade { from { opacity:0; } to { opacity:1; } }
+    @@keyframes lrSobe { from { opacity:0; transform:translateY(18px) scale(.98); } to { opacity:1; transform:none; } }
+
+    .lr-topo { display:flex; align-items:center; gap:14px; padding:20px 24px;
+        background:linear-gradient(135deg, var(--primary-soft), transparent); border-bottom:1px solid var(--border); }
+    .lr-icone { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; font-size:20px; color:#fff;
+        background:linear-gradient(135deg,#059669,#047857); box-shadow:0 6px 16px rgba(5,150,105,.35); flex-shrink:0; }
+    .lr-topo h3 { margin:0; font-size:17px; font-weight:800; color:var(--text); }
+    .lr-topo p { margin:2px 0 0; font-size:12px; color:var(--muted); }
+    .lr-fechar { margin-left:auto; width:34px; height:34px; border-radius:10px; border:1px solid var(--border);
+        background:var(--surface); color:var(--muted); font-size:18px; cursor:pointer; transition:.15s; }
+    .lr-fechar:hover { background:var(--surface-2); color:var(--text); }
+
+    .lr-corpo { display:grid; grid-template-columns:1.05fr 1fr; gap:0; overflow:auto; flex:1; }
+    .lr-form { padding:20px 24px; display:flex; flex-direction:column; gap:14px; border-right:1px solid var(--border); }
+    .lr-lado { padding:20px 24px; background:var(--surface-2); display:flex; flex-direction:column; gap:14px; min-height:0; }
+
+    .lr-linha { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .lr-campo label { display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:6px;
+        text-transform:uppercase; letter-spacing:.05em; }
+    .lr-campo .admin-input { width:100%; transition:border-color .15s, box-shadow .15s; }
+    .lr-campo .admin-input:focus { border-color:var(--primary-2); box-shadow:0 0 0 3px var(--primary-soft); }
+    .lr-fixo { display:flex; align-items:center; gap:8px; height:42px; padding:0 14px; border-radius:var(--radius-sm);
+        border:1.5px dashed var(--border); color:var(--text); font-weight:700; font-size:13px; }
+    .lr-fixo small { color:var(--muted); font-weight:600; }
+    .lr-moeda { position:relative; }
+    .lr-moeda span { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-weight:700; color:var(--muted); font-size:13px; }
+    .lr-moeda .admin-input { padding-left:40px; font-weight:700; font-size:15px; }
+    .lr-chips { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+    .lr-chip { padding:4px 12px; border-radius:999px; border:1.5px solid var(--border); background:var(--surface);
+        font-size:12px; font-weight:700; color:var(--muted); cursor:pointer; transition:.15s; }
+    .lr-chip:hover { border-color:var(--primary-2); color:var(--primary-2); }
+    .lr-chip.ativo { background:var(--primary-2); border-color:var(--primary-2); color:#fff; }
+    .lr-form textarea.admin-input { min-height:64px; resize:vertical; }
+
+    .lr-resumo { border-radius:16px; padding:16px 18px; color:#fff;
+        background:linear-gradient(135deg,#059669,#0f766e); box-shadow:0 10px 24px rgba(5,150,105,.25); }
+    .lr-resumo span { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; opacity:.85; }
+    .lr-resumo strong { display:block; font-size:28px; font-weight:800; margin:2px 0; font-family:'JetBrains Mono',monospace; }
+    .lr-resumo small { font-size:12px; opacity:.9; }
+
+    .lr-lista { flex:1; min-height:120px; max-height:340px; overflow:auto; display:flex; flex-direction:column; gap:6px; padding-right:2px; }
+    .lr-item { display:grid; grid-template-columns:54px 1fr 120px; gap:8px; align-items:center; padding:6px 8px;
+        background:var(--surface); border:1px solid var(--border); border-radius:12px; animation:lrFade .2s ease-out; }
+    .lr-item:hover { border-color:var(--primary-3); }
+    .lr-num { text-align:center; font-size:11px; font-weight:800; color:var(--primary-2); background:var(--primary-soft);
+        border-radius:8px; padding:6px 0; line-height:1.1; }
+    .lr-num small { display:block; font-size:10px; font-weight:700; color:var(--muted); text-transform:capitalize; }
+    .lr-item .admin-input { height:34px; padding:4px 8px; font-size:12px; }
+    .lr-vazio { flex:1; display:grid; place-items:center; text-align:center; color:var(--muted); font-size:12px;
+        border:1.5px dashed var(--border); border-radius:12px; padding:24px; }
+    .lr-vazio div { font-size:28px; margin-bottom:6px; }
+
+    .lr-rodape { display:flex; align-items:center; gap:10px; padding:14px 24px; border-top:1px solid var(--border); background:var(--surface); }
+    .lr-erro { flex:1; color:var(--danger); font-size:12px; font-weight:600; }
+    .lr-salvar { background:linear-gradient(135deg,#059669,#047857) !important; min-width:190px; }
+    .lr-salvar:disabled { opacity:.5; cursor:not-allowed; }
+
+    @@media (max-width: 760px) {
+        .lr-corpo { grid-template-columns:1fr; }
+        .lr-form { border-right:none; border-bottom:1px solid var(--border); }
+        .lr-item { grid-template-columns:48px 1fr 100px; }
+    }
+
     .modal-baixa-content {
         position: relative;
         width: min(520px, calc(100vw - 32px)) !important;
@@ -1229,6 +1299,11 @@
                 </div>
 
                 <button class="btn-save-permissions" style="margin-left:auto;"
+                        @onclick="AbrirLancamentoRapido">
+                    ➕ Lançar parcelas
+                </button>
+
+                <button class="btn-save-permissions"
                         @onclick="CarregarContasReceber"
                         disabled="@CarregandoContas">
                     🔄 Atualizar
@@ -1255,7 +1330,7 @@
                     <div class="commission-main-card">
                         <span>Total selecionado (c/ juros)</span>
                         <strong>@TotalSelecionadoComJuros.ToString("C")</strong>
-                        <small>Juros 2% ao mês proporcional por dia · 2 dias de carência</small>
+                        <small>A partir do 3º dia de atraso: multa de 2% + juros de 2% ao dia</small>
                     </div>
                 </div>
             }
@@ -1364,6 +1439,11 @@
                             style="background:linear-gradient(135deg,#059669,#047857);"
                             @onclick="AbrirFormBaixa">
                         💰 Realizar baixa (@TitulosSelecionados.Count título(s))
+                    </button>
+
+                    <button class="admin-tab" style="padding:10px 18px; color:var(--danger); border-color:#fca5a5;"
+                            @onclick="AbrirCancelarTitulos">
+                        🗑️ Cancelar título(s) (@TitulosSelecionados.Count)
                     </button>
                 </div>
             }
@@ -1738,6 +1818,180 @@
     </div>
 }
 
+@* ── LANÇAMENTO RÁPIDO RECEBER (igual ao do ERP) ── *@
+@if (MostrarLancamento)
+{
+    <div class="lr-fundo">
+        <div class="lr-modal" role="dialog" aria-modal="true">
+
+            <div class="lr-topo">
+                <div class="lr-icone">＋</div>
+                <div>
+                    <h3>Lançar parcelas</h3>
+                    <p>@ClienteSelecionadoBaixa?.NomeCliente · cód. @ClienteSelecionadoBaixa?.Codigo</p>
+                </div>
+                <button type="button" class="lr-fechar" title="Fechar" @onclick="FecharLancamento" disabled="@LrSalvando">×</button>
+            </div>
+
+            <div class="lr-corpo">
+                @* ── Formulário ── *@
+                <div class="lr-form">
+                    <div class="lr-linha">
+                        <div class="lr-campo">
+                            <label>Tipo de conta</label>
+                            <div class="lr-fixo">VENDA <small>· cód. 1</small></div>
+                        </div>
+                        <div class="lr-campo">
+                            <label>Movimento</label>
+                            <input class="admin-input" type="date" value="@LrDataMovimento.ToString("yyyy-MM-dd")"
+                                   @onchange="e => LrDataMovimento = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : DateTime.Today" />
+                        </div>
+                    </div>
+
+                    <div class="lr-linha">
+                        <div class="lr-campo">
+                            <label>Primeiro vencimento</label>
+                            <input class="admin-input" type="date" value="@LrPrimeiroVencimento.ToString("yyyy-MM-dd")"
+                                   @onchange="e => { LrPrimeiroVencimento = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : DateTime.Today; AtualizarPrevia(); }" />
+                        </div>
+                        <div class="lr-campo">
+                            <label>Qtd parcelas</label>
+                            <input class="admin-input" type="number" min="1" max="120" placeholder="Ex.: 12"
+                                   value="@LrQtdParcelas"
+                                   @oninput="e => { LrQtdParcelas = int.TryParse(e.Value?.ToString(), out var q) && q > 0 ? Math.Min(q, 120) : null; AtualizarPrevia(); }" />
+                        </div>
+                    </div>
+                    <div class="lr-chips" style="margin-top:-6px;">
+                        @foreach (var q in new[] { 1, 3, 6, 12, 24 })
+                        {
+                            <button type="button" class="lr-chip @(LrQtdParcelas == q ? "ativo" : "")"
+                                    @onclick="() => { LrQtdParcelas = q; AtualizarPrevia(); }">@q×</button>
+                        }
+                    </div>
+
+                    <div class="lr-campo">
+                        <label>Valor da parcela</label>
+                        <div class="lr-moeda">
+                            <span>R$</span>
+                            <input class="admin-input" type="number" min="0" step="0.01" placeholder="0,00"
+                                   value="@(LrValorParcela?.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+                                   @oninput="e => { var v = LerDecimal(e.Value); LrValorParcela = v > 0 ? v : null; AtualizarPrevia(); }" />
+                        </div>
+                    </div>
+
+                    <div class="lr-campo">
+                        <label>Observação</label>
+                        <textarea class="admin-input" maxlength="250" placeholder="Opcional" @bind="LrObservacao"></textarea>
+                    </div>
+                </div>
+
+                @* ── Resumo e parcelas (atualiza enquanto digita) ── *@
+                <div class="lr-lado">
+                    <div class="lr-resumo">
+                        <span>Valor total</span>
+                        <strong>@LrParcelas.Sum(p => p.Valor).ToString("C")</strong>
+                        <small>
+                            @if (LrParcelas.Any())
+                            {
+                                @($"{LrParcelas.Count}× · de {LrParcelas.Min(p => p.Vencimento):dd/MM/yyyy} a {LrParcelas.Max(p => p.Vencimento):dd/MM/yyyy}")
+                            }
+                            else
+                            {
+                                <text>Preencha a quantidade e o valor</text>
+                            }
+                        </small>
+                    </div>
+
+                    @if (LrParcelas.Any())
+                    {
+                        <div class="lr-lista">
+                            @foreach (var p in LrParcelas)
+                            {
+                                <div class="lr-item" @key="p.Numero">
+                                    <div class="lr-num">
+                                        @p.Numero/@LrParcelas.Count
+                                        <small>@p.Vencimento.ToString("MMM/yy", new System.Globalization.CultureInfo("pt-BR")).Replace(".", "")</small>
+                                    </div>
+                                    <input class="admin-input" type="date" value="@p.Vencimento.ToString("yyyy-MM-dd")"
+                                           @onchange="e => p.Vencimento = DateTime.TryParse(e.Value?.ToString(), out var d) ? d : p.Vencimento" />
+                                    <input class="admin-input" type="number" min="0" step="0.01"
+                                           value="@p.Valor.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                           @onchange="e => p.Valor = LerDecimal(e.Value)" />
+                                </div>
+                            }
+                        </div>
+                        <small style="color:var(--muted); font-size:11px;">Dá para ajustar a data e o valor de cada parcela antes de salvar.</small>
+                    }
+                    else
+                    {
+                        <div class="lr-vazio">
+                            <div>🗓️</div>
+                            As parcelas aparecem aqui assim que você informar a quantidade e o valor.
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="lr-rodape">
+                <div class="lr-erro">@LrMensagem</div>
+                <button class="admin-tab" style="padding:10px 18px;" @onclick="FecharLancamento" disabled="@LrSalvando">Cancelar</button>
+                <button class="btn-save-permissions lr-salvar" @onclick="SalvarParcelas" disabled="@(LrSalvando || !LrParcelas.Any())">
+                    @(LrSalvando ? "Salvando..." : LrParcelas.Any() ? $"💾 Salvar {LrParcelas.Count} parcela(s)" : "💾 Salvar")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── CANCELAR TÍTULOS ── *@
+@if (MostrarCancelar)
+{
+    <div class="modal-baixa-backdrop">
+        <div class="modal-baixa-content">
+            <h3 style="margin:0 0 4px; font-size:16px; font-weight:800; color:var(--danger);">🗑️ Cancelar título(s)</h3>
+            <p style="margin:0 0 14px; font-size:12px; color:var(--muted);">
+                Cliente: <strong>@ClienteSelecionadoBaixa?.NomeCliente</strong>
+            </p>
+
+            <div style="background:var(--surface-2); border:1.5px solid var(--border); border-radius:var(--radius-sm);
+                padding:12px; margin-bottom:14px; font-size:12px;">
+                @foreach (var ct in ContasReceber.Where(c => c.Selecionado && c.DataPagamento == null))
+                {
+                    <div style="display:flex; justify-content:space-between; padding:2px 0;">
+                        <span>#@ct.Codigo · @FormatarData(ct.DataVencimento)@(string.IsNullOrWhiteSpace(ct.Parcela) ? "" : $" · {ct.Parcela}/{ct.TotalParcela}")</span>
+                        <strong>@ct.Valor?.ToString("C")</strong>
+                    </div>
+                }
+                <div style="display:flex; justify-content:space-between; border-top:1.5px solid var(--border); padding-top:6px; margin-top:6px;">
+                    <span style="font-weight:700;">Total</span>
+                    <strong>@ValorTotalBaixa.ToString("C")</strong>
+                </div>
+            </div>
+
+            <p style="margin:0 0 14px; font-size:12px; color:var(--danger); font-weight:600;">
+                Os títulos serão excluídos do contas a receber. Título pago, com boleto/PIX gerado ou que veio de
+                venda/OS do ERP não é cancelado por aqui.
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(CancelarMensagem))
+            {
+                <div style="background:var(--danger-soft); border:1.5px solid #fca5a5; border-radius:var(--radius-sm);
+                    padding:10px 14px; color:var(--danger); font-size:12px; font-weight:600; margin-bottom:14px;">
+                    @CancelarMensagem
+                </div>
+            }
+
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="admin-tab" style="padding:10px 18px;" @onclick="() => MostrarCancelar = false" disabled="@Cancelando">Voltar</button>
+                <button class="btn-save-permissions" style="background:linear-gradient(135deg,#dc2626,#b91c1c);"
+                        @onclick="ConfirmarCancelarTitulos" disabled="@Cancelando">
+                    @(Cancelando ? "Cancelando..." : "🗑️ Confirmar cancelamento")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 
 @code {
     // ── PIX MERCADO PAGO ──
@@ -1784,6 +2038,171 @@
     private decimal ValorTotalBaixa =>
         ContasReceber.Where(c => c.Selecionado && c.DataPagamento == null)
                      .Sum(c => c.Valor ?? 0);
+    // ── LANÇAMENTO RÁPIDO RECEBER ──
+    private bool MostrarLancamento = false;
+    private const int LrCodTipoConta = 1;            // sempre VENDA
+    private const string LrNomeTipoConta = "VENDA";
+    private DateTime LrDataMovimento = DateTime.Today;
+    private DateTime LrPrimeiroVencimento = DateTime.Today;
+    private int? LrQtdParcelas = null;
+    private decimal? LrValorParcela = null;
+    private string LrObservacao = "";
+    private List<ParcelaLancamentoDto> LrParcelas = new();
+    private bool LrSalvando = false;
+    private string LrMensagem = "";
+
+    private static decimal LerDecimal(object? valor) =>
+        decimal.TryParse(valor?.ToString(), System.Globalization.NumberStyles.Any,
+                         System.Globalization.CultureInfo.InvariantCulture, out var v) ? Math.Round(v, 2) : 0m;
+
+    private void AbrirLancamentoRapido()
+    {
+        if (ClienteSelecionadoBaixa == null) return;
+
+        // Só movimento e primeiro vencimento vêm preenchidos (com hoje); o resto em branco
+        LrMensagem = "";
+        LrParcelas = new();
+        LrDataMovimento = DateTime.Today;
+        LrPrimeiroVencimento = DateTime.Today;
+        LrQtdParcelas = null;
+        LrValorParcela = null;
+        LrObservacao = "";
+        MostrarLancamento = true;
+    }
+
+    private void FecharLancamento()
+    {
+        if (LrSalvando) return;
+        MostrarLancamento = false;
+    }
+
+    /// <summary>
+    /// Monta as parcelas mês a mês a partir do primeiro vencimento (dia 31 vira o último dia do mês).
+    /// Roda a cada alteração de quantidade, valor ou primeiro vencimento (prévia ao vivo).
+    /// </summary>
+    private void AtualizarPrevia()
+    {
+        LrMensagem = "";
+        if (LrValorParcela is not > 0m || LrQtdParcelas is not (>= 1 and <= 120))
+        {
+            LrParcelas = new();
+            return;
+        }
+
+        LrParcelas = Enumerable.Range(0, LrQtdParcelas.Value)
+            .Select(i => new ParcelaLancamentoDto
+            {
+                Numero = i + 1,
+                Vencimento = LrPrimeiroVencimento.Date.AddMonths(i),
+                Valor = LrValorParcela.Value
+            })
+            .ToList();
+    }
+
+    private async Task SalvarParcelas()
+    {
+        if (ClienteSelecionadoBaixa == null || !LrParcelas.Any()) return;
+
+        LrSalvando = true;
+        LrMensagem = "";
+        try
+        {
+            var tipo = new TipoContaReceberDto { Codigo = LrCodTipoConta, Nome = LrNomeTipoConta };
+
+            var (ok, msg, codigos) = await bxClienteService.LancarParcelasAsync(
+                ClienteSelecionadoBaixa.Codigo,
+                ClienteSelecionadoBaixa.NomeCliente,
+                tipo.Codigo,
+                tipo.Nome,
+                LrDataMovimento,
+                LrParcelas,
+                LrObservacao,
+                UserState.CurrentUser ?? "");
+
+            if (!ok)
+            {
+                LrMensagem = msg;
+                return;
+            }
+
+            var total = LrParcelas.Sum(p => p.Valor);
+            await LogFinanceiroService.RegistrarAsync(
+                usuario: UserState.CurrentUser?.Trim() ?? "",
+                codEmp: UserState.CurrentCompanyId,
+                nomeEmpresa: UserState.CurrentCompany,
+                tipoEvento: LogFinanceiroService.TITULO_LANCADO,
+                detalhe: $"{codigos.Count} parcela(s) · {tipo.Nome} · Total: {total:C} · " +
+                         $"1º venc.: {LrParcelas.Min(p => p.Vencimento):dd/MM/yyyy} · Títulos: {string.Join(", ", codigos)} · " +
+                         $"Cliente: {ClienteSelecionadoBaixa.NomeCliente}",
+                ip: null);
+
+            MostrarLancamento = false;
+            MensagemBaixa = $"✅ {codigos.Count} parcela(s) lançada(s) ({total:C}).";
+            SituacaoFiltro = "abertos";
+            await CarregarContasReceber();
+        }
+        catch (Exception ex)
+        {
+            LrMensagem = "Erro ao salvar: " + ex.Message;
+        }
+        finally
+        {
+            LrSalvando = false;
+        }
+    }
+
+    // ── CANCELAR TÍTULOS ──
+    private bool MostrarCancelar = false;
+    private bool Cancelando = false;
+    private string CancelarMensagem = "";
+
+    private void AbrirCancelarTitulos()
+    {
+        if (!TitulosSelecionados.Any()) return;
+        CancelarMensagem = "";
+        MostrarCancelar = true;
+    }
+
+    private async Task ConfirmarCancelarTitulos()
+    {
+        var codigos = TitulosSelecionados;
+        if (!codigos.Any()) { MostrarCancelar = false; return; }
+
+        Cancelando = true;
+        CancelarMensagem = "";
+        try
+        {
+            var valor = ValorTotalBaixa;
+            var (ok, msg) = await bxClienteService.CancelarTitulosAsync(codigos);
+            if (!ok)
+            {
+                CancelarMensagem = msg;
+                return;
+            }
+
+            await LogFinanceiroService.RegistrarAsync(
+                usuario: UserState.CurrentUser?.Trim() ?? "",
+                codEmp: UserState.CurrentCompanyId,
+                nomeEmpresa: UserState.CurrentCompany,
+                tipoEvento: LogFinanceiroService.TITULO_CANCELADO,
+                detalhe: $"{codigos.Count} título(s) · Valor: {valor:C} · Títulos: {string.Join(", ", codigos)} · " +
+                         $"Cliente: {ClienteSelecionadoBaixa?.NomeCliente}",
+                ip: null);
+
+            MostrarCancelar = false;
+            MensagemBaixa = $"✅ {msg}";
+            await CarregarContasReceber();
+        }
+        catch (Exception ex)
+        {
+            CancelarMensagem = "Erro ao cancelar: " + ex.Message;
+        }
+        finally
+        {
+            Cancelando = false;
+        }
+    }
+
     // ── BAIXA RECEBER ──
     private string FiltroBuscaCliente = "";
     private List<BaixaReceberClienteDto> ResultadoBuscaClientes = new();
@@ -2005,7 +2424,8 @@
         sb.AppendLine();
 
         foreach (var t in TitulosCobranca)
-            sb.AppendLine($"Valor: {t.ValorComJuros:C} | Vencimento: {t.DataVencimento:dd/MM/yyyy} | {t.DiasAtraso} dia(s) em atraso");
+            sb.AppendLine($"Valor: {t.Valor:C} + multa {t.ValorMulta:C} + juros {t.ValorJuros:C} = {t.ValorComJuros:C} | " +
+              $"Vencimento: {t.DataVencimento:dd/MM/yyyy} | {t.DiasAtraso} dia(s) em atraso");
 
         sb.AppendLine();
         sb.AppendLine($"Total: {TitulosCobranca.Sum(t => t.ValorComJuros):C}");

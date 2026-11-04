@@ -1073,6 +1073,14 @@
             </div>
 
             <div style="display:flex;gap:6px;">
+                <button type="button"
+                        class="cm-btn cm-btn-ghost"
+                        title="Assistente IA: pergunte se o sistema tem uma função ou se atende o cliente"
+                        aria-pressed="@(_aiaAberto ? "true" : "false")"
+                        style="@(_aiaAberto ? "background:#1d4ed8; color:#fff; border-color:#1d4ed8;" : "")"
+                        @onclick="() => _aiaAberto = !_aiaAberto">
+                    ✨ Assistente
+                </button>
                 <NavLink href="/card" class="cm-btn cm-btn-solid" activeClass="">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                     Novo Lead
@@ -1293,7 +1301,17 @@
     </div>
 }
 
+<AssistenteIAPainel Origem="geral"
+                    Modo="comercial"
+                    CodEmp="UserState.CurrentCompanyId"
+                    Usuario="@UserState.CurrentUser"
+                    Aberto="_aiaAberto"
+                    OnFechar="() => _aiaAberto = false" />
+
 @code {
+    // Assistente IA do comercial sem card aberto (o sistema tem / atende?)
+    private bool _aiaAberto;
+
     private PeriodicTimer? _refreshTimer;
     private bool isActivePage;
     private DotNetObjectReference<MenuCRM>? dotNetRef;

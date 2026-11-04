@@ -1,4 +1,5 @@
 ﻿using EvolutCRM.Helpers;
+using EvolutCRM.Services;
 using Microsoft.Data.SqlClient;
 using System.Data;
 using System.Text;
@@ -96,6 +97,32 @@ ORDER BY D.DataHora, D.Codigo;", conn))
                           rd.GetString(5), rd.GetString(6), rd.GetInt32(7) == 1, rd.GetString(8), rd.GetInt32(9) == 1));
         }
 
+        // 2b) Respostas que saíram da sugestão da IA (AiSugestaoLog): marcadas no texto para o insight
+        //     não aprender a resposta da própria IA como se fosse a solução de um atendente.
+        var enviadasPelaIA = new List<string>();
+        try
+        {
+            await using var cmd = new SqlCommand(@"
+SELECT RespostaEnviada
+FROM AiSugestaoLog
+WHERE CodTicketChamadoC = @Id
+  AND DataHoraEnvio IS NOT NULL
+  AND ISNULL(Similaridade, 0) >= 60
+  AND ISNULL(RespostaEnviada, '') <> '';", conn);
+            cmd.Parameters.Add("@Id", SqlDbType.Int).Value = ticketId;
+            await using var rd = await cmd.ExecuteReaderAsync();
+            while (await rd.ReadAsync())
+                enviadasPelaIA.Add(rd.GetString(0));
+        }
+        catch
+        {
+            // AiSugestaoLog não existe (script não rodado): segue sem marcar
+        }
+
+        bool VeioDaIA(string texto) =>
+            enviadasPelaIA.Count > 0 && !string.IsNullOrWhiteSpace(texto) &&
+            enviadasPelaIA.Any(e => AiService.Similaridade(e, texto) >= 90);
+
         // 3) Quais prints vão junto (os 3 últimos)
         var codigosImagens = incluirImagens
             ? msgs.Where(m => m.TemImagem && ImagemIA.PareceImagem(m.NomeImagem)).Select(m => m.Codigo).TakeLast(3).ToList()
@@ -124,6 +151,7 @@ ORDER BY D.DataHora, D.Codigo;", conn))
 
             var autor = ehCliente ? "Cliente"
                       : ehNota ? $"Nota interna ({m.Usuario})"
+                      : VeioDaIA(m.Texto) ? $"Atendente ({m.Usuario}) [texto sugerido pela IA]"
                       : $"Atendente ({m.Usuario})";
 
             var partes = new List<string>();
@@ -180,7 +208,8 @@ ORDER BY D.DataHora, D.Codigo;", conn))
         if (situacao.Length > 0) sb.AppendLine($"SITUAÇÃO: {situacao}");
         if (versao.Length > 0) sb.AppendLine($"VERSÃO DO SISTEMA: {versao}");
         sb.AppendLine();
-        sb.AppendLine("CONVERSA (Cliente = quem pediu ajuda; Atendente = suporte EvolutTech; Nota interna = anotação do suporte que o cliente não vê):");
+        sb.AppendLine("CONVERSA (Cliente = quem pediu ajuda; Atendente = suporte EvolutTech; Nota interna = anotação do suporte que o cliente não vê; " +
+                      "[texto sugerido pela IA] = resposta escrita pela IA do HELP, não é prova de solução):");
         sb.AppendLine(linhas.Count == 0 ? "(vazio)" : conversa);
 
         return new TicketParaInsight(sb.ToString(), imagens);

@@ -1,0 +1,1162 @@
+﻿@* ═══════════════════════════════════════════════════════════════════════
+   Assistente IA do atendente — painel lateral do ticket.
+   Só o atendente vê. A IA lê a conversa do ticket, procura nas documentações
+   e nos casos resolvidos e, se não achar, ajuda com conhecimento geral + web.
+   ═══════════════════════════════════════════════════════════════════════ *@
+@using EvolutCRM.Helpers
+@implements IAsyncDisposable
+@inject AssistenteAtendenteService Assistente
+@inject IJSRuntime JS
+
+<style>
+.aia-painel {
+    --aia-azul: #1d4ed8; --aia-azul-2: #2563eb; --aia-azul-50: #eff6ff; --aia-azul-100: #dbeafe;
+    --aia-tinta: #0f172a; --aia-texto: #1e293b; --aia-mudo: #526079; --aia-linha: #dbe3ee; --aia-fundo: #f6f8fb;
+    --aia-verde: #15803d; --aia-verde-50: #ecfdf3; --aia-ambar: #92400e; --aia-ambar-50: #fff7e6; --aia-vermelho: #b91c1c;
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 1040;
+    width: min(440px, 100vw); display: flex; flex-direction: column;
+    background: #fff; border-left: 1px solid var(--aia-linha);
+    box-shadow: -12px 0 32px rgba(15,23,42,.14);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--aia-texto);
+    transform: translateX(105%); transition: transform .22s ease, width .2s ease; visibility: hidden;
+}
+/* Aberto continua visível e clicável mesmo quando o ticket/card está numa aba escondida
+   (.aba-painel.oculta usa visibility:hidden e pointer-events:none, que o painel herdaria). */
+.aia-painel.aia-aberto { transform: translateX(0); visibility: visible; pointer-events: auto !important; }
+.aia-painel.aia-largo { width: min(760px, 100vw); }
+
+.aia-topo { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--aia-linha); }
+.aia-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--aia-azul); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
+.aia-titulo { display: flex; flex-direction: column; min-width: 0; }
+.aia-titulo strong { font-size: 15px; color: var(--aia-tinta); }
+.aia-titulo span { font-size: 12px; color: var(--aia-mudo); }
+.aia-acoes-topo { margin-left: auto; display: flex; gap: 6px; }
+.aia-icone { width: 34px; height: 34px; border: 1px solid var(--aia-linha); border-radius: 8px; background: #fff; color: #334155;
+    display: grid; place-items: center; cursor: pointer; padding: 0; }
+.aia-icone:hover { background: var(--aia-fundo); }
+.aia-icone:focus-visible, .aia-btn:focus-visible, .aia-chip:focus-visible { outline: 2px solid var(--aia-azul-2); outline-offset: 2px; }
+
+.aia-contexto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 14px; background: var(--aia-fundo);
+    border-bottom: 1px solid var(--aia-linha); font-size: 12px; color: var(--aia-mudo); }
+.aia-tag { padding: 2px 8px; border-radius: 6px; background: #e6edf7; color: #22324d; font-size: 12px; }
+.aia-contexto label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: #22324d; }
+
+.aia-lista { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; scroll-behavior: smooth; }
+.aia-vazio { margin: auto 0; text-align: center; color: var(--aia-mudo); font-size: 13px; line-height: 1.5; padding: 0 12px; }
+.aia-vazio strong { display: block; color: var(--aia-tinta); font-size: 15px; margin-bottom: 4px; }
+
+.aia-msg-at { align-self: flex-end; max-width: 88%; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.aia-bolha-at { padding: 9px 12px; border-radius: 12px 4px 12px 12px; background: #eaf1fd; color: var(--aia-tinta);
+    font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.aia-autor { font-size: 11px; color: var(--aia-mudo); }
+.aia-minis { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.aia-minis img { width: 96px; height: 64px; object-fit: cover; border-radius: 6px; border: 1px solid var(--aia-linha); }
+
+.aia-msg-ia { display: flex; flex-direction: column; gap: 8px; }
+.aia-selos { display: flex; flex-wrap: wrap; gap: 6px; }
+.aia-selo { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 6px; font-size: 12px; background: #f1f4f8; color: #3c4a60; }
+.aia-selo.ok { background: var(--aia-verde-50); color: var(--aia-verde); font-weight: 600; }
+.aia-selo.web { background: var(--aia-ambar-50); color: var(--aia-ambar); font-weight: 600; }
+
+.aia-status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--aia-mudo); }
+.aia-spin { width: 14px; height: 14px; border: 2px solid #c7d4ea; border-top-color: var(--aia-azul-2); border-radius: 50%; animation: aia-gira .8s linear infinite; }
+@@keyframes aia-gira { to { transform: rotate(360deg); } }
+.aia-cursor::after { content: '▍'; color: var(--aia-azul-2); animation: aia-pisca 1s steps(1) infinite; }
+@@keyframes aia-pisca { 50% { opacity: 0; } }
+
+.aia-md { font-size: 14px; line-height: 1.55; color: var(--aia-texto); word-break: break-word; }
+.aia-md p { margin: 0 0 8px; }
+.aia-md h4 { margin: 12px 0 6px; font-size: 14px; color: var(--aia-tinta); }
+.aia-md h5 { margin: 10px 0 4px; font-size: 13px; color: var(--aia-tinta); }
+.aia-md ul, .aia-md ol { margin: 0 0 8px; padding-left: 20px; }
+.aia-md li { margin: 2px 0; }
+.aia-md code { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; background: #f1f4f8; padding: 1px 5px; border-radius: 4px; }
+.aia-md pre { background: #0f172a; color: #e2e8f0; padding: 10px 12px; border-radius: 8px; overflow-x: auto; margin: 0 0 8px; }
+.aia-md pre code { background: none; color: inherit; padding: 0; }
+.aia-md blockquote { margin: 0 0 8px; padding: 4px 10px; border-left: 3px solid var(--aia-linha); color: #475569; }
+.aia-md a { color: var(--aia-azul); }
+.aia-md hr { border: 0; border-top: 1px solid var(--aia-linha); margin: 10px 0; }
+.aia-cit { display: inline-block; font-size: 10.5px; font-weight: 700; color: var(--aia-azul); background: var(--aia-azul-50);
+    border: 1px solid var(--aia-azul-100); border-radius: 4px; padding: 0 4px; margin: 0 1px; vertical-align: 1px; }
+.aia-erro { color: var(--aia-vermelho); font-size: 13px; }
+
+.aia-cliente { border: 1px solid #bcd3f5; background: #f5f9ff; border-radius: 10px; padding: 10px 12px; }
+.aia-cliente-tit { font-size: 12px; font-weight: 700; color: var(--aia-azul); margin-bottom: 6px; }
+.aia-cliente-txt { font-size: 14px; line-height: 1.5; white-space: pre-wrap; color: var(--aia-tinta); }
+
+.aia-fontes { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--aia-fundo); }
+.aia-fontes-tit { font-size: 12px; font-weight: 600; color: #3c4a60; }
+.aia-fontes-lista { display: flex; flex-wrap: wrap; gap: 6px; }
+.aia-fonte { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--aia-linha);
+    background: #fff; font-size: 12px; color: #22324d; cursor: pointer; text-decoration: none; }
+.aia-fonte span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.aia-fonte b { color: var(--aia-azul); font-size: 11px; }
+.aia-fonte.nao-citada { opacity: .7; }
+.aia-fonte-prev { background: #fff; border: 1px solid var(--aia-linha); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.aia-fonte-prev-txt { white-space: pre-wrap; max-height: 200px; overflow: auto; line-height: 1.45; margin-top: 6px; color: #334155; }
+
+.aia-acoes { display: flex; flex-wrap: wrap; gap: 6px; }
+.aia-btn { height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #c9d3e1; background: #fff; color: #22324d;
+    font-size: 13px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-family: inherit; }
+.aia-btn:hover { background: var(--aia-fundo); }
+.aia-btn:disabled { opacity: .55; cursor: default; }
+.aia-btn.primario { background: var(--aia-azul); border-color: var(--aia-azul); color: #fff; font-weight: 600; }
+.aia-btn.primario:hover { background: #1e40af; }
+.aia-btn.verde { background: var(--aia-verde-50); border-color: #a8d5b9; color: var(--aia-verde); font-weight: 600; }
+.aia-btn.perigo { border-color: #f1b4b4; color: var(--aia-vermelho); }
+
+.aia-atalhos { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; }
+.aia-chip { height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--aia-linha); background: #fff; color: #22324d;
+    font-size: 12px; cursor: pointer; font-family: inherit; }
+.aia-chip:hover { background: var(--aia-azul-50); border-color: var(--aia-azul-100); }
+.aia-chip:disabled { opacity: .5; cursor: default; }
+
+.aia-rodape { padding: 8px 14px 12px; }
+.aia-pendentes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.aia-pend { position: relative; }
+.aia-pend img { width: 72px; height: 52px; object-fit: cover; border-radius: 6px; border: 1px solid var(--aia-linha); display: block; }
+.aia-pend button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: #334155;
+    color: #fff; font-size: 12px; line-height: 20px; cursor: pointer; padding: 0; }
+.aia-pend small { position: absolute; left: 3px; bottom: 3px; font-size: 9px; background: rgba(15,23,42,.75); color: #fff; padding: 0 4px; border-radius: 3px; }
+.aia-caixa { display: flex; align-items: flex-end; gap: 6px; padding: 6px; border: 1px solid #c3cedd; border-radius: 10px; background: #fff; }
+.aia-caixa:focus-within { border-color: var(--aia-azul-2); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+.aia-caixa textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: none; font-family: inherit; font-size: 14px; line-height: 1.4;
+    color: var(--aia-tinta); max-height: 180px; padding: 6px 4px; background: transparent; }
+.aia-enviar { width: 36px; height: 36px; border-radius: 8px; border: 0; background: var(--aia-azul); color: #fff; display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.aia-enviar.parar { background: #334155; }
+.aia-enviar:disabled { opacity: .45; cursor: default; }
+.aia-dica { font-size: 11px; color: var(--aia-mudo); margin-top: 5px; }
+.aia-config { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--aia-mudo); }
+.aia-config label { display: inline-flex; align-items: center; gap: 6px; }
+.aia-config select { height: 30px; padding: 0 26px 0 8px; border: 1px solid var(--aia-linha); border-radius: 8px; background: #fff;
+    font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--aia-tinta); cursor: pointer; max-width: 210px; }
+.aia-config select:disabled { opacity: .6; cursor: default; }
+.aia-esforco { display: inline-flex; align-items: center; gap: 6px; }
+.aia-seg { display: inline-flex; border: 1px solid var(--aia-linha); border-radius: 8px; overflow: hidden; }
+.aia-seg button { height: 28px; padding: 0 10px; border: 0; border-right: 1px solid var(--aia-linha); background: #fff; color: #334155;
+    font-family: inherit; font-size: 12px; cursor: pointer; }
+.aia-seg button:last-child { border-right: 0; }
+.aia-seg button.sel { background: var(--aia-azul); color: #fff; font-weight: 600; }
+.aia-seg button:disabled { cursor: default; }
+.aia-seg button:focus-visible, .aia-config select:focus-visible { outline: 2px solid var(--aia-azul-2); outline-offset: 1px; }
+.aia-niveis { display: flex; flex: 1 1 auto; min-width: 0; }
+.aia-niveis button { flex: 1 1 0; min-width: 0; height: auto; min-height: 40px; padding: 4px 8px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 1px; line-height: 1.2; }
+.aia-niveis button strong { font-size: 12.5px; font-weight: 600; }
+.aia-niveis button small { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--aia-mudo);
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aia-niveis button.sel small { color: #dbeafe; }
+.aia-niveis button:not(.sel):hover { background: var(--aia-fundo); }
+.aia-modelo-usado { margin-left: auto; align-self: center; font-size: 11px; color: var(--aia-mudo); white-space: nowrap; }
+.aia-arquivo { display: none; }
+.aia-painel.aia-arrastando .aia-caixa { border-style: dashed; border-color: var(--aia-azul-2); background: var(--aia-azul-50); }
+
+.aia-modal-fundo { position: absolute; inset: 0; background: rgba(15,23,42,.35); display: flex; align-items: flex-end; z-index: 5; }
+.aia-modal { width: 100%; max-height: 92%; overflow-y: auto; background: #fff; border-radius: 14px 14px 0 0; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.aia-modal h3 { margin: 0; font-size: 15px; color: var(--aia-tinta); }
+.aia-modal p { margin: 0; font-size: 12px; color: var(--aia-mudo); }
+.aia-campo { display: flex; flex-direction: column; gap: 4px; }
+.aia-campo label { font-size: 12px; font-weight: 600; color: #3c4a60; }
+.aia-campo input, .aia-campo textarea, .aia-campo select { font-family: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid #c3cedd; border-radius: 8px; color: var(--aia-tinta); }
+.aia-campo textarea { resize: vertical; line-height: 1.45; }
+.aia-aviso { font-size: 12px; padding: 6px 10px; border-radius: 6px; background: var(--aia-verde-50); color: var(--aia-verde); }
+.aia-aviso.erro { background: #fef2f2; color: var(--aia-vermelho); }
+
+@@media (max-width: 600px) { .aia-painel, .aia-painel.aia-largo { width: 100vw; } }
+</style>
+
+<aside id="aia-area-@Chave"
+       class="aia-painel @(Aberto ? "aia-aberto" : "") @(_largo ? "aia-largo" : "")"
+       aria-label="Assistente IA do atendente" aria-hidden="@(Aberto ? "false" : "true")">
+
+    <div class="aia-topo">
+        <div class="aia-logo" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6 4.6 1.9-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"></path><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"></path></svg>
+        </div>
+        <div class="aia-titulo">
+            <strong>Assistente IA</strong>
+            <span>Só você vê · @Subtitulo</span>
+        </div>
+        <div class="aia-acoes-topo">
+            @if (_confirmarNova)
+            {
+                <button type="button" class="aia-btn perigo" @onclick="NovaConversa">Limpar conversa</button>
+                <button type="button" class="aia-btn" @onclick="() => _confirmarNova = false">Cancelar</button>
+            }
+            else
+            {
+                <button type="button" class="aia-icone" title="Nova conversa" aria-label="Nova conversa"
+                        disabled="@_gerando" @onclick="() => _confirmarNova = _msgs.Count > 0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+                </button>
+                <button type="button" class="aia-icone" title="@(_largo ? "Diminuir painel" : "Aumentar painel")"
+                        aria-label="@(_largo ? "Diminuir painel" : "Aumentar painel")" @onclick="() => _largo = !_largo">
+                    @if (_largo)
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7M20 10h-6V4M10 14l-7 7M4 14h6v6"></path></svg>
+                    }
+                    else
+                    {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M21 3l-7 7M9 21H3v-6M3 21l7-7"></path></svg>
+                    }
+                </button>
+                <button type="button" class="aia-icone" title="Fechar" aria-label="Fechar painel" @onclick="Fechar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                </button>
+            }
+        </div>
+    </div>
+
+    <div class="aia-contexto">
+        @if (Origem == "geral")
+        {
+            <span>@(Modo == "comercial"
+                ? "Sem card aberto: pergunte se o sistema tem uma função, como funciona ou se atende o cliente."
+                : "Sem ticket aberto: pergunte sobre o sistema, uma função ou um erro.")</span>
+        }
+        else
+        {
+            <span>A IA já leu:</span>
+            <span class="aia-tag">@QtdMensagens mensagens</span>
+            @if (QtdImagens > 0)
+            {
+                <span class="aia-tag">@QtdImagens imagem(ns)</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(NomeCliente))
+            {
+                <span class="aia-tag">@NomeCliente</span>
+            }
+            @if (PrintsNovos.Count > 0)
+            {
+                <label title="Manda junto os prints mais recentes que o cliente enviou e que a IA ainda não viu">
+                    <input type="checkbox" @bind="_incluirPrintsCliente" />
+                    incluir @PrintsNovos.Count print(s) novo(s) do cliente
+                </label>
+            }
+        }
+    </div>
+
+    <div class="aia-lista" id="aia-lista-@Chave" aria-live="polite">
+        @if (!_carregado && Aberto)
+        {
+            <div class="aia-status" style="margin:auto;"><span class="aia-spin"></span> Carregando conversa...</div>
+        }
+        else if (_msgs.Count == 0)
+        {
+            <div class="aia-vazio">
+                @if (Origem == "ticket")
+                {
+                    <strong>Pergunte qualquer coisa sobre este ticket</strong>
+                    <text>A IA já leu a conversa com o cliente. Ela procura primeiro nas documentações e nos casos resolvidos;
+                    se não encontrar, explica possíveis soluções e pode pesquisar na web.
+                    Cole um print com Ctrl+V para ela analisar.</text>
+                }
+                else if (Origem == "card")
+                {
+                    <strong>Pergunte sobre esta negociação</strong>
+                    <text>A IA já leu a conversa com o lead. Pergunte se o sistema atende o que ele pediu, peça um resumo
+                    ou uma resposta pronta. Ela só confirma o que está nas documentações e nos casos resolvidos.</text>
+                }
+                else
+                {
+                    <strong>Pergunte sobre o sistema</strong>
+                    <text>Ex.: "o sistema faz receita (ficha técnica)?", "dá para controlar estoque por caixa, fardo e unidade?".
+                    A IA procura nas documentações e nos casos resolvidos e diz claramente se encontrou ou não.</text>
+                }
+            </div>
+        }
+
+        @foreach (var m in _msgs)
+        {
+            var msg = m;
+            if (!msg.EhIA)
+            {
+                <div class="aia-msg-at">
+                    @if (msg.Miniaturas.Count > 0)
+                    {
+                        <div class="aia-minis">
+                            @foreach (var mini in msg.Miniaturas)
+                            {
+                                <img src="@mini" alt="Imagem enviada para a IA" />
+                            }
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(msg.Texto))
+                    {
+                        <div class="aia-bolha-at">@msg.Texto</div>
+                    }
+                    @if (!string.Equals(msg.Usuario, Usuario, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(msg.Usuario))
+                    {
+                        <span class="aia-autor">@msg.Usuario · @msg.DataHora.ToString("dd/MM HH:mm")</span>
+                    }
+                </div>
+            }
+            else
+            {
+                var (antes, blocoCliente, depois) = MarkdownSimples.SepararRespostaCliente(msg.Texto);
+                <div class="aia-msg-ia">
+                    @if (!msg.Gerando || msg.DocsEncontrados + msg.CasosEncontrados > 0 || msg.PesquisouWeb)
+                    {
+                        <div class="aia-selos">
+                            @if (!msg.Gerando || msg.DocsEncontrados > 0)
+                            {
+                                <span class="aia-selo @(msg.DocsEncontrados > 0 ? "ok" : "")">
+                                    @(msg.DocsEncontrados > 0 ? $"Documentações: {msg.DocsEncontrados} encontrada(s)" : "Documentações: nada encontrado")
+                                </span>
+                            }
+                            @if (!msg.Gerando || msg.CasosEncontrados > 0)
+                            {
+                                <span class="aia-selo @(msg.CasosEncontrados > 0 ? "ok" : "")">
+                                    @(msg.CasosEncontrados > 0 ? $"Insights: {msg.CasosEncontrados} caso(s)" : "Insights: nada encontrado")
+                                </span>
+                            }
+                            @if (msg.PesquisouWeb)
+                            {
+                                <span class="aia-selo web">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"></path></svg>
+                                    Pesquisou na web
+                                </span>
+                            }
+                        </div>
+                    }
+
+                    @if (msg.Gerando && string.IsNullOrEmpty(msg.Texto))
+                    {
+                        <div class="aia-status"><span class="aia-spin"></span> @(string.IsNullOrWhiteSpace(msg.Status) ? "Pensando..." : msg.Status)</div>
+                    }
+                    else if (msg.Erro && string.IsNullOrWhiteSpace(antes) && blocoCliente == null)
+                    {
+                        <div class="aia-erro">@msg.Status</div>
+                    }
+                    else
+                    {
+                        @if (!string.IsNullOrWhiteSpace(antes))
+                        {
+                            <div class="aia-md @(msg.Gerando && blocoCliente == null ? "aia-cursor" : "")">@((MarkupString)MarkdownSimples.ParaHtml(antes))</div>
+                        }
+                        @if (blocoCliente != null)
+                        {
+                            <div class="aia-cliente">
+                                <div class="aia-cliente-tit">Mensagem para o cliente</div>
+                                <div class="aia-cliente-txt @(msg.Gerando && string.IsNullOrWhiteSpace(depois) ? "aia-cursor" : "")">@blocoCliente</div>
+                                @if (!msg.Gerando)
+                                {
+                                    <div class="aia-acoes" style="margin-top:8px;">
+                                        @if (PodeUsarNaResposta)
+                                        {
+                                            <button type="button" class="aia-btn primario" @onclick="() => UsarNaResposta(blocoCliente)">Usar na resposta</button>
+                                        }
+                                        <button type="button" class="aia-btn" @onclick="() => Copiar(msg, blocoCliente)">@(_copiado == msg ? "Copiado" : "Copiar")</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(depois))
+                        {
+                            <div class="aia-md @(msg.Gerando ? "aia-cursor" : "")">@((MarkupString)MarkdownSimples.ParaHtml(depois))</div>
+                        }
+                        @if (msg.Gerando && !string.IsNullOrWhiteSpace(msg.Status) && msg.Status != "Escrevendo...")
+                        {
+                            <div class="aia-status"><span class="aia-spin"></span> @msg.Status</div>
+                        }
+                        @if (msg.Erro && !string.IsNullOrWhiteSpace(msg.Status))
+                        {
+                            <div class="aia-erro">@msg.Status</div>
+                        }
+                    }
+
+                    @if (!msg.Gerando && msg.Fontes.Count > 0)
+                    {
+                        var internas = msg.Fontes.Where(f => f.Tipo != "web" && f.Citada).ToList();
+                        var web = msg.Fontes.Where(f => f.Tipo == "web").ToList();
+                        var naoUsadas = msg.Fontes.Where(f => f.Tipo != "web" && !f.Citada).ToList();
+                        <div class="aia-fontes">
+                            @if (internas.Count > 0)
+                            {
+                                <div class="aia-fontes-tit">Base interna usada</div>
+                                <div class="aia-fontes-lista">
+                                    @foreach (var f in internas)
+                                    {
+                                        var fonte = f;
+                                        <button type="button" class="aia-fonte" title="@fonte.Titulo" @onclick="() => AlternarFonte(msg, fonte)">
+                                            <b>@fonte.Id</b><span>@(fonte.Tipo == "doc" ? fonte.Titulo : $"Ticket #{fonte.CodTicket} · {fonte.Titulo}")</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            @if (web.Count > 0)
+                            {
+                                <div class="aia-fontes-tit">Fontes da web</div>
+                                <div class="aia-fontes-lista">
+                                    @foreach (var f in web)
+                                    {
+                                        <a class="aia-fonte" href="@f.Url" target="_blank" rel="noopener noreferrer" title="@f.Url">
+                                            <span>@f.Titulo</span>
+                                        </a>
+                                    }
+                                </div>
+                            }
+                            @if (naoUsadas.Count > 0)
+                            {
+                                <div class="aia-fontes-tit">Também encontrado (não usado na resposta)</div>
+                                <div class="aia-fontes-lista">
+                                    @foreach (var f in naoUsadas)
+                                    {
+                                        var fonte = f;
+                                        <button type="button" class="aia-fonte nao-citada" title="@fonte.Titulo" @onclick="() => AlternarFonte(msg, fonte)">
+                                            <b>@fonte.Id</b><span>@(fonte.Tipo == "doc" ? fonte.Titulo : $"Ticket #{fonte.CodTicket} · {fonte.Titulo}")</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                            @if (_fonteAberta.msg == msg && _fonteAberta.fonte != null)
+                            {
+                                var fa = _fonteAberta.fonte;
+                                <div class="aia-fonte-prev">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <strong style="font-size:12px;">@fa.Id · @(fa.Tipo == "doc" ? fa.Titulo : $"Ticket #{fa.CodTicket}")</strong>
+                                        <span style="margin-left:auto; display:flex; gap:6px;">
+                                            @if (!string.IsNullOrWhiteSpace(fa.Url))
+                                            {
+                                                <a class="aia-btn" style="height:28px; text-decoration:none;" href="@fa.Url" target="_blank" rel="noopener">
+                                                    @(fa.Tipo == "doc" ? "Abrir documentação" : "Abrir ticket")
+                                                </a>
+                                            }
+                                            <button type="button" class="aia-icone" style="width:28px; height:28px;" aria-label="Fechar trecho"
+                                                    @onclick="() => _fonteAberta = (null, null)">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+                                            </button>
+                                        </span>
+                                    </div>
+                                    <div class="aia-fonte-prev-txt">@fa.Texto</div>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (msg.Gerando && !string.IsNullOrWhiteSpace(msg.Modelo))
+                    {
+                        <span class="aia-modelo-usado" style="margin-left:0;">@RotuloModelo(msg.Modelo)</span>
+                    }
+                    @if (!msg.Gerando && !msg.Erro && !string.IsNullOrWhiteSpace(msg.Texto))
+                    {
+                        <div class="aia-acoes">
+                            @if (blocoCliente == null)
+                            {
+                                @if (PodeUsarNaResposta)
+                                {
+                                    <button type="button" class="aia-btn primario" @onclick="() => UsarNaResposta(MarkdownSimples.ParaTextoPuro(msg.Texto))">Usar na resposta</button>
+                                }
+                                <button type="button" class="aia-btn" @onclick="() => Copiar(msg, MarkdownSimples.ParaTextoPuro(msg.Texto))">@(_copiado == msg ? "Copiado" : "Copiar")</button>
+                            }
+                            @if (Origem == "ticket")
+                            {
+                                <button type="button" class="aia-btn verde" disabled="@_gerandoRascunho" @onclick="() => AbrirInsight(msg)">
+                                    @if (_gerandoRascunho && _msgInsight == msg)
+                                    {
+                                        <span class="aia-spin"></span>
+                                    }
+                                    Salvar como insight
+                                </button>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(msg.Modelo))
+                            {
+                                <span class="aia-modelo-usado">@RotuloModelo(msg.Modelo)</span>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <div class="aia-atalhos">
+        @foreach (var at in Atalhos)
+        {
+            var atalho = at;
+            <button type="button" class="aia-chip" disabled="@_gerando" @onclick="() => UsarAtalho(atalho)">@atalho.Rotulo</button>
+        }
+        <button type="button" class="aia-chip" disabled="@_gerando" @onclick="PrepararPesquisaWeb">Pesquisar na web</button>
+    </div>
+
+    <div class="aia-rodape">
+        @if (_pendentes.Count > 0)
+        {
+            <div class="aia-pendentes">
+                @foreach (var p in _pendentes)
+                {
+                    var pend = p;
+                    <div class="aia-pend">
+                        <img src="@pend.Preview" alt="Imagem para a IA analisar" />
+                        @if (pend.Origem == "ticket")
+                        {
+                            <small>do ticket</small>
+                        }
+                        <button type="button" aria-label="Remover imagem" @onclick="() => _pendentes.Remove(pend)">×</button>
+                    </div>
+                }
+            </div>
+        }
+        <div class="aia-config">
+            <span id="aia-niv-rot-@Chave">Nível</span>
+            <div class="aia-seg aia-niveis" role="group" aria-labelledby="aia-niv-rot-@Chave">
+                @foreach (var op in _modelos)
+                {
+                    var nivel = op;
+                    var sel = nivel.Nome == OpcaoAtual.Nome;
+                    <button type="button" class="@(sel ? "sel" : "")" aria-pressed="@(sel ? "true" : "false")"
+                            title="@nivel.Descricao" disabled="@_gerando" @onclick="() => MudarNivel(nivel.Nome)">
+                        <strong>@nivel.Nome</strong>
+                        <small>@nivel.Id</small>
+                    </button>
+                }
+            </div>
+        </div>
+        <label for="aia-txt-@Chave" style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Pergunte à IA</label>
+        <div class="aia-caixa">
+            <label class="aia-icone" style="border:0; background:#f1f4f8;" title="Anexar imagem" for="aia-arq-@Chave">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="M21 16l-5-5-9 9"></path></svg>
+                <span style="position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);">Anexar imagem</span>
+            </label>
+            <InputFile id="@($"aia-arq-{Chave}")" class="aia-arquivo" accept="image/*" multiple OnChange="AnexarArquivos" />
+            <textarea id="aia-txt-@Chave" rows="1"
+                      placeholder="Pergunte, cole um print (Ctrl+V) ou peça uma pesquisa..."
+                      @bind="_texto" @bind:event="oninput"></textarea>
+            @if (_gerando)
+            {
+                <button type="button" class="aia-enviar parar" title="Parar" aria-label="Parar resposta" @onclick="Parar">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>
+                </button>
+            }
+            else
+            {
+                <button type="button" class="aia-enviar" title="Enviar" aria-label="Enviar pergunta"
+                        disabled="@(string.IsNullOrWhiteSpace(_texto) && _pendentes.Count == 0)" @onclick="() => EnviarAsync()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+                </button>
+            }
+        </div>
+        <div class="aia-dica">@OpcaoAtual.Descricao · Enter envia · Shift+Enter quebra linha</div>
+    </div>
+
+    @if (_rascunho != null)
+    {
+        <div class="aia-modal-fundo">
+            <div class="aia-modal" role="dialog" aria-modal="true" aria-labelledby="aia-ins-tit-@Chave">
+                <h3 id="aia-ins-tit-@Chave">Salvar como insight</h3>
+                <p>Revise antes de salvar. Este caso passa a ser usado pela IA (do cliente e do atendente) em atendimentos parecidos.</p>
+                <div class="aia-campo">
+                    <label for="aia-ins-t-@Chave">Título</label>
+                    <input id="aia-ins-t-@Chave" @bind="_rascunho.TopicoTitulo" maxlength="120" />
+                </div>
+                <div class="aia-campo">
+                    <label for="aia-ins-r-@Chave">Problema (resumo)</label>
+                    <textarea id="aia-ins-r-@Chave" rows="3" maxlength="300" @bind="_rascunho.Resumo"></textarea>
+                </div>
+                <div class="aia-campo">
+                    <label for="aia-ins-c-@Chave">Causa</label>
+                    <textarea id="aia-ins-c-@Chave" rows="2" maxlength="1000" @bind="_rascunho.CausaProvavel"></textarea>
+                </div>
+                <div class="aia-campo">
+                    <label for="aia-ins-s-@Chave">Solução (passo a passo)</label>
+                    <textarea id="aia-ins-s-@Chave" rows="5" maxlength="1200" @bind="_rascunho.Solucao"></textarea>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <div class="aia-campo" style="flex:1 1 160px;">
+                        <label for="aia-ins-cat-@Chave">Categoria</label>
+                        <select id="aia-ins-cat-@Chave" @bind="_rascunho.Categoria">
+                            @foreach (var c in Categorias)
+                            {
+                                <option value="@c">@c</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="aia-campo" style="flex:2 1 200px;">
+                        <label for="aia-ins-tag-@Chave">Tags (separadas por vírgula)</label>
+                        <input id="aia-ins-tag-@Chave" @bind="_rascunho.Tags" />
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_avisoInsight))
+                {
+                    <div class="aia-aviso erro">@_avisoInsight</div>
+                }
+                <div class="aia-acoes" style="justify-content:flex-end;">
+                    <button type="button" class="aia-btn" disabled="@_salvandoInsight" @onclick="CancelarInsight">Cancelar</button>
+                    <button type="button" class="aia-btn primario" disabled="@_salvandoInsight" @onclick="SalvarInsight">
+                        @if (_salvandoInsight) { <span class="aia-spin"></span> }
+                        Salvar insight
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</aside>
+
+@if (!string.IsNullOrWhiteSpace(_avisoSalvo))
+{
+    <div role="status" style="position:fixed; right:24px; bottom:24px; z-index:1050; padding:10px 14px; border-radius:8px;
+         background:#14532d; color:#fff; font-size:13px; font-family:'IBM Plex Sans',sans-serif; box-shadow:0 6px 20px rgba(0,0,0,.2);">
+        @_avisoSalvo
+    </div>
+}
+
+@code {
+    /// <summary>"ticket" (Ticket.razor), "card" (Card.razor) ou "geral" (Tickets.razor / MenuCRM.razor).</summary>
+    [Parameter] public string Origem { get; set; } = "ticket";
+
+    /// <summary>"suporte" ou "comercial" (no card é sempre comercial).</summary>
+    [Parameter] public string Modo { get; set; } = "suporte";
+
+    [Parameter] public int CodTicket { get; set; }
+    [Parameter] public int CodCard { get; set; }
+    [Parameter] public CardModels? Card { get; set; }
+    [Parameter] public int CodEmp { get; set; }
+    [Parameter] public string Usuario { get; set; } = "";
+    [Parameter] public TicketChamadoCModel? Ticket { get; set; }
+    [Parameter] public List<TicketChamadoDModel>? Historico { get; set; }
+    [Parameter] public bool Aberto { get; set; }
+    [Parameter] public EventCallback OnFechar { get; set; }
+    [Parameter] public EventCallback<string> OnUsarNaResposta { get; set; }
+
+    private static readonly string[] Categorias =
+    {
+        "pdv", "fiscal_nfe", "fiscal_nfce", "financeiro_pagar", "financeiro_receber", "estoque",
+        "cadastro_produto", "cadastro_cliente_fornecedor", "balanca", "impressao", "etiqueta",
+        "relatorio", "acesso_remoto", "hardware", "configuracao", "integracao", "outro"
+    };
+
+    private readonly List<AssistenteMensagem> _msgs = new();
+    private readonly List<AssistenteImagem> _pendentes = new();
+    private readonly HashSet<int> _imgsTicketVistas = new();   // imagens do ticket que a IA já recebeu
+    private string _texto = "";
+    private bool _gerando;
+    private bool _carregado;
+    private bool _carregando;
+    private bool _largo;
+    private bool _confirmarNova;
+    private bool _incluirPrintsCliente = true;
+    private string _chaveCarregada = "";
+    private CancellationTokenSource? _cts;
+    private DotNetObjectReference<AssistenteIAPainel>? _ref;
+    private bool _jsIniciado;
+    private bool _rolarFim;
+    private bool _forcarRolagem;
+    private bool _focar;
+    private bool _estavaAberto;
+
+    // Nível escolhido no painel (Baixo / Médio / Alto) — salvo no navegador do atendente
+    private IReadOnlyList<AssistenteModeloOpcao> _modelos = Array.Empty<AssistenteModeloOpcao>();
+    private string _modelo = "";   // nome do nível
+    private bool _prefsLidas;
+
+    private AssistenteModeloOpcao OpcaoAtual =>
+        _modelos.FirstOrDefault(m => m.Nome == _modelo) ?? _modelos.FirstOrDefault() ?? new AssistenteModeloOpcao { Id = "", Nome = "Padrão" };
+
+    protected override void OnInitialized()
+    {
+        _modelos = Assistente.ListarModelos();
+        _modelo = _modelos.Count > 0 ? _modelos[0].Nome : "";
+    }
+
+    private async Task MudarNivel(string nome)
+    {
+        _modelo = nome;
+        try { await JS.InvokeVoidAsync("assistenteIA.salvarPreferencias", _modelo, ""); } catch { }
+    }
+
+    /// <summary>"gpt-5 (medium)" → "Alto · gpt-5".</summary>
+    private string RotuloModelo(string? bruto)
+    {
+        if (string.IsNullOrWhiteSpace(bruto)) return "";
+        var m = System.Text.RegularExpressions.Regex.Match(bruto.Trim(), @"^(?<id>[^\s(]+)\s*(\((?<e>\w+)\))?");
+        var id = m.Groups["id"].Value;
+        var e = m.Groups["e"].Value;
+        var nivel = _modelos.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase) &&
+                                                  (e.Length == 0 || string.Equals(x.Esforco ?? "medium", e, StringComparison.OrdinalIgnoreCase)))
+                 ?? _modelos.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.OrdinalIgnoreCase));
+        return nivel != null ? $"{nivel.Nome} · {id}" : id;
+    }
+    private AssistenteMensagem? _copiado;
+    private (AssistenteMensagem? msg, AssistenteFonte? fonte) _fonteAberta;
+
+    private AssistenteInsightRascunho? _rascunho;
+    private AssistenteMensagem? _msgInsight;
+    private bool _gerandoRascunho;
+    private bool _salvandoInsight;
+    private string _avisoInsight = "";
+    private string _avisoSalvo = "";
+
+    private string IdTexto => $"aia-txt-{Chave}";
+    private string IdArea => $"aia-area-{Chave}";
+    private string IdLista => $"aia-lista-{Chave}";
+
+    private string ModoEfetivo => Origem == "card" ? "comercial" : (Modo == "comercial" ? "comercial" : "suporte");
+    private int CodReferencia => Origem switch { "ticket" => CodTicket, "card" => CodCard, _ => 0 };
+    private bool Ativo => Origem == "geral" || CodReferencia > 0;
+    private string Chave => Origem switch { "ticket" => $"t{CodTicket}", "card" => $"c{CodCard}", _ => $"g{ModoEfetivo}" };
+    private bool PodeUsarNaResposta => OnUsarNaResposta.HasDelegate;
+
+    private string Subtitulo => Origem switch
+    {
+        "ticket" => $"ticket #{CodTicket}",
+        "card" => $"card #{CodCard}",
+        _ => ModoEfetivo == "comercial" ? "dúvidas do comercial" : "dúvidas sobre o sistema"
+    };
+
+    private string? NomeCliente => Origem switch
+    {
+        "ticket" => !string.IsNullOrWhiteSpace(Ticket?.ApelidoCliente) ? Ticket!.ApelidoCliente : Ticket?.NomeCliente,
+        "card" => Card?.NomeCliente,
+        _ => null
+    };
+
+    private int QtdMensagens => Origem switch
+    {
+        "ticket" => Historico?.Count(h => h.MensagemExcluida != "S") ?? 0,
+        "card" => Card?.Anotacoes?.Count(a => a.MensagemExcluida != "S") ?? 0,
+        _ => 0
+    };
+
+    private int QtdImagens => Origem switch
+    {
+        "ticket" => Historico?.Count(h => h.MensagemExcluida != "S" && AssistenteAtendenteService.EhImagemDoTicket(h)) ?? 0,
+        "card" => Card?.Anotacoes?.Count(a => a.MensagemExcluida != "S" && AssistenteAtendenteService.EhImagemDoCard(a)) ?? 0,
+        _ => 0
+    };
+
+    /// <summary>Um print que o cliente mandou (do ticket ou do card).</summary>
+    private sealed record PrintCliente(int Codigo, DateTime DataHora, string Preview, AnotacaoModel? DoCard);
+
+    private IEnumerable<PrintCliente> PrintsDoCliente => Origem switch
+    {
+        "ticket" => (Historico ?? new())
+            .Where(h => h.EnvioCliente == "S" && h.MensagemExcluida != "S" && AssistenteAtendenteService.EhImagemDoTicket(h))
+            .Select(h => new PrintCliente(h.Codigo, h.DataHora, h.CaminhoImagem ?? "", null)),
+        "card" => (Card?.Anotacoes ?? new())
+            .Where(a => a.EnvioCliente == "S" && a.MensagemExcluida != "S" && AssistenteAtendenteService.EhImagemDoCard(a))
+            .Select(a => new PrintCliente(a.Codigo, a.DataHora, "", a)),
+        _ => Enumerable.Empty<PrintCliente>()
+    };
+
+    /// <summary>Prints do cliente que a IA ainda não viu (no máximo os 2 mais recentes).</summary>
+    private List<PrintCliente> PrintsNovos =>
+        PrintsDoCliente.Where(p => !_imgsTicketVistas.Contains(p.Codigo))
+            .OrderByDescending(p => p.DataHora).ThenByDescending(p => p.Codigo)
+            .Take(2)
+            .ToList();
+
+    private sealed record Atalho(string Rotulo, string Texto, bool Enviar);
+
+    private IEnumerable<Atalho> Atalhos => Origem switch
+    {
+        "ticket" => new[]
+        {
+            new Atalho("Resumir o ticket", "Resuma este ticket: o que o cliente quer, o que já foi feito e o que falta fazer.", true),
+            new Atalho("O que pode ser?", "Com base na conversa do ticket e nos prints, qual a causa provável do problema e como eu resolvo?", true),
+            new Atalho("Sugerir resposta ao cliente", "Escreva a próxima resposta para o cliente com base no que sabemos até agora.", true),
+        },
+        "card" => new[]
+        {
+            new Atalho("Resumir a negociação", "Resuma esta negociação: o que o lead precisa, o que já foi conversado e qual o próximo passo.", true),
+            new Atalho("O sistema atende?", "O sistema Evolut atende o que o lead pediu nesta conversa? Responda item por item: tem, tem em parte ou não encontrei na base.", true),
+            new Atalho("Sugerir resposta ao lead", "Escreva a próxima mensagem para o lead com base na conversa, sem prometer o que não está confirmado na base.", true),
+        },
+        _ => new[]
+        {
+            new Atalho("O sistema faz...?", "O sistema Evolut consegue ", false),
+            new Atalho("Como funciona...?", "Como funciona no Evolut ", false),
+        }
+    };
+
+    private async Task UsarAtalho(Atalho a)
+    {
+        if (a.Enviar) { await EnviarAsync(a.Texto); return; }
+        _texto = a.Texto;
+        _focar = true;
+    }
+
+    private AssistenteContextoTicket MontarCtx() => Origem switch
+    {
+        "card" => AssistenteAtendenteService.MontarContextoCard(Card, CodEmp, Usuario),
+        "geral" => AssistenteAtendenteService.MontarContextoGeral(CodEmp, Usuario, ModoEfetivo),
+        _ => AssistenteAtendenteService.MontarContexto(CodTicket, CodEmp, Usuario, Ticket, Historico)
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_chaveCarregada != Chave)
+        {
+            // trocou de ticket/card (aba reaproveitada): começa do zero
+            _cts?.Cancel();
+            _msgs.Clear(); _pendentes.Clear(); _imgsTicketVistas.Clear();
+            _carregado = false; _gerando = false; _texto = ""; _rascunho = null;
+            if (_jsIniciado && _chaveCarregada.Length > 0)
+            {
+                try { await JS.InvokeVoidAsync("assistenteIA.dispose", $"aia-txt-{_chaveCarregada}"); } catch { }
+            }
+            _chaveCarregada = Chave;
+            _jsIniciado = false;
+        }
+
+        if (Aberto && !_carregado && !_carregando && Ativo)
+        {
+            _carregando = true;
+            try
+            {
+                var hist = await Assistente.CarregarHistoricoAsync(Origem, ModoEfetivo, CodReferencia, Usuario);
+                _msgs.Clear();
+                _msgs.AddRange(hist);
+
+                // prints do cliente anteriores à última conversa com a IA contam como já vistos
+                var ultima = hist.Count > 0 ? hist.Max(h => h.DataHora) : DateTime.MinValue;
+                foreach (var pc in PrintsDoCliente)
+                    if (pc.DataHora <= ultima) _imgsTicketVistas.Add(pc.Codigo);
+            }
+            finally
+            {
+                _carregado = true;
+                _carregando = false;
+                _rolarFim = true; _forcarRolagem = true; _focar = true;
+            }
+        }
+        else if (Aberto && !_estavaAberto)
+        {
+            _focar = true;            // acabou de abrir: foca a caixa (não rouba o foco nos refresh do ticket)
+            _rolarFim = true;
+        }
+        _estavaAberto = Aberto;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (!_jsIniciado && Ativo)
+            {
+                _ref ??= DotNetObjectReference.Create(this);
+                await JS.InvokeVoidAsync("assistenteIA.init", IdTexto, IdArea, _ref);
+                _jsIniciado = true;
+            }
+            if (!_prefsLidas && _jsIniciado)
+            {
+                _prefsLidas = true;
+                var prefs = await JS.InvokeAsync<string[]>("assistenteIA.lerPreferencias");
+                var mudou = false;
+                if (prefs?.Length > 0 && _modelos.Any(x => x.Nome == prefs[0]) && prefs[0] != _modelo) { _modelo = prefs[0]; mudou = true; }
+                if (mudou) StateHasChanged();
+            }
+            if (_rolarFim)
+            {
+                _rolarFim = false;
+                var forcar = _forcarRolagem; _forcarRolagem = false;
+                await JS.InvokeVoidAsync("assistenteIA.rolarFim", IdLista, forcar);
+            }
+            if (_focar && Aberto)
+            {
+                _focar = false;
+                await JS.InvokeVoidAsync("assistenteIA.focar", IdTexto);
+                await JS.InvokeVoidAsync("assistenteIA.ajustarAltura", IdTexto);
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { } // pré-render
+        catch (JSException ex)
+        {
+            Console.WriteLine("[AssistenteIA] JS: " + ex.Message);
+        }
+    }
+
+    // ── Chamado pelo Ticket.razor no botão "Analisar com IA" das imagens do ticket
+    public async Task AnalisarImagemDoTicketAsync(int codTicketChamadoD, string? url)
+    {
+        if (codTicketChamadoD <= 0) return;
+        if (!_pendentes.Any(p => p.Origem == "ticket" && p.CodTicketChamadoD == codTicketChamadoD))
+        {
+            if (_pendentes.Count >= 4) _pendentes.RemoveAt(0);
+            _pendentes.Add(new AssistenteImagem { Origem = "ticket", CodTicketChamadoD = codTicketChamadoD, Preview = url ?? "" });
+        }
+        if (string.IsNullOrWhiteSpace(_texto))
+            _texto = "O que é esse erro e como resolvo?";
+        _focar = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Chamado pelo Card.razor no botão "Analisar com IA" das imagens do lead
+    public async Task AnalisarImagemDoCardAsync(AnotacaoModel anot)
+    {
+        if (anot?.ImagemBytes == null || anot.ImagemBytes.Length == 0) return;
+        var url = await ImagemIA.ParaDataUrlAsync(anot.ImagemBytes, 1600);
+        if (url == null) return;
+        _imgsTicketVistas.Add(anot.Codigo);
+        if (_pendentes.Count >= 4) _pendentes.RemoveAt(0);
+        _pendentes.Add(new AssistenteImagem { Origem = "colado", DataUrl = url, Preview = url });
+        if (string.IsNullOrWhiteSpace(_texto))
+            _texto = "O que aparece nesta imagem? O sistema atende isso?";
+        _focar = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task AiaImagemRecebida(string dataUrl)
+    {
+        if (string.IsNullOrWhiteSpace(dataUrl) || !dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return;
+        if (dataUrl.Length > 12_000_000) return; // ~9 MB: o JS já reduz, isso é só proteção
+        if (_pendentes.Count >= 4) _pendentes.RemoveAt(0);
+        _pendentes.Add(new AssistenteImagem { Origem = "colado", DataUrl = dataUrl, Preview = dataUrl });
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task AiaEnterPressionado() => InvokeAsync(() => EnviarAsync());
+
+    private async Task AnexarArquivos(InputFileChangeEventArgs e)
+    {
+        foreach (var arq in e.GetMultipleFiles(4))
+        {
+            if (!arq.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)) continue;
+            try
+            {
+                await using var s = arq.OpenReadStream(15 * 1024 * 1024);
+                using var ms = new MemoryStream();
+                await s.CopyToAsync(ms);
+                var url = await ImagemIA.ParaDataUrlAsync(ms.ToArray(), 1600);
+                if (url == null) continue;
+                if (_pendentes.Count >= 4) _pendentes.RemoveAt(0);
+                _pendentes.Add(new AssistenteImagem { Origem = "colado", DataUrl = url, Preview = url });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[AssistenteIA] Anexo: " + ex.Message);
+            }
+        }
+        _focar = true;
+    }
+
+    private Task EnviarAtalho(string texto) => EnviarAsync(texto);
+
+    private void PrepararPesquisaWeb()
+    {
+        if (!(_texto ?? "").StartsWith("Pesquise na web", StringComparison.OrdinalIgnoreCase))
+            _texto = "Pesquise na web: " + (_texto ?? "").Trim();
+        _focar = true;
+    }
+
+    private async Task EnviarAsync(string? textoForcado = null)
+    {
+        if (_gerando || !Ativo) return;
+
+        var texto = (textoForcado ?? _texto ?? "").Trim();
+        if (texto.Length == 0 && _pendentes.Count == 0) return;
+        var imagens = _pendentes.ToList();
+
+        // Prints novos do cliente vão junto automaticamente (se o atendente não desmarcou)
+        if (_incluirPrintsCliente)
+        {
+            foreach (var pc in PrintsNovos)
+            {
+                if (pc.DoCard != null)
+                {
+                    var url = await ImagemIA.ParaDataUrlAsync(pc.DoCard.ImagemBytes, 1600);
+                    if (url != null) imagens.Add(new AssistenteImagem { Origem = "colado", DataUrl = url, Preview = url });
+                }
+                else if (!imagens.Any(i => i.Origem == "ticket" && i.CodTicketChamadoD == pc.Codigo))
+                    imagens.Add(new AssistenteImagem { Origem = "ticket", CodTicketChamadoD = pc.Codigo, Preview = pc.Preview });
+            }
+        }
+
+        foreach (var i in imagens.Where(i => i.Origem == "ticket")) _imgsTicketVistas.Add(i.CodTicketChamadoD);
+        // a partir daqui, todos os prints atuais do cliente contam como vistos
+        foreach (var pc in PrintsDoCliente) _imgsTicketVistas.Add(pc.Codigo);
+
+        var anteriores = _msgs.ToList();
+        var pergunta = new AssistenteMensagem
+        {
+            Papel = "atendente", Usuario = Usuario, DataHora = DateTime.Now,
+            Texto = texto.Length > 0 ? texto : "O que aparece nesta imagem e como resolvo?",
+            Miniaturas = imagens.Select(i => i.Preview).Where(p => !string.IsNullOrWhiteSpace(p)).ToList()
+        };
+        var opcao = OpcaoAtual;
+        var resposta = new AssistenteMensagem
+        {
+            Papel = "ia", Gerando = true, DataHora = DateTime.Now,
+            Status = opcao.Raciocinio ? "Raciocinando..." : "Pensando...",
+            Modelo = opcao.Id
+        };
+        _msgs.Add(pergunta);
+        _msgs.Add(resposta);
+
+        _texto = "";
+        _pendentes.Clear();
+        _gerando = true;
+        _confirmarNova = false;
+        _rolarFim = true; _forcarRolagem = true;
+        StateHasChanged();
+        try { await JS.InvokeVoidAsync("assistenteIA.ajustarAltura", IdTexto); } catch { }
+
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        try
+        {
+            var ctx = MontarCtx();
+
+            var res = await Assistente.PerguntarAsync(ctx,
+                new AssistentePergunta { Texto = texto, Imagens = imagens, Modelo = opcao.Nome, Esforco = opcao.Esforco },
+                anteriores,
+                onTexto: t => InvokeAsync(() =>
+                {
+                    resposta.Texto = t;
+                    _rolarFim = true;
+                    StateHasChanged();
+                }),
+                onStatus: s => InvokeAsync(() =>
+                {
+                    resposta.Status = s;
+                    StateHasChanged();
+                }),
+                ct);
+
+            resposta.Gerando = false;
+            resposta.Codigo = res.CodMensagemIA;
+            if (!string.IsNullOrWhiteSpace(res.Modelo)) resposta.Modelo = res.Modelo;
+            resposta.Fontes = res.Fontes;
+            resposta.PesquisouWeb = res.PesquisouWeb;
+            resposta.DocsEncontrados = res.DocsEncontrados;
+            resposta.CasosEncontrados = res.CasosEncontrados;
+            pergunta.Codigo = res.CodMensagemAtendente;
+
+            if (!res.Ok)
+            {
+                resposta.Erro = true;
+                resposta.Status = string.IsNullOrWhiteSpace(res.Erro) ? "Não foi possível responder." : res.Erro;
+                if (string.IsNullOrWhiteSpace(resposta.Texto)) resposta.Texto = "";
+            }
+            else
+            {
+                resposta.Texto = res.Texto;
+                resposta.Status = "";
+                if (!string.IsNullOrWhiteSpace(res.Erro)) { resposta.Erro = true; resposta.Status = res.Erro; }
+            }
+        }
+        catch (Exception ex)
+        {
+            resposta.Gerando = false;
+            resposta.Erro = true;
+            resposta.Status = "Erro: " + ex.Message;
+        }
+        finally
+        {
+            _gerando = false;
+            _rolarFim = true;
+            _focar = true;
+            StateHasChanged();
+        }
+    }
+
+    private void Parar() => _cts?.Cancel();
+
+    private async Task NovaConversa()
+    {
+        _confirmarNova = false;
+        if (_gerando) return;
+        await Assistente.NovaConversaAsync(Origem, ModoEfetivo, CodReferencia, Usuario);
+        _msgs.Clear();
+        _fonteAberta = (null, null);
+        _focar = true;
+    }
+
+    private async Task Fechar()
+    {
+        _confirmarNova = false;
+        await OnFechar.InvokeAsync();
+    }
+
+    private async Task UsarNaResposta(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return;
+        await OnUsarNaResposta.InvokeAsync(texto.Trim());
+    }
+
+    private async Task Copiar(AssistenteMensagem msg, string texto)
+    {
+        try
+        {
+            if (await JS.InvokeAsync<bool>("assistenteIA.copiar", texto))
+            {
+                _copiado = msg;
+                StateHasChanged();
+                await Task.Delay(1800);
+                if (_copiado == msg) _copiado = null;
+            }
+        }
+        catch { }
+    }
+
+    private void AlternarFonte(AssistenteMensagem msg, AssistenteFonte fonte)
+        => _fonteAberta = _fonteAberta.msg == msg && _fonteAberta.fonte == fonte ? (null, null) : (msg, fonte);
+
+    private async Task AbrirInsight(AssistenteMensagem msg)
+    {
+        if (_gerandoRascunho) return;
+        _gerandoRascunho = true;
+        _msgInsight = msg;
+        _avisoInsight = "";
+        StateHasChanged();
+        try
+        {
+            var ctx = MontarCtx();
+            var ate = _msgs.IndexOf(msg);
+            var chat = ate >= 0 ? _msgs.Take(ate + 1).ToList() : _msgs.ToList();
+            _rascunho = await Assistente.GerarRascunhoInsightAsync(ctx, chat, msg.Texto)
+                        ?? new AssistenteInsightRascunho { Resumo = Ticket?.Assunto ?? "", Solucao = MarkdownSimples.ParaTextoPuro(msg.Texto) };
+            if (!Categorias.Contains(_rascunho.Categoria)) _rascunho.Categoria = "outro";
+        }
+        finally
+        {
+            _gerandoRascunho = false;
+        }
+    }
+
+    private void CancelarInsight()
+    {
+        _rascunho = null;
+        _avisoInsight = "";
+    }
+
+    private async Task SalvarInsight()
+    {
+        if (_rascunho == null) return;
+        if (string.IsNullOrWhiteSpace(_rascunho.Resumo) || string.IsNullOrWhiteSpace(_rascunho.Solucao))
+        {
+            _avisoInsight = "Preencha o problema e a solução.";
+            return;
+        }
+        _salvandoInsight = true;
+        _avisoInsight = "";
+        try
+        {
+            await Assistente.SalvarInsightAsync(CodTicket, _rascunho);
+            _rascunho = null;
+            _avisoSalvo = "Insight salvo. A IA já pode usar este caso.";
+            StateHasChanged();
+            _ = Task.Delay(3500).ContinueWith(_ => InvokeAsync(() => { _avisoSalvo = ""; StateHasChanged(); }));
+        }
+        catch (Exception ex)
+        {
+            _avisoInsight = "Não foi possível salvar: " + ex.Message;
+        }
+        finally
+        {
+            _salvandoInsight = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { _cts?.Cancel(); } catch { }
+        _cts?.Dispose();
+        try { await JS.InvokeVoidAsync("assistenteIA.dispose", IdTexto); } catch { }
+        _ref?.Dispose();
+    }
+}

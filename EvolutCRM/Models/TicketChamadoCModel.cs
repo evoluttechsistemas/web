@@ -19,6 +19,8 @@ namespace EvolutCRM.Models
         public string Assunto { get; set; } = "";
         public int CodSituacao { get; set; }
         public string Novo { get; set; } = "S";
+        /// <summary>Notificação: o responsável está offline ou num status que não conta como disponível (ex.: almoço).</summary>
+        public bool ResponsavelIndisponivel { get; set; }
         public string? NomeCliente { get; set; }
         public string? ApelidoCliente { get; set; }
         public string TelefoneCliente { get; set; } = "";

@@ -1820,6 +1820,15 @@
                 Atualizar
             </button> *@
 
+            <button type="button"
+                    class="tk-btn tk-btn-ghost"
+                    title="Assistente IA: pergunte sobre o sistema, uma função ou um erro"
+                    aria-pressed="@(_aiaAberto ? "true" : "false")"
+                    style="@(_aiaAberto ? "background:#1d4ed8; color:#fff; border-color:#1d4ed8;" : "")"
+                    @onclick="() => _aiaAberto = !_aiaAberto">
+                ✨ Assistente
+            </button>
+
             <button class="tk-btn tk-btn-solid" @onclick="NovoTicket" type="button">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Novo Ticket
@@ -2193,7 +2202,17 @@
     </div>
 }
 
+<AssistenteIAPainel Origem="geral"
+                    Modo="suporte"
+                    CodEmp="UserState.CurrentCompanyId"
+                    Usuario="@UserState.CurrentUser"
+                    Aberto="_aiaAberto"
+                    OnFechar="() => _aiaAberto = false" />
+
 @code {
+    // Assistente IA sem ticket aberto (perguntas sobre o sistema)
+    private bool _aiaAberto;
+
     private List<TicketChamadoCModel>? _finalizadosCache;
     /* ===== VISAO EM CARDS ===== */
     private bool VisaoCards = false;

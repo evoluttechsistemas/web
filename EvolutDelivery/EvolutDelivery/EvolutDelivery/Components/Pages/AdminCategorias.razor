@@ -1,6 +1,14 @@
 @page "/admin-categorias"
 @rendermode InteractiveServer
 @layout AdminLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using EvolutDelivery.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
+@using EvolutDelivery.Models
+@using EvolutDelivery.Services
+@inject ILogger<AdminCategorias> Logger
+@inject ProdutoService ProdutoService
 @inject IJSRuntime JS
 
 <PageTitle>Categorias - Admin</PageTitle>
@@ -71,95 +79,86 @@
     }
 </style>
 
-<div class="header-actions" style="display:flex; justify-content:space-between; margin-bottom:24px;">
-    <h2>📂 Gestão de Categorias</h2>
-    <button class="btn-novo" style="background:#2563eb; color:white; border:none; padding:12px 24px; border-radius:8px; font-weight:600; cursor:pointer;"
-            @onclick="NovaCategoria">
-        + Nova Categoria
-    </button>
+<div class="header-actions" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; gap:12px; flex-wrap:wrap;">
+    <h2>📂 Categorias</h2>
+    <span style="color:#64748b; font-size:.9rem;">As categorias vêm das seções cadastradas no ERP</span>
 </div>
 
-<div class="categorias-grid">
-
-    <div class="categoria-card">
-        <div class="categoria-icon">🍔</div>
-        <div class="categoria-nome">Lanches</div>
-        <div class="categoria-produtos">45 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(1)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(1)'>🗑️</button>
-        </div>
+@if (!string.IsNullOrWhiteSpace(mensagemErro))
+{
+    <div style="background:#fef2f2; color:#dc2626; padding:16px; border-radius:12px; margin-bottom:16px; font-weight:600;">
+        @mensagemErro
     </div>
+}
 
-    <div class="categoria-card">
-        <div class="categoria-icon">🍕</div>
-        <div class="categoria-nome">Pizzas</div>
-        <div class="categoria-produtos">28 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(2)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(2)'>🗑️</button>
-        </div>
+@if (carregando)
+{
+    <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
+        Carregando categorias...
     </div>
-
-    <div class="categoria-card">
-        <div class="categoria-icon">🥤</div>
-        <div class="categoria-nome">Bebidas</div>
-        <div class="categoria-produtos">32 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(3)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(3)'>🗑️</button>
-        </div>
+}
+else if (!categorias.Any())
+{
+    <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
+        📂 Nenhuma categoria encontrada.
     </div>
-
-    <div class="categoria-card">
-        <div class="categoria-icon">🍰</div>
-        <div class="categoria-nome">Sobremesas</div>
-        <div class="categoria-produtos">18 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(4)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(4)'>🗑️</button>
-        </div>
+}
+else
+{
+    <div class="categorias-grid">
+        @foreach (var c in categorias)
+        {
+            <div class="categoria-card">
+                <div class="categoria-icon">📂</div>
+                <div class="categoria-nome">@c.Nome</div>
+                <div class="categoria-produtos">@c.TotalProdutos produto(s)</div>
+            </div>
+        }
     </div>
-
-    <div class="categoria-card">
-        <div class="categoria-icon">🍟</div>
-        <div class="categoria-nome">Porções</div>
-        <div class="categoria-produtos">15 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(5)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(5)'>🗑️</button>
-        </div>
-    </div>
-
-    <div class="categoria-card">
-        <div class="categoria-icon">🍺</div>
-        <div class="categoria-nome">Cervejas</div>
-        <div class="categoria-produtos">22 produtos</div>
-        <div class="categoria-acoes">
-            <button class="btn-acao btn-editar" @onclick='() => EditarCategoria(6)'>✏️ Editar</button>
-            <button class="btn-acao btn-deletar" @onclick='() => DeletarCategoria(6)'>🗑️</button>
-        </div>
-    </div>
-
-</div>
+}
 
 @code {
-    private async Task NovaCategoria()
-    {
-        await JS.InvokeVoidAsync("alert", "Modal de nova categoria em desenvolvimento!");
-    }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private async Task EditarCategoria(int id)
-    {
-        await JS.InvokeVoidAsync("alert", $"Editar categoria #{id}");
-    }
+    private record CategoriaResumo(int Codigo, string Nome, int TotalProdutos);
 
-    private async Task DeletarCategoria(int id)
+    private List<CategoriaResumo> categorias = new();
+    private string mensagemErro = "";
+    private bool carregando = true;
+
+    protected override async Task OnInitializedAsync()
     {
-        var confirmado = await JS.InvokeAsync<bool>("confirm", $"Deletar categoria #{id}?");
-        if (confirmado)
+        try
         {
-            await JS.InvokeVoidAsync("alert", "Categoria deletada!");
+            var user = (await AuthState).User;
+            if (!EmpresaLogadaHelper.TryObter(user, out _, out var cnpj))
+            {
+                mensagemErro = "Sessão inválida. Saia e faça login novamente.";
+                return;
+            }
+
+            var secoes = await Task.Run(() => ProdutoService.BuscarSecoes(cnpj));
+            var produtos = await Task.Run(() => ProdutoService.BuscarProdutos("", cnpj));
+
+            var totalPorSecao = produtos
+                .GroupBy(p => p.CodSecao)
+                .ToDictionary(g => g.Key, g => g.Select(p => p.Codigo).Distinct().Count());
+
+            categorias = secoes
+                .Select(s => new CategoriaResumo(
+                    s.Codigo,
+                    s.Descricao,
+                    totalPorSecao.TryGetValue(s.Codigo, out var total) ? total : 0))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = "Erro ao carregar categorias.";
+            Logger.LogError(ex, "Erro ao carregar categorias do admin");
+        }
+        finally
+        {
+            carregando = false;
         }
     }
 }

@@ -101,14 +101,29 @@ namespace EvolutCRM.Services
         private readonly string _conn;
         private readonly UserState _state;
         private readonly OpenAiClient _openAi;
-        private readonly HealthMonitorService _monitor;  // ← ADD
 
-        public TicketService(IConfiguration cfg, UserState state, OpenAiClient openAi, HealthMonitorService monitor)  // ← ADD
+        // Última análise de assunto/sentimento por ticket (evita chamar a IA a cada mensagem do cliente)
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, DateTime> _ultimaAnaliseContexto = new();
+        private readonly HealthMonitorService _monitor;  // ← ADD
+        private readonly ResumoTransferenciaService _resumoTransf;   // resumo para quem recebe o ticket transferido
+
+        public TicketService(IConfiguration cfg, UserState state, OpenAiClient openAi, HealthMonitorService monitor,
+            ResumoTransferenciaService resumoTransf)
         {
             _conn = cfg.GetConnectionString("Connection");
             _state = state;
             _openAi = openAi;
             _monitor = monitor;  // ← ADD
+            _resumoTransf = resumoTransf;
+        }
+
+        /// <summary>Responsável atual do ticket (antes de salvar), para saber se houve transferência.</summary>
+        private async Task<string> ResponsavelAtualAsync(SqlConnection conn, int ticket)
+        {
+            using var cmd = new SqlCommand("SELECT ISNULL(Usuario, '') FROM TicketChamadoC WHERE Codigo = @id AND CodEmp = @CodEmp", conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@id", ticket);
+            return ((await cmd.ExecuteScalarAsync())?.ToString() ?? "").Trim();
         }
 
         private int CodEmpAtual
@@ -273,7 +288,15 @@ SELECT
     ISNULL(T.Novo, 'N') AS Novo,
     ISNULL(T.CodTipo, 1) AS CodTipo,
     ISNULL(T.Prioridade, 2) AS Prioridade,
-    ISNULL(T.UsuarioUltimaGravacao, '') AS UsuarioUltimaGravacao
+    ISNULL(T.UsuarioUltimaGravacao, '') AS UsuarioUltimaGravacao,
+    -- responsável offline ou em status que não conta como disponível (almoço etc.)
+    CASE WHEN EXISTS (SELECT 1 FROM Usuario RU
+                      LEFT JOIN UsuarioStatus RS ON RS.CodEmp = RU.CodEmp AND RS.Codigo = RU.CodUsuarioStatus
+                      WHERE RU.CodEmp = T.CodEmp
+                        AND UPPER(LTRIM(RTRIM(RU.Usuario))) = UPPER(LTRIM(RTRIM(ISNULL(T.Usuario, ''))))
+                        AND (ISNULL(RU.Online, 'N') <> 'S'
+                             OR (RU.CodUsuarioStatus IS NOT NULL AND ISNULL(RS.Disponivel, 'S') = 'N')))
+         THEN 1 ELSE 0 END AS ResponsavelIndisponivel
 FROM TicketChamadoC T
 LEFT JOIN Cliente C ON C.Codigo = T.CodCliente AND C.CodEmp = T.CodEmp
 WHERE T.CodEmp = @CodEmp
@@ -315,7 +338,8 @@ ORDER BY
                     Novo = rd.IsDBNull(11) ? "N" : rd.GetString(11),
                     CodTipo = rd.IsDBNull(12) ? 1 : rd.GetInt32(12),
                     Prioridade = rd.IsDBNull(13) ? 2 : rd.GetInt32(13),
-                    UsuarioUltimaGravacao = rd.IsDBNull(14) ? "" : rd.GetString(14)
+                    UsuarioUltimaGravacao = rd.IsDBNull(14) ? "" : rd.GetString(14),
+                    ResponsavelIndisponivel = !rd.IsDBNull(15) && rd.GetInt32(15) == 1
                 });
             }
 
@@ -857,6 +881,18 @@ VALUES
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(3)); // aguarda chegar mais mensagens
+
+                    // No máximo uma análise por ticket a cada 15 min (antes era a cada mensagem do cliente)
+                    var agoraAnalise = DateTime.Now;
+                    if (_ultimaAnaliseContexto.TryGetValue(_codTicketAnalise, out var ultimaAnalise)
+                        && agoraAnalise - ultimaAnalise < TimeSpan.FromMinutes(15))
+                        return;
+                    _ultimaAnaliseContexto[_codTicketAnalise] = agoraAnalise;
+                    if (_ultimaAnaliseContexto.Count > 5000)
+                        foreach (var velho in _ultimaAnaliseContexto.Where(k => agoraAnalise - k.Value > TimeSpan.FromHours(1)).Select(k => k.Key).ToList())
+                            _ultimaAnaliseContexto.TryRemove(velho, out _);
+
+                    if (!LimiteDiarioIa.Consumir(LimiteDiarioIa.AnaliseContexto)) return;   // trava de gasto do dia
                     await AnalisarContextoClienteAsync(_codTicketAnalise, _codEmpAnalise);
                 }
                 catch (Exception ex)
@@ -1801,6 +1837,7 @@ ORDER BY NomeComputador";
                 cmdGet.Parameters.AddWithValue("@id", ticket.Codigo);
                 assuntoAnterior = (string?)await cmdGet.ExecuteScalarAsync() ?? "";
             }
+            var responsavelAnterior = await ResponsavelAtualAsync(conn, ticket.Codigo);
 
             using (var cmdUpdate = new SqlCommand(@"
 UPDATE TicketChamadoC
@@ -1853,6 +1890,9 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn))
                 await cmdUpdate.ExecuteNonQueryAsync();
                 await PropagarObservacaoClienteAsync(ticket.CodCliente, ticket.ObservacaoCliente);
             }
+
+            // Transferiu para outro atendente: a IA deixa um resumo da conversa como nota interna (segundo plano)
+            _resumoTransf.TalvezResumir(ticket.Codigo, CodEmpAtual, responsavelAnterior, ticket.Usuario, usuario, ticket.CodSituacao);
 
             byte[]? imagemBytes = null;
             string? nomeImagem = null;
@@ -2222,10 +2262,11 @@ VALUES
                         SELECT TOP 1 D.DataHoraAgenda, D.CodTicketChamadoC
                         FROM TicketChamadoD D
                         INNER JOIN TicketChamadoC C ON C.Codigo = D.CodTicketChamadoC AND C.CodEmp = D.CodEmp
-                        WHERE ISNULL(D.NovaAgenda,'N')='S' AND D.DataHoraAgenda IS NOT NULL
-                          AND ISNULL(D.AgendaResolvida,'N')<>'S' AND ISNULL(C.CodSituacao,1)<>3
+                        WHERE D.NovaAgenda='S' AND D.CodEmp=@CodEmp
+                          AND D.DataHoraAgenda > DATEADD(MINUTE,-30,@DataHoraAgenda)
+                          AND D.DataHoraAgenda < DATEADD(MINUTE,30,@DataHoraAgenda)
+                          AND ISNULL(D.AgendaResolvida,'N')<>'S'
                           AND UPPER(ISNULL(C.Usuario,''))=UPPER(@Usuario)
-                          AND ABS(DATEDIFF(MINUTE,D.DataHoraAgenda,@DataHoraAgenda))<30
                         ORDER BY ABS(DATEDIFF(MINUTE,D.DataHoraAgenda,@DataHoraAgenda)) ASC", conn, tx);
 
                     AddCodEmp(cmdConflito);
@@ -2433,6 +2474,13 @@ VALUES
                         UPPER(LTRIM(RTRIM(ISNULL(Usuario,''))))=UPPER(LTRIM(RTRIM(@Usuario)))
                         OR UPPER(LTRIM(RTRIM(ISNULL(Usuario,''))))
                            IN ('','WHATSAPP','NOVO','CLIENTE')
+                        -- responsável offline ou em almoço/ausente: o aviso vai para todos
+                        OR EXISTS (SELECT 1 FROM Usuario RU
+                                LEFT JOIN UsuarioStatus RS ON RS.CodEmp = RU.CodEmp AND RS.Codigo = RU.CodUsuarioStatus
+                                WHERE RU.CodEmp = TicketChamadoC.CodEmp
+                                  AND UPPER(LTRIM(RTRIM(RU.Usuario))) = UPPER(LTRIM(RTRIM(ISNULL(TicketChamadoC.Usuario,''))))
+                                  AND (ISNULL(RU.Online,'N') <> 'S'
+                                       OR (RU.CodUsuarioStatus IS NOT NULL AND ISNULL(RS.Disponivel,'S') = 'N')))
                       )";
 
             using var conn = new SqlConnection(_conn);
@@ -2614,11 +2662,11 @@ VALUES
                        C.Usuario, D.DataHoraAgenda, D.UltimaNotificacaoAgenda
                 FROM TicketChamadoD D
                 INNER JOIN TicketChamadoC C ON C.Codigo=D.CodTicketChamadoC AND C.CodEmp=D.CodEmp
-                WHERE ISNULL(D.NovaAgenda,'N')='S'
+                WHERE D.NovaAgenda='S'
+                  AND D.CodEmp=@CodEmp
                   AND ISNULL(D.AgendaResolvida,'N')='N'
                   AND ISNULL(D.NotificarAgenda,'S')='S'
                   AND D.DataHoraAgenda<=GETDATE()
-                  AND ISNULL(C.CodSituacao,1)<>3
                   AND ISNULL(C.ChatInterno,'N')<>'S'
                   AND UPPER(ISNULL(C.Usuario,''))=UPPER(@Usuario)
                   AND (D.UltimaNotificacaoAgenda IS NULL
@@ -2655,12 +2703,46 @@ VALUES
             await cmd.ExecuteNonQueryAsync();
         }
 
+        // Colunas de "quem finalizou a agenda" (criadas na primeira vez; ADD de coluna NULL não reescreve a tabela)
+        private static volatile bool _colunasAgendaOk;
+
+        private static async Task GarantirColunasAgendaAsync(SqlConnection conn)
+        {
+            if (_colunasAgendaOk) return;
+            using var cmd = new SqlCommand(@"
+IF COL_LENGTH('dbo.TicketChamadoD', 'AgendaResolvidaPor') IS NULL
+    ALTER TABLE dbo.TicketChamadoD ADD AgendaResolvidaPor NVARCHAR(100) NULL;
+IF COL_LENGTH('dbo.TicketChamadoD', 'AgendaResolvidaEm') IS NULL
+    ALTER TABLE dbo.TicketChamadoD ADD AgendaResolvidaEm DATETIME NULL;", conn);
+            await cmd.ExecuteNonQueryAsync();
+            _colunasAgendaOk = true;
+        }
+
         public async Task ResolverAgendaAsync(int codigoDetalhe)
         {
             using var conn = new SqlConnection(_conn);
             await conn.OpenAsync();
-            using var cmd = new SqlCommand(
-                "UPDATE TicketChamadoD SET AgendaResolvida='S',NotificarAgenda='N' WHERE Codigo=@Codigo AND CodEmp=@CodEmp", conn);
+            await GarantirColunasAgendaAsync(conn);
+            using var cmd = new SqlCommand(@"
+UPDATE TicketChamadoD
+SET AgendaResolvida='S', NotificarAgenda='N', AgendaResolvidaPor=@Por, AgendaResolvidaEm=GETDATE()
+WHERE Codigo=@Codigo AND CodEmp=@CodEmp", conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@Codigo", codigoDetalhe);
+            cmd.Parameters.AddWithValue("@Por", (_state.CurrentUser ?? "").Trim().ToUpperInvariant());
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        /// <summary>Volta a agenda do ticket para pendente (desfazer o finalizar).</summary>
+        public async Task ReabrirAgendaTicketAsync(int codigoDetalhe)
+        {
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+            await GarantirColunasAgendaAsync(conn);
+            using var cmd = new SqlCommand(@"
+UPDATE TicketChamadoD
+SET AgendaResolvida='N', NotificarAgenda='S', AgendaResolvidaPor=NULL, AgendaResolvidaEm=NULL
+WHERE Codigo=@Codigo AND CodEmp=@CodEmp", conn);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Codigo", codigoDetalhe);
             await cmd.ExecuteNonQueryAsync();
@@ -2673,30 +2755,39 @@ VALUES
             using var cmd = new SqlCommand(@"
                 UPDATE TicketChamadoD SET AgendaResolvida='S',NotificarAgenda='N'
                 WHERE CodTicketChamadoC=@CodTicket AND CodEmp=@CodEmp
-                  AND ISNULL(NovaAgenda,'N')='S'
+                  AND NovaAgenda='S'
                   AND ISNULL(AgendaResolvida,'N')='N'", conn);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@CodTicket", codTicket);
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public async Task<List<TicketChamadoDModel>> BuscarAgendasTicketsAsync(string? usuario = null)
+        /// <summary>
+        /// Agendas de ticket da tela de Agendas: as pendentes sempre (inclusive atrasadas) e as resolvidas
+        /// só do período <paramref name="de"/>–<paramref name="ate"/> (sem período: todas).
+        /// </summary>
+        public async Task<List<TicketChamadoDModel>> BuscarAgendasTicketsAsync(string? usuario = null,
+            DateTime? de = null, DateTime? ate = null)
         {
             var lista = new List<TicketChamadoDModel>();
             using var conn = new SqlConnection(_conn);
             await conn.OpenAsync();
 
             var filtrar = !string.IsNullOrWhiteSpace(usuario) && usuario != "TODOS";
+            await GarantirColunasAgendaAsync(conn);
 
             using var cmd = new SqlCommand(@"
                 SELECT D.Codigo, D.CodTicketChamadoC, D.Anotacao, D.DataHora,
                        C.Usuario, ISNULL(D.NovaAgenda,'N'), D.DataHoraAgenda,
                        ISNULL(D.AgendaResolvida,'N'), D.UltimaNotificacaoAgenda,
-                       ISNULL(D.NotificarAgenda,'S')
+                       ISNULL(D.NotificarAgenda,'S'), D.AgendaResolvidaPor, D.AgendaResolvidaEm
                 FROM TicketChamadoD D
                 INNER JOIN TicketChamadoC C ON C.Codigo=D.CodTicketChamadoC AND C.CodEmp=D.CodEmp
-                WHERE ISNULL(D.NovaAgenda,'N')='S' AND D.DataHoraAgenda IS NOT NULL
-                  AND ISNULL(C.CodSituacao,1)<>3
+                WHERE D.NovaAgenda='S' AND D.CodEmp=@CodEmp AND D.DataHoraAgenda IS NOT NULL
+                  AND (@De IS NULL OR ISNULL(D.AgendaResolvida,'N')='N'
+                       OR (D.DataHoraAgenda >= @De AND D.DataHoraAgenda < @AteMais1))
+                  -- ticket finalizado: a agenda continua até ser resolvida na tela de Agendas
+                  AND (ISNULL(C.CodSituacao,1)<>3 OR ISNULL(D.AgendaResolvida,'N')='N')
                   AND ISNULL(C.ChatInterno,'N')<>'S'
                   AND (@FiltrarUsuario=0 OR UPPER(ISNULL(C.Usuario,''))=UPPER(@Usuario))
                 ORDER BY D.DataHoraAgenda ASC", conn);
@@ -2705,6 +2796,9 @@ VALUES
             cmd.Parameters.AddWithValue("@FiltrarUsuario", filtrar ? 1 : 0);
             AddCodEmp(cmd);
             cmd.Parameters.AddWithValue("@Usuario", usuario?.Trim().ToUpper() ?? "");
+            cmd.Parameters.Add("@De", SqlDbType.DateTime).Value = de.HasValue ? de.Value.Date : (object)DBNull.Value;
+            cmd.Parameters.Add("@AteMais1", SqlDbType.DateTime).Value =
+                de.HasValue ? (ate ?? de.Value).Date.AddDays(1) : (object)DBNull.Value;
 
             using var rd = await cmd.ExecuteReaderAsync();
             while (await rd.ReadAsync())
@@ -2719,21 +2813,14 @@ VALUES
                     AgendaResolvida = rd[7]?.ToString() ?? "N",
                     DataHoraAgenda = rd[6] == DBNull.Value ? null : Convert.ToDateTime(rd[6]),
                     UltimaNotificacaoAgenda = rd[8] == DBNull.Value ? null : Convert.ToDateTime(rd[8]),
-                    NotificarAgenda = rd[9]?.ToString() ?? "S"
+                    NotificarAgenda = rd[9]?.ToString() ?? "S",
+                    AgendaResolvidaPor = rd[10] == DBNull.Value ? null : rd[10].ToString(),
+                    AgendaResolvidaEm = rd[11] == DBNull.Value ? null : Convert.ToDateTime(rd[11])
                 });
             return lista;
         }
 
-        public async Task FinalizarAgendaTicketAsync(int codigoDetalhe)
-        {
-            using var conn = new SqlConnection(_conn);
-            await conn.OpenAsync();
-            using var cmd = new SqlCommand(
-                "UPDATE TicketChamadoD SET AgendaResolvida='S',NotificarAgenda='N' WHERE Codigo=@Codigo AND CodEmp=@CodEmp", conn);
-            AddCodEmp(cmd);
-            cmd.Parameters.AddWithValue("@Codigo", codigoDetalhe);
-            await cmd.ExecuteNonQueryAsync();
-        }
+        public Task FinalizarAgendaTicketAsync(int codigoDetalhe) => ResolverAgendaAsync(codigoDetalhe);
 
         public async Task AlterarSetorAsync(int ticketId, int novoSetor, string usuarioQueAlterou)
         {
@@ -2903,10 +2990,11 @@ VALUES
                 SELECT TOP 1 D.DataHoraAgenda, D.CodTicketChamadoC
                 FROM TicketChamadoD D
                 INNER JOIN TicketChamadoC C ON C.Codigo=D.CodTicketChamadoC AND C.CodEmp=D.CodEmp
-                WHERE ISNULL(D.NovaAgenda,'N')='S' AND D.DataHoraAgenda IS NOT NULL
-                  AND ISNULL(D.AgendaResolvida,'N')<>'S' AND ISNULL(C.CodSituacao,1)<>3
+                WHERE D.NovaAgenda='S' AND D.CodEmp=@CodEmp
+                  AND D.DataHoraAgenda > DATEADD(MINUTE,-30,@DataHoraAgenda)
+                  AND D.DataHoraAgenda < DATEADD(MINUTE,30,@DataHoraAgenda)
+                  AND ISNULL(D.AgendaResolvida,'N')<>'S'
                   AND UPPER(ISNULL(C.Usuario,''))=UPPER(@Usuario)
-                  AND ABS(DATEDIFF(MINUTE,D.DataHoraAgenda,@DataHoraAgenda))<30
                   AND (@IgnorarCodigoDetalhe IS NULL OR D.Codigo<>@IgnorarCodigoDetalhe)
                 ORDER BY ABS(DATEDIFF(MINUTE,D.DataHoraAgenda,@DataHoraAgenda)) ASC", conn);
 
@@ -3195,6 +3283,7 @@ VALUES
             await conn.OpenAsync();
 
             string usuario = (usuarioQueSalvou ?? "").Trim().ToUpper();
+            var responsavelAnterior = await ResponsavelAtualAsync(conn, ticket.Codigo);
 
             using var cmdUpdate = new SqlCommand(@"
 UPDATE TicketChamadoC
@@ -3251,6 +3340,9 @@ WHERE Codigo = @Id AND CodEmp = @CodEmp", conn);
 
             await cmdUpdate.ExecuteNonQueryAsync();
             await PropagarObservacaoClienteAsync(ticket.CodCliente, ticket.ObservacaoCliente);
+
+            // Transferiu para outro atendente: a IA deixa um resumo da conversa como nota interna (segundo plano)
+            _resumoTransf.TalvezResumir(ticket.Codigo, CodEmpAtual, responsavelAnterior, ticket.Usuario, usuario, ticket.CodSituacao);
 
             return (true, "Ticket salvo com sucesso.");
         }

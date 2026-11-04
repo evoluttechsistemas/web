@@ -1,8 +1,13 @@
 @page "/admin-entregadores"
 @rendermode InteractiveServer
 @layout AdminLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using EvolutDelivery.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@inject ILogger<AdminEntregadores> Logger
 @inject EntregadorService EntregadorService
 @inject IJSRuntime JS
 
@@ -172,6 +177,8 @@ else
 }
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private List<Entregador> entregadores = new();
     private string? mensagemErro;
     private bool carregando = true;
@@ -180,15 +187,22 @@ else
     {
         try
         {
-            entregadores = await EntregadorService.ListarTodosAsync(1, false);
+            var user = (await AuthState).User;
+            if (!EmpresaLogadaHelper.TryObter(user, out var codEmp, out _))
+            {
+                mensagemErro = "Sessão inválida. Saia e faça login novamente.";
+                carregando = false;
+                return;
+            }
+
+            entregadores = await EntregadorService.ListarTodosAsync(codEmp, false);
             carregando = false;
         }
         catch (Exception ex)
         {
             mensagemErro = $"Erro ao carregar entregadores: {ex.Message}";
             carregando = false;
-            Console.WriteLine($"ERRO DETALHADO: {ex}");
-            Console.WriteLine($"STACK TRACE: {ex.StackTrace}");
+            Logger.LogError(ex, "Erro ao carregar entregadores");
         }
     }
 

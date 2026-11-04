@@ -2,6 +2,7 @@
 @page "/delivery/{slug}/meus-pedidos/{Telefone}"
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@using EvolutDelivery.Helpers
 @using System.Globalization
 @inject PedidoService PedidoService
 @inject ClienteService ClienteService
@@ -223,7 +224,7 @@
         <div class="busca-pedidos">
             <h2>Meus Pedidos</h2>
             <p>Loja: <strong>@NomeEmpresa</strong></p>
-            <p>Telefone: <strong>@Telefone</strong></p>
+            <p>Telefone: <strong>@PrivacidadeHelper.MascararTelefone(Telefone)</strong></p>
         </div>
 
         @if (carregando)
@@ -270,7 +271,7 @@
                         {
                             <div class="linha">
                                 <strong>Endereço:</strong>
-                                <span>@pedido.EnderecoCompleto</span>
+                                <span>@PrivacidadeHelper.MascararEnderecoCompleto(pedido.EnderecoCompleto)</span>
                             </div>
                         }
                     </div>

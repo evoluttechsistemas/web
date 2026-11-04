@@ -17,6 +17,9 @@
 @inject EvolutCRM.Services.MonitorBackupService MonitorBackupService
 @inject EvolutCRM.Services.DeployNotificacaoState DeployState
 @inject EvolutCRM.Services.MiniChatState MiniChat
+@inject EvolutCRM.Services.NotificacaoVistaNotifier VistaNotifier
+@inject EvolutCRM.Services.MonitorServidorService MonitorServidor
+@inject EvolutCRM.Services.FinalizacaoConfirmacaoService FinalizacaoConfirmacao
 
 
 @* ── CSS ─────────────────────────────────────────────────────────────────── *@
@@ -150,6 +153,163 @@
         .aba-item:active {
             cursor: grabbing;
         }
+    /* ── Aviso "cliente aguardando resposta" (finalização automática) ── */
+    .fz-fundo {
+        position: fixed;
+        inset: 0;
+        z-index: 100000;
+        background: rgba(15, 23, 42, .55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+
+    .fz-modal {
+        width: 100%;
+        max-width: 460px;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+        padding: 20px 22px 18px;
+        animation: deploySlideIn .25s ease;
+        font-family: inherit;
+    }
+
+    .fz-topo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .fz-ic {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #fef3c7;
+        display: grid;
+        place-items: center;
+        font-size: 20px;
+        flex: none;
+    }
+
+    .fz-ic-ia {
+        background: #ede9fe;
+        color: #6d28d9;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .fz-topo strong {
+        display: block;
+        font-size: 16px;
+        color: #0f172a;
+    }
+
+    .fz-topo span {
+        display: block;
+        font-size: 13px;
+        color: #64748b;
+    }
+
+    .fz-n {
+        margin-left: auto;
+        align-self: flex-start;
+        font-size: 11.5px !important;
+        font-weight: 700;
+        color: #1d4ed8 !important;
+        background: #dbeafe;
+        border-radius: 999px;
+        padding: 2px 8px;
+        white-space: nowrap;
+    }
+
+    .fz-texto {
+        margin: 0 0 10px;
+        font-size: 14px;
+        color: #334155;
+        line-height: 1.45;
+    }
+
+    .fz-msg {
+        margin: 0 0 14px;
+        padding: 8px 12px;
+        border-left: 3px solid #cbd5e1;
+        background: #f8fafc;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #475569;
+        white-space: pre-wrap;
+        max-height: 120px;
+        overflow-y: auto;
+    }
+
+    .fz-msg-rotulo {
+        margin: 0 0 4px;
+        font-size: 11.5px;
+        font-weight: 700;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+    }
+
+    .fz-erro {
+        margin: 0 0 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: #fff1f2;
+        color: #991b1b;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .fz-acoes {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .fz-btn {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 9px;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .fz-btn:hover:not(:disabled) {
+            background: #f1f5f9;
+        }
+
+        .fz-btn:disabled {
+            opacity: .6;
+            cursor: default;
+        }
+
+    .fz-principal {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #fff;
+    }
+
+        .fz-principal:hover:not(:disabled) {
+            background: #15803d;
+        }
+
+    .fz-link {
+        border: 0;
+        background: transparent;
+        color: #1d4ed8;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 4px;
+    }
 </style>
 
 <MainMenu Notificacoes="_notificacoesPainel"
@@ -193,6 +353,12 @@
                 }
             </div>
 
+                @* Crédito da IA (só administradores): amarelo em US$ 2, vermelho em US$ 1.
+                   DESATIVADO por enquanto: a OpenAI não informa o saldo, então ele teria que ser digitado a cada recarga.
+                   Para voltar a usar, é só tirar este comentário:
+                <IaCreditoBadge />
+                *@
+
                 @* Equipe: quem está logado, status e quantos disponíveis *@
                 <EquipeBarra />
             </div>
@@ -218,6 +384,97 @@
     <a href="" class="reload">Reload</a>
     <a class="dismiss">🗙</a>
 </div>
+
+@* ── AVISO: CLIENTE AGUARDANDO RESPOSTA (finalização automática) ─────────── *@
+@if (_perguntasFinalizacao.Count > 0 && _perguntasFinalizacao[0].Tipo == "INSIGHT")
+{
+    var pi = _perguntasFinalizacao[0];
+    <div class="fz-fundo">
+        <div class="fz-modal" role="dialog" aria-modal="true">
+            <div class="fz-topo">
+                <span class="fz-ic fz-ic-ia">IA</span>
+                <div>
+                    <strong>Ticket finalizado automaticamente</strong>
+                    <span>Ticket #@pi.Ticket@(string.IsNullOrWhiteSpace(pi.Cliente) ? "" : " · " + pi.Cliente)</span>
+                </div>
+                @if (_perguntasFinalizacao.Count > 1)
+                {
+                    <span class="fz-n">1 de @_perguntasFinalizacao.Count</span>
+                }
+            </div>
+
+            <p class="fz-texto">
+                O ticket foi finalizado por ficar sem interação. Quer gerar o insight desta conversa,
+                para a IA aprender com este atendimento?
+            </p>
+
+            @if (!string.IsNullOrEmpty(_erroFinalizacao))
+            {
+                <div class="fz-erro">@_erroFinalizacao</div>
+            }
+
+            <div class="fz-acoes">
+                <button type="button" class="fz-btn fz-principal" disabled="@_processandoFinalizacao"
+                        @onclick="() => ResponderInsightAsync(true)">✅ Gerar insight</button>
+                <button type="button" class="fz-btn" disabled="@_processandoFinalizacao"
+                        @onclick="() => ResponderInsightAsync(false)">Não gerar</button>
+            </div>
+        </div>
+    </div>
+}
+else if (_perguntasFinalizacao.Count > 0)
+{
+    var pf = _perguntasFinalizacao[0];
+    <div class="fz-fundo">
+        <div class="fz-modal" role="dialog" aria-modal="true">
+            <div class="fz-topo">
+                <span class="fz-ic">⏳</span>
+                <div>
+                    <strong>@(pf.UltimaDoCliente ? "Cliente aguardando resposta" : "Finalizar o ticket?")</strong>
+                    <span>Ticket #@pf.Ticket@(string.IsNullOrWhiteSpace(pf.Cliente) ? "" : " · " + pf.Cliente)</span>
+                </div>
+                @if (_perguntasFinalizacao.Count > 1)
+                {
+                    <span class="fz-n">1 de @_perguntasFinalizacao.Count</span>
+                }
+            </div>
+
+            <p class="fz-texto">
+                @if (pf.UltimaDoCliente)
+                {
+                    <text>A última mensagem é do cliente e o ticket está sem resposta há <strong>@TempoAguardando(pf)</strong>.</text>
+                }
+                else
+                {
+                    <text>O ticket está sem nenhuma mensagem há <strong>@TempoAguardando(pf)</strong>. A última mensagem foi do atendente.</text>
+                }
+                Quer finalizar o ticket?
+            </p>
+
+            @if (!string.IsNullOrWhiteSpace(pf.UltimaMensagem))
+            {
+                <div class="fz-msg-rotulo">Última mensagem @(pf.UltimaDoCliente ? "do cliente" : "do atendente")</div>
+                <div class="fz-msg">@ResumoMensagem(pf.UltimaMensagem)</div>
+            }
+
+            @if (!string.IsNullOrEmpty(_erroFinalizacao))
+            {
+                <div class="fz-erro">@_erroFinalizacao</div>
+            }
+
+            <div class="fz-acoes">
+                <button type="button" class="fz-btn fz-principal" disabled="@_processandoFinalizacao"
+                        @onclick="() => FinalizarPerguntaAsync(true)">✅ Finalizar e gerar insight</button>
+                <button type="button" class="fz-btn" disabled="@_processandoFinalizacao"
+                        @onclick="() => FinalizarPerguntaAsync(false)">Finalizar sem insight</button>
+                <button type="button" class="fz-btn" disabled="@_processandoFinalizacao"
+                        @onclick="ManterPerguntaAsync">Não finalizar agora (conta o tempo de novo)</button>
+                <button type="button" class="fz-link" disabled="@_processandoFinalizacao"
+                        @onclick="AbrirTicketPerguntaAsync">Não finalizar e abrir o ticket</button>
+            </div>
+        </div>
+    </div>
+}
 
 @* ── MODAL DE DEPLOY ─────────────────────────────────────────────────────── *@
 @if (DeployState.Ativo)
@@ -355,7 +612,22 @@
 
 @code {
 
-    private void AoMudar() => _ = InvokeAsync(StateHasChanged);
+    private string? _rotaAtivaNotificacoes;
+
+    private void AoMudar()
+    {
+        // Trocar de aba nem sempre muda o endereço: a aba que ficou ativa também conta como "abriu"
+        var rota = (Abas.RotaAtiva ?? "").Split('?')[0].Trim('/').ToLowerInvariant();
+        if (rota.Length > 0 && rota != _rotaAtivaNotificacoes)
+        {
+            _rotaAtivaNotificacoes = rota;
+            _ = InvokeAsync(() => RemoverNotificacaoPorRotaAtualAsync(rota));
+        }
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // mensagem do chat interno → conversa (para tirar os avisos quando a conversa é aberta)
+    private Dictionary<int, int> _chatConversaPorMensagem = new();
     private Dictionary<int, (DateTime UltimaNotificacao, int Contagem)> _mensagensFailedNotificadas = new();
     private int _ultimaQtdNovosTickets = -1;
     private bool _changelogVerificado = false;
@@ -367,7 +639,12 @@
     private DateTime _ultimoAlertaNovoCard = DateTime.MinValue;
     private Dictionary<int, DateTime> _cardsMensagensNotificadas = new();
 
+    // Ticket → DataHoraUltimaGravacao da última mensagem já avisada (avisa de novo só quando chega mensagem nova)
     private Dictionary<int, DateTime> _ticketsNotificadosLayout = new();
+
+    // Lista carregada por AtualizarTickets neste ciclo (null = não precisou carregar) e contador de ciclos de 5s
+    private List<TicketChamadoCModel>? _listaTicketsDoCiclo;
+    private int _cicloTickets;
 
     private PeriodicTimer? _timerTickets;
     private PeriodicTimer? _timerOutros;
@@ -513,8 +790,10 @@
             await AtualizarChatInterno();
             await AtualizarNotificacoesAgendas();
             await AtualizarNotificacoesAgendasTicket();
+            await AtualizarPerguntasFinalizacaoAsync();
             await AtualizarNotificacoesCards();
             await AtualizarNotificacoesTicketsSemResponsavel(ticketsIniciais);
+            await VerificarServidoresForaAsync();
 
             await JS.InvokeVoidAsync("registrarOfflineAoFechar",
                 UserState.CurrentUser?.Trim() ?? "",
@@ -560,9 +839,17 @@
                                     await SafeJs("crmLog", $"[Presenca] Erro: {exPresenca.Message}");
                                 }
 
-                                var tickets = await TicketService.ListarChamadosParaNotificacaoAsync();
-                                await AtualizarTickets(tickets);
-                                await AtualizarNotificacoesTicketsSemResponsavel(tickets);
+                                // Consulta pesada só quando precisa: AtualizarTickets carrega a lista quando há ticket
+                                // novo; sem ticket novo, a verificação de "sem atendimento" (que só avisa depois de
+                                // 5 min) usa a lista a cada 30s. Antes rodava a cada 5s sempre, por usuário e por aba.
+                                _listaTicketsDoCiclo = null;
+                                await AtualizarTickets();
+                                _cicloTickets++;
+                                var tickets = _listaTicketsDoCiclo;
+                                if (tickets == null && _cicloTickets % 6 == 0)
+                                    tickets = await TicketService.ListarChamadosParaNotificacaoAsync();
+                                if (tickets != null)
+                                    await AtualizarNotificacoesTicketsSemResponsavel(tickets);
                                 await AtualizarNotificacoesMensagensPresasAsync();
                             }
                         });
@@ -641,6 +928,8 @@
 
                             await AtualizarNotificacoesAgendas();
                             await AtualizarNotificacoesAgendasTicket();
+                            await AtualizarPerguntasFinalizacaoAsync();
+                            await VerificarServidoresForaAsync();
                         });
                     }
                     catch (Exception ex) when (!_cts!.IsCancellationRequested)
@@ -686,7 +975,7 @@
                 return;
 
             var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosParaNotificacaoAsync();
-
+            _listaTicketsDoCiclo = tickets;
 
             var rotaAtiva = Abas.RotaAtiva ?? "";
             var estaDentroDoTicketAtivo = rotaAtiva.StartsWith("ticket/");
@@ -699,7 +988,22 @@
                     int.TryParse(partes[1], out idTicketAberto);
             }
 
-            
+            // O ticket na frente só deixa de avisar se a pessoa está realmente olhando
+            // (aba do navegador visível e janela com foco). Em outra aba/programa, avisa normalmente.
+            var olhandoTicketAberto = false;
+            if (idTicketAberto > 0 && tickets.Any(t => t.Codigo == idTicketAberto))
+            {
+                try { olhandoTicketAberto = await JS.InvokeAsync<bool>("crmPaginaEmUso"); }
+                catch { olhandoTicketAberto = false; }
+
+                // Está vendo a conversa: o que chegou até agora já foi visto (não avisa quando sair do ticket)
+                if (olhandoTicketAberto)
+                {
+                    var aberto = tickets.First(t => t.Codigo == idTicketAberto);
+                    _ticketsNotificadosLayout[idTicketAberto] = aberto.DataHoraUltimaGravacao;
+                }
+            }
+
             var novosParaNotificar = tickets
                 .Where(t =>
                 {
@@ -717,13 +1021,23 @@
                         usuarioTicket == "NOVO" ||
                         usuarioTicket == "CLIENTE";
 
+                    // Gravação feita por mim mesmo (respondi/salvei) não é mensagem nova para mim
+                    var gravadoPorMim = (t.UsuarioUltimaGravacao ?? "").Trim().ToUpperInvariant() == usuario;
+
+                    // Avisa quando chegou movimentação nova desde o último aviso deste ticket
+                    // (antes: bloqueio fixo de 3 min, que engolia a mensagem que chegava nesse intervalo)
+                    var temMensagemNova = !_ticketsNotificadosLayout.TryGetValue(t.Codigo, out var jaAvisado)
+                                          || t.DataHoraUltimaGravacao > jaAvisado;
+
+                    // Responsável offline ou em almoço/ausente: avisa todos (antes só ele, que não estava lá)
+                    var responsavelFora = !ehMeuTicket && !ehTicketSemResponsavel && t.ResponsavelIndisponivel;
+
                     return ehNovo
-                        && (ehMeuTicket || ehTicketSemResponsavel)
-                        && (!estaDentroDoTicketAtivo || t.Codigo != idTicketAberto)
-                        && (
-    !_ticketsNotificadosLayout.ContainsKey(t.Codigo) ||
-    DateTime.Now - _ticketsNotificadosLayout[t.Codigo] >= TimeSpan.FromMinutes(3)
-);
+                        && (ehMeuTicket || ehTicketSemResponsavel || responsavelFora)
+                        && !(olhandoTicketAberto && t.Codigo == idTicketAberto)
+                        && !gravadoPorMim
+                        && !VistoDepoisDe(NotificacaoVistaNotifier.Ticket, t.Codigo, t.DataHoraUltimaGravacao)
+                        && temMensagemNova;
                 })
                 .ToList();
 
@@ -757,7 +1071,7 @@
 
             foreach (var t in novosParaNotificar)
             {
-                _ticketsNotificadosLayout[t.Codigo] = DateTime.Now;
+                _ticketsNotificadosLayout[t.Codigo] = t.DataHoraUltimaGravacao;
 
                 var nomeCliente = !string.IsNullOrWhiteSpace(t.ApelidoCliente)
                     ? t.ApelidoCliente
@@ -766,6 +1080,11 @@
                         : $"Ticket #{t.Codigo}";
 
                 var ultimaAnotacao = ultimasAnotacoes.GetValueOrDefault(t.Codigo, "");
+                var usuarioResp = (t.Usuario ?? "").Trim().ToUpperInvariant();
+                var avisoResponsavelFora = t.ResponsavelIndisponivel && usuarioResp != usuario
+                                           && usuarioResp is not ("" or "NOVO" or "WHATSAPP" or "CLIENTE")
+                    ? $" (responsável {usuarioResp} indisponível)"
+                    : "";
 
                 if (t.CodSituacao == 6)
                     ultimaAnotacao = $"Aguardando aprovação: {t.Assunto}";
@@ -784,7 +1103,7 @@
                     item: new NotificacaoItemModel
                     {
                         Codigo = t.Codigo,
-                        Descricao = $"{nomeCliente}: {ultimaAnotacao}",
+                        Descricao = $"{nomeCliente}{avisoResponsavelFora}: {ultimaAnotacao}",
                         Url = $"/ticket/{t.Codigo}",
                         DataHora = DateTime.Now
                     });
@@ -808,25 +1127,31 @@
             if (primeiraUltimaAnotacao.Length > 80)
                 primeiraUltimaAnotacao = primeiraUltimaAnotacao.Substring(0, 80) + "...";
 
+            // Várias abas do HELP no navegador: só a primeira que pegar este aviso toca/abre pop-up/pisca
+            var avisoUnico = await AvisoUnicoAsync($"tk-{primeiroTicket.Codigo}-{primeiroTicket.DataHoraUltimaGravacao:yyyyMMddHHmmss}", 600);
+
             if (primeiroTicket.CodSituacao == 6)
             {
                 await SafeJs("crmToast", $"⏳ {primeiroNomeCliente}: aguardando aprovação", "warning");
-                await SafeJs("crmBlinkStart", $"⏳ Aguardando aprovação", 10);
+                if (avisoUnico) await SafeJs("crmBlinkStart", $"⏳ Aguardando aprovação", 10);
             }
             else
             {
                 await SafeJs("crmToast", $"💬 {primeiroNomeCliente}: {primeiraUltimaAnotacao}", "danger");
-                await SafeJs("crmBlinkStart", $"💬 {primeiroNomeCliente}", 10);
+                if (avisoUnico) await SafeJs("crmBlinkStart", $"💬 {primeiroNomeCliente}", 10);
             }
 
-            await SafeJs(
-                "crmNotifyPopup",
-                primeiroNomeCliente,
-                primeiraUltimaAnotacao,
-                "/images/logo-evoluttech.png"
-            );
+            if (avisoUnico)
+            {
+                await SafeJs(
+                    "crmNotifyPopup",
+                    primeiroNomeCliente,
+                    primeiraUltimaAnotacao,
+                    "/images/logo-evoluttech.png"
+                );
 
-            await SafeJs("crmBeep", 300);
+                await SafeJs("crmBeep", 300);
+            }
         }
         catch (Exception ex)
         {
@@ -844,7 +1169,8 @@
         {
             var tickets = ticketsPreCarregados ?? await TicketService.ListarChamadosParaNotificacaoAsync();
 
-            var agora = DateTime.Now;
+            // Hora do banco: é comparada com DataHoraUltimaGravacao (GETDATE() do SQL)
+            var agora = VistaNotifier.AgoraBanco();
 
             var usuariosAutomaticos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -883,6 +1209,10 @@
                     jaNotificou = false;
                 }
 
+                // Alguém da equipe já abriu o ticket depois da última mensagem do cliente
+                if (VistoDepoisDe(NotificacaoVistaNotifier.Ticket, t.Codigo, t.DataHoraUltimaGravacao))
+                    continue;
+
                 // Notifica na primeira vez e depois a cada 5 min (evita spam)
                 var deveNotificar = !jaNotificou || (agora - controle.UltimaNotificacao).TotalMinutes >= 5;
 
@@ -914,22 +1244,154 @@
                     });
 
                 await SafeJs("crmToast", $"🆘 {mensagem}", "danger");
-                await SafeJs("crmBlinkStart", $"🆘 TICKET SEM ATENDIMENTO!", 8);
 
-                await SafeJs(
-                    "crmNotifyPopup",
-                    "🆘 Ticket sem atendimento",
-                    mensagem,
-                    "/images/logo-evoluttech.png"
-                );
+                // Várias abas do HELP no navegador: beep/pop-up/piscar uma vez só
+                if (await AvisoUnicoAsync($"semresp-{t.Codigo}", 240))
+                {
+                    await SafeJs("crmBlinkStart", $"🆘 TICKET SEM ATENDIMENTO!", 8);
 
-                await SafeJs("crmBeep", 400);
+                    await SafeJs(
+                        "crmNotifyPopup",
+                        "🆘 Ticket sem atendimento",
+                        mensagem,
+                        "/images/logo-evoluttech.png"
+                    );
+
+                    await SafeJs("crmBeep", 400);
+                }
             }
         }
         catch (Exception ex)
         {
             await SafeJs("crmLog", $"[TicketSemRespNotify] Erro: {ex.Message}");
         }
+    }
+
+    // ─────────────── Aviso "cliente aguardando resposta" (finalização automática) ───────────────
+    private List<EvolutCRM.Services.FinalizacaoConfirmacaoService.Pergunta> _perguntasFinalizacao = new();
+    private bool _processandoFinalizacao;
+    private string? _erroFinalizacao;
+
+    /// <summary>Busca os avisos do usuário (a cada 30s). Toca o beep quando aparece um aviso novo.</summary>
+    private async Task AtualizarPerguntasFinalizacaoAsync()
+    {
+        if (_processandoFinalizacao || !UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+            return;
+
+        try
+        {
+            var antes = _perguntasFinalizacao.Select(p => p.Ticket).ToHashSet();
+            var agora = await FinalizacaoConfirmacao.ListarMinhasAsync();
+            var temNovo = agora.Any(p => !antes.Contains(p.Ticket));
+
+            // O aviso que está na tela continua na frente (não troca de ticket no meio da leitura)
+            if (_perguntasFinalizacao.Count > 0 && agora.Any(p => p.Ticket == _perguntasFinalizacao[0].Ticket))
+            {
+                var atual = agora.First(p => p.Ticket == _perguntasFinalizacao[0].Ticket);
+                agora.Remove(atual);
+                agora.Insert(0, atual);
+            }
+            else
+            {
+                _erroFinalizacao = null;
+            }
+
+            _perguntasFinalizacao = agora;
+            if (temNovo)
+                await SafeJs("crmBeep", 400);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[FinalizacaoAviso] Erro: {ex.Message}");
+        }
+    }
+
+    private async Task FinalizarPerguntaAsync(bool comInsight)
+    {
+        if (_perguntasFinalizacao.Count == 0 || _processandoFinalizacao) return;
+        var ticket = _perguntasFinalizacao[0].Ticket;
+        _processandoFinalizacao = true;
+        try
+        {
+            var erro = await FinalizacaoConfirmacao.FinalizarAsync(ticket, comInsight);
+            _perguntasFinalizacao.RemoveAt(0);
+            _erroFinalizacao = null;
+            if (erro != null)
+                await SafeJs("crmToast", erro, "warning");
+        }
+        catch (Exception ex)
+        {
+            _erroFinalizacao = "Não foi possível finalizar: " + ex.Message;
+        }
+        finally
+        {
+            _processandoFinalizacao = false;
+        }
+    }
+
+    private async Task ResponderInsightAsync(bool gerar)
+    {
+        if (_perguntasFinalizacao.Count == 0 || _processandoFinalizacao) return;
+        var ticket = _perguntasFinalizacao[0].Ticket;
+        _processandoFinalizacao = true;
+        try
+        {
+            await FinalizacaoConfirmacao.ResponderInsightAsync(ticket, gerar);
+            _perguntasFinalizacao.RemoveAt(0);
+            _erroFinalizacao = null;
+        }
+        catch (Exception ex)
+        {
+            _erroFinalizacao = "Não foi possível salvar: " + ex.Message;
+        }
+        finally
+        {
+            _processandoFinalizacao = false;
+        }
+    }
+
+    private async Task ManterPerguntaAsync()
+    {
+        if (_perguntasFinalizacao.Count == 0 || _processandoFinalizacao) return;
+        var ticket = _perguntasFinalizacao[0].Ticket;
+        _processandoFinalizacao = true;
+        try
+        {
+            await FinalizacaoConfirmacao.ManterAbertoAsync(ticket);
+            _perguntasFinalizacao.RemoveAt(0);
+            _erroFinalizacao = null;
+        }
+        catch (Exception ex)
+        {
+            _erroFinalizacao = "Não foi possível salvar: " + ex.Message;
+        }
+        finally
+        {
+            _processandoFinalizacao = false;
+        }
+    }
+
+    private async Task AbrirTicketPerguntaAsync()
+    {
+        if (_perguntasFinalizacao.Count == 0 || _processandoFinalizacao) return;
+        var ticket = _perguntasFinalizacao[0].Ticket;
+        await ManterPerguntaAsync();
+        if (_erroFinalizacao == null)
+            Nav.NavigateTo($"/ticket/{ticket}");
+    }
+
+    private static string TempoAguardando(EvolutCRM.Services.FinalizacaoConfirmacaoService.Pergunta p)
+    {
+        var min = Math.Max(1, (int)(DateTime.Now - p.UltimaInteracao).TotalMinutes);
+        if (min < 60) return $"{min} min";
+        return $"{min / 60}h{min % 60:00}";
+    }
+
+    private static string ResumoMensagem(string texto)
+    {
+        texto = (texto ?? "").Trim();
+        return texto.Length > 300 ? texto[..300] + "…" : texto;
     }
 
     private async Task AtualizarNotificacoesAgendas()
@@ -941,9 +1403,12 @@
         {
             var usuario = UserState.CurrentUser.Trim();
 
-            var agendasBanco = await CardService.GetAgendasEmpresaAsync(UserState.CurrentCompanyId);
+            // Só as agendas do usuário de hoje e amanhã (mais as regras das repetições), não o histórico todo
+            var agendasBanco = await CardService.GetAgendasPeriodoAsync(
+                UserState.CurrentCompanyId, DateTime.Today, DateTime.Today.AddDays(1), usuario);
 
-            var agendasUsuario = ExpandirAgendasRepetitivasLayout(agendasBanco)
+            // Mesma regra de repetição da tela de Agendas; só hoje e amanhã interessam para os avisos
+            var agendasUsuario = EvolutCRM.Services.AgendaService.ExpandirAgendas(agendasBanco, DateTime.Today, DateTime.Today.AddDays(1))
                 .Where(a =>
                     a.Status != "RESOLVIDO" &&
                     a.DataAgendamento.Date >= DateTime.Today &&
@@ -1326,147 +1791,6 @@
     //     }
     // }
 
-    private List<AgendaModel> ExpandirAgendasRepetitivasLayout(List<AgendaModel> agendasOriginais)
-    {
-        var agendasSemDuplicatas = agendasOriginais
-            .GroupBy(a => new { a.Codigo, a.DataAgendamento.Date, a.Usuario })
-            .Select(g => g.First())
-            .ToList();
-
-        var resultado = new List<AgendaModel>();
-
-        var dataInicio = DateTime.Today;
-        var dataFim = DateTime.Today.AddDays(364);
-
-        var agendasMestras = agendasSemDuplicatas
-            .Where(a => !a.AgendaPaiCodigo.HasValue)
-            .ToList();
-
-        var ocorrenciasMaterializadas = agendasSemDuplicatas
-            .Where(a => a.AgendaPaiCodigo.HasValue && a.AgendaPaiCodigo > 0)
-            .ToList();
-
-        foreach (var agenda in agendasMestras.Where(a => string.IsNullOrEmpty(a.TipoRepeticao) || a.TipoRepeticao == "UmaVez"))
-        {
-            resultado.Add(agenda);
-        }
-
-        foreach (var agendaMestre in agendasMestras.Where(a => !string.IsNullOrEmpty(a.TipoRepeticao) && a.TipoRepeticao != "UmaVez"))
-        {
-            var datasJaMaterializadas = ocorrenciasMaterializadas
-                .Where(a => a.AgendaPaiCodigo == agendaMestre.Codigo)
-                .Select(a => a.DataAgendamento.Date)
-                .ToHashSet();
-
-            var datasGerar = new List<DateTime>();
-
-            DateTime dataLimite = dataFim;
-
-            if (agendaMestre.TipoRepeticao == "PorTempo" && agendaMestre.DataFimRepeticao.HasValue)
-            {
-                dataLimite = agendaMestre.DataFimRepeticao.Value < dataFim
-                    ? agendaMestre.DataFimRepeticao.Value
-                    : dataFim;
-            }
-
-            switch (agendaMestre.FrequenciaRepeticao ?? "")
-            {
-                case "DIARIO":
-                    for (var data = dataInicio; data <= dataLimite; data = data.AddDays(1))
-                    {
-                        if (!datasJaMaterializadas.Contains(data.Date))
-                            datasGerar.Add(data);
-                    }
-                    break;
-
-                case "SEMANAL":
-                    var diasSelecionados = ParseDiasSemanaLayout(agendaMestre.DiasRepeticao);
-
-                    for (var data = dataInicio; data <= dataLimite; data = data.AddDays(1))
-                    {
-                        if (diasSelecionados.Contains((int)data.DayOfWeek) &&
-                            !datasJaMaterializadas.Contains(data.Date))
-                        {
-                            datasGerar.Add(data);
-                        }
-                    }
-                    break;
-
-                case "MENSAL":
-                    var diaDoMes = agendaMestre.DataAgendamento.Day;
-                    var dataMensal = new DateTime(dataInicio.Year, dataInicio.Month, 1);
-
-                    while (dataMensal <= dataLimite)
-                    {
-                        var diaMax = DateTime.DaysInMonth(dataMensal.Year, dataMensal.Month);
-                        var dataOcorrencia = new DateTime(
-                            dataMensal.Year,
-                            dataMensal.Month,
-                            Math.Min(diaDoMes, diaMax)
-                        );
-
-                        if (dataOcorrencia >= dataInicio &&
-                            dataOcorrencia <= dataLimite &&
-                            !datasJaMaterializadas.Contains(dataOcorrencia.Date))
-                        {
-                            datasGerar.Add(dataOcorrencia);
-                        }
-
-                        dataMensal = dataMensal.AddMonths(1);
-                    }
-                    break;
-            }
-
-            resultado.Add(agendaMestre);
-
-            foreach (var data in datasGerar)
-            {
-                resultado.Add(new AgendaModel
-                {
-                    Codigo = agendaMestre.Codigo,
-                    Origem = agendaMestre.Origem,
-                    CodCRMC = agendaMestre.CodCRMC,
-                    Descricao = agendaMestre.Descricao,
-                    DataAgendamento = data,
-                    HoraAgendamento = agendaMestre.HoraAgendamento,
-                    CodCliente = agendaMestre.CodCliente,
-                    NomeCliente = agendaMestre.NomeCliente,
-                    ApelidoCliente = agendaMestre.ApelidoCliente,
-                    EmailCliente = agendaMestre.EmailCliente,
-                    Usuario = agendaMestre.Usuario,
-                    Status = agendaMestre.Status,
-                    CodEmp = agendaMestre.CodEmp,
-                    TipoRepeticao = agendaMestre.TipoRepeticao,
-                    FrequenciaRepeticao = agendaMestre.FrequenciaRepeticao,
-                    DataFimRepeticao = agendaMestre.DataFimRepeticao,
-                    DiasRepeticao = agendaMestre.DiasRepeticao,
-                    EhOcorrenciaGerada = true,
-                    NumeroTelefone = agendaMestre.NumeroTelefone,
-                    AgendaPaiCodigo = agendaMestre.Codigo
-                });
-            }
-        }
-
-        resultado.AddRange(ocorrenciasMaterializadas);
-
-        return resultado
-            .OrderBy(a => a.DataAgendamento)
-            .ThenBy(a => a.HoraAgendamento)
-            .ToList();
-    }
-
-    private List<int> ParseDiasSemanaLayout(string diasRepeticao)
-    {
-        if (string.IsNullOrWhiteSpace(diasRepeticao))
-            return new List<int>();
-
-        return diasRepeticao
-            .Split(',')
-            .Where(d => int.TryParse(d, out _))
-            .Select(int.Parse)
-            .ToList();
-    }
-
     private async Task SafeJs(string identifier, params object[] args)
     {
         if (_disposed)
@@ -1505,6 +1829,9 @@
         Nav.LocationChanged += OnLocationChanged;
         Nav.LocationChanged += AoNavegar;
         Abas.OnMudanca += AoMudar;
+        VistaNotifier.OnVisto += AoItemVistoPorAlguem;
+        MonitorServidor.OnMudanca += AoMudarServidor;
+        MiniChat.OnConversaAberta += AoAbrirConversaMiniChat;
         RegistrarRotaAtual(Nav.Uri);
         DeployState.OnChange += OnDeployStateChanged;
     }
@@ -1521,11 +1848,22 @@
     // SUBSTITUIR o método inteiro por:
     private async Task RemoverNotificacaoPorRotaAtualAsync(string rotaAtual)
     {
+        rotaAtual = (rotaAtual ?? "").Split('?')[0].Trim('/').ToLowerInvariant();
+
+        // Qualquer aviso que leva exatamente para a tela aberta sai do painel
+        // (ex.: agenda vencida de ticket abre /ticket/123)
+        RemoverItensComUrl(rotaAtual);
+
         if (rotaAtual.StartsWith("ticket/"))
         {
             var partes = rotaAtual.Split('/');
             if (partes.Length >= 2 && int.TryParse(partes[1], out var codigo))
+            {
                 await RemoverItemDoGrupo("GRUPO_TICKET", codigo);
+                await RemoverItemDoGrupo("GRUPO_TICKET_SEM_RESP", codigo);
+                // ticket novo aparece para todos: quem abriu tira da tela de todo mundo
+                VistaNotifier.MarcarVisto(UserState.CurrentCompanyId, NotificacaoVistaNotifier.Ticket, codigo);
+            }
         }
         else if (rotaAtual == "tickets")
         {
@@ -1540,6 +1878,7 @@
             {
                 await RemoverItemDoGrupo("GRUPO_CRM_NOVO", codigo);
                 await RemoverItemDoGrupo("GRUPO_CRM_MSG", codigo);
+                VistaNotifier.MarcarVisto(UserState.CurrentCompanyId, NotificacaoVistaNotifier.Card, codigo);
             }
         }
         else if (rotaAtual.StartsWith("chat-interno"))
@@ -1582,6 +1921,154 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    // ── Servidor de backup fora do ar (MonitorServidorService) ─────────────────
+    private readonly Dictionary<string, DateTime> _servidorAlertado = new();
+
+    // Caiu ou voltou: chega na hora em todas as telas
+    private void AoMudarServidor(ServidorStatus s)
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(async () =>
+        {
+            if (s.ForaDoAr)
+            {
+                await VerificarServidoresForaAsync();
+            }
+            else
+            {
+                _servidorAlertado.Remove(s.Chave);
+                await RemoverItemDoGrupo("GRUPO_SERVIDOR", CodigoServidor(s));
+                await SafeJs("crmToast", $"✅ {s.Nome} voltou a responder.", "success");
+            }
+        });
+    }
+
+    private static int CodigoServidor(ServidorStatus s) => s.Porta;
+
+    // Mantém o aviso no painel enquanto estiver fora e repete o alerta a cada 15 min
+    private async Task VerificarServidoresForaAsync()
+    {
+        foreach (var s in MonitorServidor.ForaDoAr.ToList())
+        {
+            var agora = DateTime.Now;
+            var desde = s.ForaDesde ?? agora;
+            var tempo = MonitorServidorService.FormatarDuracao(agora - desde);
+            var mensagem = $"{s.Nome} ({s.Host}:{s.Porta}) sem resposta desde {desde:dd/MM HH:mm} — {tempo}.";
+
+            await AdicionarItemAoGrupo(
+                chaveGrupo: "GRUPO_SERVIDOR",
+                tipoOrigem: "SERVIDOR",
+                tituloGrupo: "🖥️ Servidor fora do ar",
+                tipo: "danger",
+                urlGrupo: "/admin/monitor-backups",
+                item: new NotificacaoItemModel
+                {
+                    Codigo = CodigoServidor(s),
+                    Descricao = mensagem,
+                    Url = "/admin/monitor-backups",
+                    DataHora = desde
+                });
+
+            if (_servidorAlertado.TryGetValue(s.Chave, out var ultimo) && agora - ultimo < TimeSpan.FromMinutes(15))
+                continue;
+
+            _servidorAlertado[s.Chave] = agora;
+
+            await SafeJs("crmToast", $"🖥️ {s.Nome} FORA DO AR desde {desde:HH:mm}", "danger");
+            await SafeJs("crmNotifyPopup", $"🖥️ {s.Nome} fora do ar", mensagem, "/images/logo-evoluttech.png");
+            await SafeJs("crmBlinkStart", "🖥️ SERVIDOR FORA DO AR!", 10);
+            await SafeJs("crmBeep", 500);
+        }
+
+        // voltou enquanto esta tela não estava ouvindo (reconexão etc.)
+        var grupo = _notificacoesPainel.FirstOrDefault(g => g.Chave == "GRUPO_SERVIDOR");
+        if (grupo != null)
+            foreach (var item in grupo.Itens.ToList())
+                if (!MonitorServidor.ForaDoAr.Any(s => CodigoServidor(s) == item.Codigo))
+                    await RemoverItemDoGrupo("GRUPO_SERVIDOR", item.Codigo);
+    }
+
+    private static string NormalizarRota(string? url)
+        => (url ?? "").Split('?')[0].Trim('/').ToLowerInvariant();
+
+    // Tira de todos os grupos os itens cuja URL é a tela aberta
+    private void RemoverItensComUrl(string rota)
+    {
+        if (string.IsNullOrEmpty(rota)) return;
+
+        var mudou = false;
+        foreach (var grupo in _notificacoesPainel.ToList())
+        {
+            if (grupo.Chave == "GRUPO_SERVIDOR") continue; // só sai quando o servidor voltar
+            if (grupo.Itens.RemoveAll(i => NormalizarRota(i.Url) == rota) == 0) continue;
+            mudou = true;
+            if (grupo.Itens.Count > 0)
+                grupo.Mensagem = FormatarMensagemGrupo(grupo.Itens, grupo.TipoOrigem);
+        }
+
+        if (mudou)
+            _notificacoesPainel = _notificacoesPainel.Where(g => g.Itens.Count > 0).ToList();
+    }
+
+    // Outro usuário (ou outra aba deste) abriu um ticket/card: some daqui também
+    private void AoItemVistoPorAlguem(int codEmp, string tipo, int codigo)
+    {
+        if (_disposed || codEmp != UserState.CurrentCompanyId) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            if (tipo == NotificacaoVistaNotifier.Ticket)
+            {
+                await RemoverItemDoGrupo("GRUPO_TICKET", codigo);
+                await RemoverItemDoGrupo("GRUPO_TICKET_SEM_RESP", codigo);
+                // Só tira o aviso da tela. Não bloqueia mais os próximos: mensagem que chegar depois
+                // de alguém abrir o ticket avisa normalmente (VistoDepoisDe compara com a hora da mensagem).
+            }
+            else if (tipo == NotificacaoVistaNotifier.Card)
+            {
+                await RemoverItemDoGrupo("GRUPO_CRM_NOVO", codigo);
+                await RemoverItemDoGrupo("GRUPO_CRM_MSG", codigo);
+            }
+        });
+    }
+
+    // Conversa aberta na janelinha do chat (faixa da equipe, lá em cima): tira os avisos dela
+    private void AoAbrirConversaMiniChat(int codConversa)
+    {
+        if (_disposed) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            var msgs = _chatConversaPorMensagem
+                .Where(kv => kv.Value == codConversa)
+                .Select(kv => kv.Key)
+                .ToList();
+
+            foreach (var codMsg in msgs)
+            {
+                await RemoverItemDoGrupo("GRUPO_CHAT", codMsg);
+                _chatConversaPorMensagem.Remove(codMsg);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Com o HELP em várias abas do navegador, devolve true só na primeira aba que pegar o aviso
+    /// (chave guardada no localStorage por alguns segundos). Se o navegador não responder, avisa.
+    /// </summary>
+    private async Task<bool> AvisoUnicoAsync(string chave, int segundos)
+    {
+        try { return await JS.InvokeAsync<bool>("crmAvisoUnico", chave, segundos); }
+        catch { return true; }
+    }
+
+    // Visto por alguém depois da última movimentação? Então não volta a avisar.
+    private bool VistoDepoisDe(string tipo, int codigo, DateTime ultimaMovimentacao)
+    {
+        var visto = VistaNotifier.VistoEm(UserState.CurrentCompanyId, tipo, codigo);
+        return visto.HasValue && visto.Value >= ultimaMovimentacao;
+    }
+
     public void Dispose()
     {
         _disposed = true;
@@ -1604,6 +2091,9 @@
         Nav.LocationChanged -= AoNavegar;
         Nav.LocationChanged -= OnLocationChanged;
         Abas.OnMudanca -= AoMudar;
+        VistaNotifier.OnVisto -= AoItemVistoPorAlguem;
+        MonitorServidor.OnMudanca -= AoMudarServidor;
+        MiniChat.OnConversaAberta -= AoAbrirConversaMiniChat;
         DeployState.OnChange -= OnDeployStateChanged;
         _dragRef?.Dispose();
         _deployCountdownCts?.Cancel();
@@ -1726,7 +2216,13 @@
             ChatNotify.SetNovas(qtdNovas);
 
             if (qtdNovas <= 0)
+            {
+                // tudo lido (por qualquer lugar: tela do chat, janelinha lá em cima, celular...)
+                if (_notificacoesPainel.Any(g => g.Chave == "GRUPO_CHAT"))
+                    await RemoverNotificacaoPainel("GRUPO_CHAT");
+                _chatConversaPorMensagem.Clear();
                 return;
+            }
 
             var ultima = await ChatInternoService
                 .ObterUltimaMensagemNaoLidaAsync(usuario, CodEmp);
@@ -1749,6 +2245,7 @@
                 return;
 
             _chatNotificadoLayout[ultima.Codigo] = ultima.DataHora;
+            _chatConversaPorMensagem[ultima.Codigo] = ultima.CodConversa;
 
             var texto = ultima.Texto ?? "";
 
@@ -1801,8 +2298,11 @@
         Abas.AbrirOuAtivar(aba.ComponenteTipo, aba.Parametros, aba.Rota);
     }
 
-    private void FecharAba(AbaItem aba)
+    private async Task FecharAba(AbaItem aba)
     {
+        // a tela pode pedir confirmação (ex.: editor com alterações não salvas)
+        if (!await Abas.PodeFecharAsync(aba.Rota)) return;
+
         var proxima = Abas.Fechar(aba.Rota);
         if (proxima is not null) Nav.NavigateTo(proxima.Rota);
         else if (Abas.RotaAtiva is null) Nav.NavigateTo("");

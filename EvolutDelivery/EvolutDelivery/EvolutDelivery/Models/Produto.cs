@@ -13,7 +13,10 @@
         public decimal PrecoVenda { get; set; }
         public decimal PrecoPromocao { get; set; }
         public decimal Estoque { get; set; }
-        public decimal EstoqueAtual { get; set; }
+
+        // Estoque usado pelo delivery para liberar a venda (ProdutoAFV.EstoqueAtual, enviado pelo ERP).
+        // null = estoque não informado -> produto vende sem controle.
+        public decimal? EstoqueAtual { get; set; }
         public string PermiteDecimal { get; set; } = "N";
         public string CNPJ { get; set; } = string.Empty;
         public byte[]? Imagem { get; set; }

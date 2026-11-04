@@ -1,0 +1,806 @@
+﻿@page "/cadastro-treinamentos"
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject TreinamentoClienteService Treinos
+@inject AdminService AdminService
+@inject UserState UserState
+@inject IJSRuntime JS
+
+<PageTitle>Treinamentos</PageTitle>
+
+@* Cadastro dos treinamentos que a EvolutTech faz.
+   Os ativos formam o "Treinamento inicial" do modal 🎓 Treinamentos do ticket. *@
+
+<div class="tq-wrap">
+    <div class="tq-header">
+        <div>
+            <div class="tq-title">
+                <span class="tq-title-ico"><i class="fas fa-graduation-cap"></i></span>
+                <span>Treinamentos</span>
+            </div>
+            <div class="tq-subtitle">@EmpresaAtual · os ativos aparecem como "Treinamento inicial" no ticket</div>
+        </div>
+        <button type="button" class="tq-btn primary" @onclick="Novo" disabled="@(!PodeEditar)">
+            <i class="fas fa-plus"></i>
+            Novo treinamento
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensagem))
+    {
+        <div class="@ClasseMensagem" role="status">@mensagem</div>
+    }
+
+    @if (PodeVisualizar && !PodeEditar)
+    {
+        <div class="tq-alert err" role="status">
+            Você pode só consultar. Para incluir, inativar ou excluir treinamentos é preciso a permissão
+            de editar o cadastro de clientes (CADASTROS_CLIENTES_EDITAR).
+        </div>
+    }
+
+    <div class="tq-grid">
+        <section class="tq-card">
+            <EditForm Model="tipo" OnValidSubmit="SalvarAsync">
+                <DataAnnotationsValidator />
+                <div class="tq-card-head">
+                    <div class="tq-card-title">
+                        @(tipo.Codigo > 0 ? $"Editando treinamento #{tipo.Codigo}" : "Novo treinamento")
+                    </div>
+                    <label class="tq-check">
+                        <InputCheckbox @bind-Value="tipo.Ativo" />
+                        <span>Ativo</span>
+                    </label>
+                </div>
+                <div class="tq-card-body">
+                    <ValidationSummary />
+                    <div class="tq-row">
+                        <div class="tq-field">
+                            <label for="tq-titulo">Treinamento</label>
+                            <InputText id="tq-titulo" class="tq-input" @bind-Value="tipo.Titulo" placeholder="Ex.: Fechamento de caixa" />
+                            <ValidationMessage For="@(() => tipo.Titulo)" />
+                        </div>
+                    </div>
+                    <div class="tq-row two">
+                        <div class="tq-field">
+                            <label for="tq-modulo">Módulo</label>
+                            <InputSelect id="tq-modulo" class="tq-input" @bind-Value="tipo.Modulo">
+                                @foreach (var m in ClienteTreinamentoModulos.Lista)
+                                {
+                                    <option value="@m.Codigo">@m.Nome</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="tq-field">
+                            <label for="tq-ordem">Ordem</label>
+                            <InputNumber id="tq-ordem" class="tq-input" @bind-Value="tipo.Ordem" />
+                        </div>
+                    </div>
+                    <div class="tq-row">
+                        <div class="tq-field" style="position:relative;">
+                            <label for="tq-doc">Tutorial (vai junto quando enviar o resumo ao cliente)</label>
+                            @if (!string.IsNullOrWhiteSpace(tipo.SlugDoc))
+                            {
+                                <div class="tq-doc">
+                                    <span>@tipo.TituloDoc</span>
+                                    <a class="tq-btn" style="margin-left:auto; min-height:30px; text-decoration:none;" href="@tipo.UrlTutorial" target="_blank" rel="noopener">Abrir</a>
+                                    <button type="button" class="tq-btn" style="min-height:30px;" @onclick="RemoverTutorial">Trocar</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <input id="tq-doc" class="tq-input" autocomplete="off" @bind="buscaTutorial" @bind:event="oninput" @bind:after="BuscarTutoriais"
+                                       placeholder="Digite para procurar a documentação (opcional)" />
+                                @if (sugTutoriais.Count > 0)
+                                {
+                                    <div class="tq-sug" role="listbox">
+                                        @foreach (var s in sugTutoriais)
+                                        {
+                                            var sug = s;
+                                            <button type="button" role="option" @onclick="() => EscolherTutorial(sug)">@sug.Titulo</button>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <div class="tq-form-actions">
+                        <button type="submit" class="tq-btn primary" disabled="@(!PodeEditar || salvando)">
+                            <i class="fas fa-save"></i>
+                            @(salvando ? "Salvando..." : "Salvar")
+                        </button>
+                        <button type="button" class="tq-btn" @onclick="Novo" disabled="@salvando">
+                            <i class="fas fa-eraser"></i>
+                            Limpar
+                        </button>
+                        @if (tipo.Codigo > 0)
+                        {
+                            <button type="button" class="@(tipo.Ativo ? "tq-btn danger" : "tq-btn success")" @onclick="AlternarAtivoAsync" disabled="@(!PodeEditar || salvando)">
+                                <i class="@(tipo.Ativo ? "fas fa-ban" : "fas fa-check")"></i>
+                                @(tipo.Ativo ? "Inativar" : "Ativar")
+                            </button>
+                        }
+                    </div>
+                </div>
+            </EditForm>
+        </section>
+
+        <section class="tq-card">
+            <div class="tq-card-head">
+                <div class="tq-card-title">Treinamentos cadastrados</div>
+                <label class="tq-check">
+                    <InputCheckbox @bind-Value="incluirInativos" @bind-Value:after="CarregarAsync" />
+                    <span>Inativos</span>
+                </label>
+            </div>
+            <div class="tq-toolbar">
+                <button type="button" class="tq-btn" @onclick="CarregarAsync" disabled="@carregando">
+                    <i class="fas fa-rotate"></i>
+                    Atualizar
+                </button>
+                <button type="button" class="tq-btn" @onclick="AplicarAsync" disabled="@(!PodeEditar || aplicando)"
+                        title="Leva esta lista para os clientes que já têm o treinamento inicial criado">
+                    <i class="fas fa-users"></i>
+                    @(aplicando ? "Atualizando clientes..." : "Atualizar clientes existentes")
+                </button>
+            </div>
+            <div class="tq-dica">
+                Novos clientes recebem esta lista sozinhos. Para quem já tem a lista, use <strong>Atualizar clientes existentes</strong>:
+                entram os treinamentos novos, saem os inativados e os pendentes ganham o nome e o tutorial atuais.
+                O que já foi marcado como treinado não muda.
+            </div>
+
+            @if (carregando)
+            {
+                <div class="tq-empty">Carregando treinamentos...</div>
+            }
+            else if (tipos.Count == 0)
+            {
+                <div class="tq-empty">Nenhum treinamento cadastrado.</div>
+            }
+            else
+            {
+                <div class="tq-table-wrap">
+                    <table class="tq-table">
+                        <thead>
+                            <tr>
+                                <th>Ordem</th>
+                                <th>Treinamento</th>
+                                <th>Módulo</th>
+                                <th>Tutorial</th>
+                                <th>Status</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in tipos)
+                            {
+                                var it = item;
+                                <tr class="@(it.Ativo ? "" : "tq-muted-row")">
+                                    <td>@it.Ordem</td>
+                                    <td><span class="tq-main-text">@it.Titulo</span></td>
+                                    <td>@ClienteTreinamentoModulos.Nome(it.Modulo)</td>
+                                    <td>
+                                        @if (it.UrlTutorial != null)
+                                        {
+                                            <a href="@it.UrlTutorial" target="_blank" rel="noopener" title="@it.TituloDoc">Abrir</a>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#94a3b8;">—</span>
+                                        }
+                                    </td>
+                                    <td><span class="@(it.Ativo ? "tq-status on" : "tq-status off")">@(it.Ativo ? "Ativo" : "Inativo")</span></td>
+                                    <td class="tq-actions-cell" style="white-space:nowrap;">
+                                        @if (confirmarExclusao == it.Codigo)
+                                        {
+                                            <button type="button" class="tq-btn danger" style="min-height:30px;" disabled="@salvando" @onclick="() => ExcluirAsync(it)">Excluir</button>
+                                            <button type="button" class="tq-btn" style="min-height:30px;" @onclick="() => confirmarExclusao = 0">Não</button>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="tq-icon-btn" title="Editar treinamento" aria-label="Editar @it.Titulo" @onclick="() => Editar(it)">
+                                                <i class="fas fa-pen"></i>
+                                            </button>
+                                            <button type="button" class="tq-icon-btn" disabled="@(!PodeEditar || salvando)"
+                                                    title="@(it.Ativo ? "Inativar (sai da lista dos clientes onde está pendente)" : "Ativar")"
+                                                    aria-label="@(it.Ativo ? "Inativar" : "Ativar") @it.Titulo"
+                                                    @onclick="() => AlternarAtivoLinhaAsync(it)">
+                                                <i class="@(it.Ativo ? "fas fa-ban" : "fas fa-check")"></i>
+                                            </button>
+                                            <button type="button" class="tq-icon-btn" disabled="@(!PodeEditar || salvando)"
+                                                    title="Excluir treinamento" aria-label="Excluir @it.Titulo"
+                                                    @onclick="() => confirmarExclusao = it.Codigo">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+</div>
+
+<style>
+    .tq-wrap {
+        --tq-ink: #0f172a;
+        --tq-ink2: #334155;
+        --tq-muted: #64748b;
+        --tq-line: #e2e8f0;
+        --tq-bg: #f0f4fd;
+        --tq-card: #fff;
+        --tq-blue: #2563eb;
+        --tq-blue-d: #1e3a8a;
+        --tq-red: #dc2626;
+        height: 100%;
+        overflow-y: auto;
+        background: var(--tq-bg);
+        color: var(--tq-ink);
+        font-family: 'IBM Plex Sans','Segoe UI',sans-serif;
+        padding: 20px 22px 40px;
+    }
+
+    .tq-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+    }
+
+    .tq-title {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--tq-blue-d);
+        line-height: 1.15;
+    }
+
+    .tq-title-ico {
+        width: 40px;
+        height: 40px;
+        border-radius: 11px;
+        background: linear-gradient(135deg,var(--tq-blue),var(--tq-blue-d));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(37,99,235,.32);
+    }
+
+    .tq-subtitle {
+        font-size: 12.5px;
+        color: var(--tq-muted);
+        margin-top: 6px;
+        margin-left: 51px;
+        font-weight: 600;
+    }
+
+    .tq-grid {
+        display: grid;
+        grid-template-columns: minmax(360px,460px) minmax(0,1fr);
+        gap: 16px;
+        align-items: start;
+    }
+
+    .tq-card {
+        background: var(--tq-card);
+        border: 1px solid var(--tq-line);
+        border-radius: 14px;
+        box-shadow: 0 1px 3px rgba(15,23,42,.05);
+        overflow: hidden;
+    }
+
+    .tq-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--tq-line);
+        background: #f8fbff;
+    }
+
+    .tq-card-title {
+        font-size: 14px;
+        font-weight: 850;
+        color: var(--tq-blue-d);
+    }
+
+    .tq-card-body {
+        padding: 16px;
+    }
+
+    .tq-row {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+        .tq-row.two {
+            grid-template-columns: 1fr 1fr;
+        }
+
+    .tq-field {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        min-width: 0;
+    }
+
+        .tq-field label {
+            font-size: 11.5px;
+            font-weight: 800;
+            color: var(--tq-ink2);
+        }
+
+    .tq-input {
+        width: 100%;
+        min-height: 36px;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        padding: 7px 10px;
+        background: #fff;
+        color: var(--tq-ink);
+        font: inherit;
+        font-size: 12.5px;
+        outline: none;
+    }
+
+        .tq-input:focus {
+            border-color: var(--tq-blue);
+            box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+        }
+
+    .tq-readonly {
+        background: #f8fafc;
+        color: var(--tq-muted);
+        cursor: not-allowed;
+    }
+
+    .tq-check {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--tq-muted);
+        font-size: 12px;
+        font-weight: 700;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    .tq-preview {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 14px;
+    }
+
+        .tq-preview > div {
+            border: 1px solid var(--tq-line);
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: #f8fafc;
+        }
+
+        .tq-preview span {
+            display: block;
+            color: var(--tq-muted);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-bottom: 4px;
+        }
+
+        .tq-preview strong {
+            color: var(--tq-ink2);
+            font-size: 12px;
+        }
+
+    .tq-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 38px;
+        padding: 0 15px;
+        border-radius: 10px;
+        border: 1px solid var(--tq-line);
+        background: #fff;
+        color: var(--tq-ink2);
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: .16s ease;
+        white-space: nowrap;
+    }
+
+        .tq-btn:hover {
+            border-color: var(--tq-blue);
+            color: var(--tq-blue);
+            background: #f5f9ff;
+        }
+
+        .tq-btn.primary {
+            background: linear-gradient(135deg,var(--tq-blue),var(--tq-blue-d));
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 3px 10px rgba(37,99,235,.28);
+        }
+
+        .tq-btn.danger {
+            color: var(--tq-red);
+            border-color: #fecaca;
+        }
+
+        .tq-btn.success {
+            color: #166534;
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        .tq-btn:disabled {
+            opacity: .62;
+            cursor: not-allowed;
+        }
+
+    .tq-alert {
+        margin-bottom: 14px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        border: 1px solid var(--tq-line);
+        background: #fff;
+    }
+
+        .tq-alert.ok {
+            color: #166534;
+            background: #dcfce7;
+            border-color: #86efac;
+        }
+
+        .tq-alert.err {
+            color: #991b1b;
+            background: #fee2e2;
+            border-color: #fca5a5;
+        }
+
+    .tq-form-actions, .tq-toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .tq-toolbar {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--tq-line);
+        background: #f8fbff;
+    }
+
+    .tq-empty {
+        margin: 16px;
+        padding: 24px;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        color: var(--tq-muted);
+        text-align: center;
+        font-size: 12.5px;
+        font-weight: 700;
+        background: #f8fafc;
+    }
+
+    .tq-table-wrap {
+        overflow: auto;
+    }
+
+    .tq-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+    }
+
+        .tq-table th {
+            padding: 10px 12px;
+            text-align: left;
+            color: var(--tq-muted);
+            background: #f8fbff;
+            border-bottom: 1px solid var(--tq-line);
+            font-size: 10.5px;
+            font-weight: 850;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            white-space: nowrap;
+        }
+
+        .tq-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eef2f7;
+            vertical-align: middle;
+        }
+
+    .tq-main-text {
+        font-weight: 800;
+        color: var(--tq-ink);
+    }
+
+    .tq-status {
+        display: inline-flex;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 11px;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+        .tq-status.on {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .tq-status.off {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+
+    .tq-muted-row {
+        opacity: .62;
+    }
+
+    .tq-actions-cell {
+        width: 1%;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .tq-icon-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        border: 1px solid var(--tq-line);
+        background: #fff;
+        color: var(--tq-blue-d);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .validation-errors {
+        margin: 0 0 12px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #9a3412;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .validation-message {
+        color: #dc2626;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    @@media (max-width: 980px) {
+        .tq-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @@media (max-width: 680px) {
+        .tq-wrap {
+            padding: 16px 14px 32px;
+        }
+
+        .tq-row.two, .tq-preview {
+            grid-template-columns: 1fr;
+        }
+
+        .tq-btn {
+            width: 100%;
+        }
+
+        .tq-header .tq-btn {
+            width: auto;
+        }
+    }
+    .tq-dica { margin: 0 16px 12px; padding: 9px 11px; border-radius: 10px; background: #f8fbff; border: 1px solid #e2e8f0; font-size: 12px; color: #475569; line-height: 1.45; }
+    .tq-doc { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; font-size: 12.5px; font-weight: 600; color: #0f172a; }
+    .tq-sug { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; margin-top: 2px; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; box-shadow: 0 8px 20px rgba(15,23,42,.12); max-height: 240px; overflow: auto; padding: 4px; }
+    .tq-sug button { display: block; width: 100%; text-align: left; padding: 7px 9px; border: 0; background: none; border-radius: 7px; cursor: pointer; font-family: inherit; font-size: 12.5px; color: #0f172a; }
+    .tq-sug button:hover, .tq-sug button:focus-visible { background: #eff6ff; }
+</style>
+
+@code {
+    private TreinamentoTipo tipo = new();
+    private List<TreinamentoTipo> tipos = new();
+    private bool incluirInativos;
+    private bool carregando;
+    private bool salvando;
+    private bool aplicando;
+    private bool PodeVisualizar;
+    private bool PodeEditar;
+    private string mensagem = "";
+    private string classeMensagem = "alert-info";
+
+    private string buscaTutorial = "";
+    private List<TreinamentoSugestao> sugTutoriais = new();
+
+    private int CodEmp => UserState.CurrentCompanyId;
+    private string EmpresaAtual => CodEmp > 0 ? $"Empresa: {UserState.CurrentCompany} ({CodEmp})" : "Empresa não carregada";
+    private string ClasseMensagem => classeMensagem == "alert-success" ? "tq-alert ok" : "tq-alert err";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // mesmas permissões do cadastro de clientes
+        PodeVisualizar = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "CADASTROS_CLIENTES_VISUALIZAR");
+        PodeEditar = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "CADASTROS_CLIENTES_EDITAR");
+
+        if (!PodeVisualizar)
+        {
+            MostrarErro("Você não tem permissão para acessar o cadastro de treinamentos.");
+            return;
+        }
+        Novo();
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            carregando = true;
+            tipos = await Treinos.ListarTiposAsync(CodEmp, incluirInativos, UserState.CurrentUser);
+        }
+        catch (Exception ex)
+        {
+            MostrarErro(ex.Message.Contains("TreinamentoTipo", StringComparison.OrdinalIgnoreCase)
+                ? "A tabela de treinamentos ainda não existe. Rode o script Scripts/2026-10-26_TreinamentoTipo.sql."
+                : $"Erro ao carregar treinamentos: {ex.Message}");
+        }
+        finally { carregando = false; }
+    }
+
+    private void Novo()
+    {
+        var proxima = tipos.Count > 0 ? tipos.Max(t => t.Ordem) + 10 : 10;
+        tipo = new TreinamentoTipo { CodEmp = CodEmp, Ativo = true, Modulo = "outro", Ordem = proxima };
+        buscaTutorial = "";
+        sugTutoriais.Clear();
+    }
+
+    private void Editar(TreinamentoTipo t)
+    {
+        tipo = new TreinamentoTipo
+        {
+            Codigo = t.Codigo, CodEmp = t.CodEmp, Titulo = t.Titulo, Modulo = t.Modulo, Ordem = t.Ordem, Ativo = t.Ativo,
+            CodDoc = t.CodDoc, CodEmpDoc = t.CodEmpDoc, SlugDoc = t.SlugDoc, TituloDoc = t.TituloDoc
+        };
+        buscaTutorial = "";
+        sugTutoriais.Clear();
+        mensagem = "";
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (!PodeEditar)
+        {
+            MostrarErro("Você não tem permissão para alterar treinamentos.");
+            return;
+        }
+        try
+        {
+            salvando = true;
+            tipo.CodEmp = CodEmp;
+            await Treinos.SalvarTipoAsync(tipo, UserState.CurrentUser);
+            MostrarSucesso("Treinamento salvo. Para levar a mudança a quem já tem a lista, use \"Atualizar clientes existentes\".");
+            await CarregarAsync();
+            Novo();
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao salvar treinamento: {ex.Message}"); }
+        finally { salvando = false; }
+    }
+
+    private int confirmarExclusao;
+
+    private Task AlternarAtivoAsync()
+    {
+        var item = tipos.FirstOrDefault(t => t.Codigo == tipo.Codigo);
+        return item == null ? Task.CompletedTask : AlternarAtivoLinhaAsync(item);
+    }
+
+    private async Task AlternarAtivoLinhaAsync(TreinamentoTipo item)
+    {
+        if (!PodeEditar || item.Codigo <= 0) return;
+        var novo = !item.Ativo;
+        var texto = novo
+            ? $"Ativar \"{item.Titulo}\"?\n\nClientes novos passam a receber. Para quem já tem a lista, use \"Atualizar clientes existentes\"."
+            : $"Inativar \"{item.Titulo}\"?\n\nEle sai da lista dos clientes onde ainda está pendente. Onde já foi treinado, continua no histórico.";
+        if (!await JS.InvokeAsync<bool>("confirm", texto)) return;
+        try
+        {
+            salvando = true;
+            var removidos = await Treinos.AlterarAtivoTipoAsync(item.Codigo, CodEmp, novo, UserState.CurrentUser);
+            MostrarSucesso(novo
+                ? "Treinamento ativado."
+                : $"Treinamento inativado. Saiu da lista de {removidos} cliente(s) onde estava pendente.");
+            await CarregarAsync();
+            if (tipo.Codigo == item.Codigo) Novo();
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao alterar treinamento: {ex.Message}"); }
+        finally { salvando = false; }
+    }
+
+    private async Task ExcluirAsync(TreinamentoTipo item)
+    {
+        confirmarExclusao = 0;
+        if (!PodeEditar) return;
+        try
+        {
+            salvando = true;
+            var removidos = await Treinos.ExcluirTipoAsync(item.Codigo, CodEmp, UserState.CurrentUser);
+            MostrarSucesso($"\"{item.Titulo}\" excluído. Saiu da lista de {removidos} cliente(s) onde estava pendente; onde já foi treinado, continua no histórico.");
+            await CarregarAsync();
+            if (tipo.Codigo == item.Codigo) Novo();
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao excluir treinamento: {ex.Message}"); }
+        finally { salvando = false; }
+    }
+
+    private async Task AplicarAsync()
+    {
+        if (!PodeEditar) return;
+        var confirmar = await JS.InvokeAsync<bool>("confirm",
+            "Atualizar a lista do treinamento inicial em todos os clientes que já têm a lista criada?\n\n" +
+            "Entram os treinamentos ativos que faltam, saem os pendentes de treinamentos inativados e os pendentes ganham o nome e o tutorial atuais. " +
+            "O que já foi marcado como treinado não muda.");
+        if (!confirmar) return;
+        try
+        {
+            aplicando = true;
+            var r = await Treinos.AplicarTiposAosClientesAsync(CodEmp, UserState.CurrentUser);
+            MostrarSucesso($"Clientes atualizados ({r.Clientes} com lista): {r.Incluidos} item(ns) incluído(s), " +
+                           $"{r.Atualizados} atualizado(s), {r.Removidos} removido(s).");
+        }
+        catch (Exception ex) { MostrarErro($"Erro ao atualizar clientes: {ex.Message}"); }
+        finally { aplicando = false; }
+    }
+
+    private async Task BuscarTutoriais()
+    {
+        if ((buscaTutorial ?? "").Trim().Length < 3) { sugTutoriais.Clear(); return; }
+        try { sugTutoriais = await Treinos.SugerirTutoriaisAsync(CodEmp, buscaTutorial!); }
+        catch { sugTutoriais.Clear(); }
+    }
+
+    private void EscolherTutorial(TreinamentoSugestao s)
+    {
+        tipo.CodDoc = s.CodDoc;
+        tipo.CodEmpDoc = s.CodEmpDoc;
+        tipo.SlugDoc = s.SlugDoc;
+        tipo.TituloDoc = s.Titulo;
+        sugTutoriais.Clear();
+        buscaTutorial = "";
+    }
+
+    private void RemoverTutorial()
+    {
+        tipo.CodDoc = null; tipo.CodEmpDoc = null; tipo.SlugDoc = null; tipo.TituloDoc = null;
+    }
+
+    private void MostrarSucesso(string texto) { mensagem = texto; classeMensagem = "alert-success"; }
+    private void MostrarErro(string texto) { mensagem = texto; classeMensagem = "alert-danger"; }
+}

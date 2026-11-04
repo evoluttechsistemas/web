@@ -1,8 +1,13 @@
 @page "/admin-clientes"
 @rendermode InteractiveServer
 @layout AdminLayout
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@using EvolutDelivery.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@inject ILogger<AdminClientes> Logger
 @inject ClienteService ClienteService
 @inject IJSRuntime JS
 
@@ -40,7 +45,7 @@
 
 <div style="display:flex; justify-content:space-between; margin-bottom:24px;">
     <h2>👥 Gestão de Clientes</h2>
-    <input type="text" placeholder="🔍 Buscar cliente..." @bind="filtro" @bind:after="Filtrar"
+    <input type="text" placeholder="🔍 Buscar por nome ou telefone..." @bind="filtro" @bind:after="Filtrar"
            style="padding:10px; border:1px solid #e2e8f0; border-radius:8px; width:300px;" />
 </div>
 
@@ -61,10 +66,23 @@
     </div>
 </div>
 
-@if (!clientes.Any())
+@if (!string.IsNullOrWhiteSpace(mensagemErro))
+{
+    <div style="background:#fef2f2; color:#dc2626; padding:16px; border-radius:12px; margin-bottom:16px; font-weight:600;">
+        @mensagemErro
+    </div>
+}
+
+@if (carregando)
 {
     <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
-        📦 Nenhum cliente cadastrado ainda.
+        Carregando clientes...
+    </div>
+}
+else if (!clientes.Any())
+{
+    <div style="background:white; padding:60px; border-radius:12px; text-align:center; color:#64748b;">
+        @(string.IsNullOrWhiteSpace(filtro) ? "📦 Nenhum cliente cadastrado ainda." : "🔍 Nenhum cliente encontrado para esta busca.")
     </div>
 }
 else
@@ -82,7 +100,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var cliente in clientesFiltrados)
+                @foreach (var cliente in clientes)
                 {
                     <tr>
                         <td><strong>@cliente.Nome</strong></td>
@@ -101,43 +119,80 @@ else
             </tbody>
         </table>
     </div>
+
+    @if (clientes.Count >= LimiteLista)
+    {
+        <p style="color:#64748b; font-size:.85rem; margin-top:10px;">
+            Mostrando os primeiros @LimiteLista clientes. Use a busca para encontrar um cliente específico.
+        </p>
+    }
 }
 
 @code {
-    private List<Cliente> clientes = new();
-    private List<Cliente> clientesFiltrados = new();
-    private string filtro = "";
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    private int totalClientes => clientes.Count;
-    private int clientesComPedido => clientes.Count(c => c.TotalPedidos > 0);
-    private int clientesComEmail => clientes.Count(c => !string.IsNullOrWhiteSpace(c.Email));
+    private const int LimiteLista = 300;
+
+    private List<Cliente> clientes = new();
+    private string filtro = "";
+    private string mensagemErro = "";
+    private bool carregando = true;
+
+    private int codEmp;
+    private string cnpj = "";
+
+    private int totalClientes;
+    private int clientesComPedido;
+    private int clientesComEmail;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            clientes = new List<Cliente>
+            var user = (await AuthState).User;
+            if (!EmpresaLogadaHelper.TryObter(user, out codEmp, out cnpj))
             {
-                new() { Codigo = 1, Nome = "João Silva", Telefone = "(17) 99999-0001", Email = "joao@email.com", TotalPedidos = 15, TotalGasto = 450.00m, CodEmp = 1 },
-                new() { Codigo = 2, Nome = "Maria Santos", Telefone = "(17) 99999-0002", Email = "maria@email.com", TotalPedidos = 8, TotalGasto = 320.00m, CodEmp = 1 },
-                new() { Codigo = 3, Nome = "Pedro Oliveira", Telefone = "(17) 99999-0003", Email = "", TotalPedidos = 1, TotalGasto = 45.00m, CodEmp = 1 },
-            };
+                mensagemErro = "Sessão inválida. Saia e faça login novamente.";
+                return;
+            }
 
-            clientesFiltrados = clientes;
+            var resumo = await ClienteService.ObterResumoAdminAsync(codEmp, cnpj);
+            totalClientes = resumo.TotalClientes;
+            clientesComPedido = resumo.ClientesComPedido;
+            clientesComEmail = resumo.ClientesComEmail;
+
+            clientes = await ClienteService.ListarClientesAdminAsync(codEmp, cnpj, "", LimiteLista);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Erro: {ex.Message}");
+            mensagemErro = "Erro ao carregar clientes.";
+            Logger.LogError(ex, "Erro ao carregar clientes do admin");
+        }
+        finally
+        {
+            carregando = false;
         }
     }
 
-    private void Filtrar()
+    private async Task Filtrar()
     {
-        clientesFiltrados = clientes
-            .Where(c => string.IsNullOrEmpty(filtro)
-                     || c.Nome.Contains(filtro, StringComparison.OrdinalIgnoreCase)
-                     || c.Telefone.Contains(filtro, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        if (codEmp <= 0 || string.IsNullOrWhiteSpace(cnpj))
+            return;
+
+        carregando = true;
+        try
+        {
+            clientes = await ClienteService.ListarClientesAdminAsync(codEmp, cnpj, filtro, LimiteLista);
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = "Erro ao buscar clientes.";
+            Logger.LogError(ex, "Erro ao buscar clientes do admin");
+        }
+        finally
+        {
+            carregando = false;
+        }
     }
 
     private async Task VerDetalhes(int codigo)

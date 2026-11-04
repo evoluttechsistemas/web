@@ -78,35 +78,31 @@ public sealed class IndicacaoMensalidadeModel
     /// <summary>Cliente.ClienteMensalista = 'S'. Se 'N', as indicações aprovadas não descontam.</summary>
     public bool Mensalista { get; set; }
 
-    /// <summary>Valor cheio: Cliente.ValorMensalidade; se não estiver preenchido, usa o título atual.</summary>
-    public decimal? Valor => ValorMensalidade is > 0 ? ValorMensalidade : ValorTitulo;
+    /// <summary>Desconto das indicações aprovadas: R$ 10 por indicação (só mensalista).</summary>
+    public decimal Desconto => Mensalista ? QtdConfirmadasRegistradas * DescontoPorIndicacao : 0m;
 
     /// <summary>
-    /// Quanto ele paga: o menor entre o título atual (ContaReceber) e o valor cheio menos
-    /// R$ 10 por indicação aprovada. Assim vale tanto o desconto que já está no título
-    /// quanto uma indicação aprovada agora que ainda não entrou na cobrança.
+    /// Quanto ele paga: o título atual em ContaReceber, que já vem com o desconto aplicado.
+    /// Sem título, cai para Cliente.ValorMensalidade menos o desconto.
     /// </summary>
     public decimal? ValorComDesconto
     {
         get
         {
-            if (Valor is null) return null;
-            if (!Mensalista) return ValorTitulo is > 0 ? ValorTitulo : Valor;
-
-            var calculado = Math.Max(0, Valor.Value - QtdConfirmadasRegistradas * DescontoPorIndicacao);
-            return ValorTitulo is > 0 ? Math.Min(ValorTitulo.Value, calculado) : calculado;
+            if (ValorTitulo is > 0) return ValorTitulo;
+            if (ValorMensalidade is not > 0) return null;
+            return Math.Max(0, ValorMensalidade.Value - Desconto);
         }
     }
 
-    /// <summary>Diferença entre o valor cheio e o que ele paga.</summary>
-    public decimal Desconto => !Mensalista || Valor is null || ValorComDesconto is null
-        ? 0m
-        : Math.Max(0, Valor.Value - ValorComDesconto.Value);
+    /// <summary>
+    /// Valor cheio (o riscado): o que ele paga + R$ 10 por indicação aprovada.
+    /// Ex.: título 137 com 1 aprovada → 147; título 127 com 2 aprovadas → 147.
+    /// </summary>
+    public decimal? Valor => ValorComDesconto is null ? null : ValorComDesconto.Value + Desconto;
 
-    /// <summary>Indicações aprovadas mostradas (inclui descontos que já vieram no título).</summary>
-    public int QtdConfirmadas => Mensalista
-        ? Math.Max(QtdConfirmadasRegistradas, (int)Math.Floor(Desconto / DescontoPorIndicacao))
-        : QtdConfirmadasRegistradas;
+    /// <summary>Indicações aprovadas (status Confirmada).</summary>
+    public int QtdConfirmadas => QtdConfirmadasRegistradas;
 
     /// <summary>Quantas indicações aprovadas ainda faltam para zerar o que ele paga.</summary>
     public int FaltamParaZerar => !Mensalista || ValorComDesconto is null or <= 0

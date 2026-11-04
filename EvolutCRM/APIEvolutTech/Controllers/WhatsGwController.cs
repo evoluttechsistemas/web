@@ -1052,6 +1052,28 @@ WHERE CodEmp = @CodEmp
                 }
             }
 
+            // Contato novo de verdade: o número não está em nenhum card do CRM, em nenhum ticket
+            // (lista de contatos do WhatsApp) nem no cadastro de clientes → entra como "Novo Lead"
+            const string LIMPA_TEL =
+                "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefone,''),'(',''),')',''),'-',''),' ',''),'+',''),'.','')";
+            using (var cmdNovo = new SqlCommand($@"
+        SELECT CASE WHEN
+               EXISTS (SELECT 1 FROM CRMC
+                       WHERE CodEmp = @CodEmp AND ({LIMPA_WA} IN ({inTel}) OR {LIMPA_CEL} IN ({inTel})))
+            OR EXISTS (SELECT 1 FROM TicketChamadoC
+                       WHERE CodEmp = @CodEmp AND {LIMPA_WA} IN ({inTel}))
+            OR EXISTS (SELECT 1 FROM Cliente
+                       WHERE CodEmp = @CodEmp AND ({LIMPA_CEL} IN ({inTel}) OR {LIMPA_TEL} IN ({inTel})))
+        THEN 1 ELSE 0 END", conn, transaction))
+            {
+                cmdNovo.Parameters.AddWithValue("@CodEmp", codEmp);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmdNovo.Parameters.AddWithValue(pTel[i], variantes[i]);
+
+                if (Convert.ToInt32(await cmdNovo.ExecuteScalarAsync()) == 0)
+                    funilParaUsar = "RA";   // Novo Lead
+            }
+
             // Cliente pelo número (todas as variantes)
             int codCliente = 0;
             string nomeCliente = contactName ?? "";

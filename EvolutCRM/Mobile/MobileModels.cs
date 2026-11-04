@@ -220,4 +220,18 @@ namespace EvolutCRM.Mobile
         public int Codigo { get; set; }
         public string Mensagem { get; set; } = "";
     }
+
+    /// <summary>Pessoa da equipe para a faixa do topo do app (quem está online e em que status).</summary>
+    public class MobileEquipeMembroDto
+    {
+        public string Usuario { get; set; } = "";
+        public bool Online { get; set; }
+        public bool Disponivel { get; set; }
+        public string Status { get; set; } = "";
+        /// <summary>Cor do status (anel do avatar), ex.: #22c55e.</summary>
+        public string Cor { get; set; } = "";
+        /// <summary>Há quanto tempo está no status ("há 5 min"); vazio quando não se aplica.</summary>
+        public string Tempo { get; set; } = "";
+        public int Atendimentos { get; set; }
+    }
 }

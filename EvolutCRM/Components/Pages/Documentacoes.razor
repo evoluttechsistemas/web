@@ -3,6 +3,8 @@
 @inject EvolutCRM.Services.DocumentacaoService DocumentacaoService
 @inject EvolutCRM.Services.UserState UserState
 @inject NavigationManager Nav
+@inject EvolutCRM.Abas.AbaService Abas
+@implements IDisposable
 
 @using EvolutCRM.Models
 
@@ -196,16 +198,18 @@
 <div class="docs-page">
     <div class="docs-head">
         <div class="docs-title">
-            <h1>Documentacoes</h1>
-            <p>Crie tutoriais com texto, videos, imagens e links para compartilhar com clientes.</p>
+            <h1>Documentações</h1>
+            <p>Crie tutoriais com texto, vídeos, imagens e links para compartilhar com clientes.</p>
         </div>
         <div class="docs-actions">
-            <button class="docs-btn primary" @onclick="NovaDocumentacao">Nova documentacao</button>
+            <button class="docs-btn" @onclick="NovaInterna"
+                    title="Registrar como um problema foi resolvido: só a equipe e a IA veem">🔒 Nova interna</button>
+            <button class="docs-btn primary" @onclick="NovaDocumentacao">Nova documentação</button>
         </div>
     </div>
 
-    <div class="docs-toolbar" style="grid-template-columns: minmax(220px, 1fr) 160px 160px;">
-        <input class="docs-input" placeholder="Buscar por titulo, descricao ou categoria"
+    <div class="docs-toolbar" style="grid-template-columns: minmax(220px, 1fr) 160px 160px 170px;">
+        <input class="docs-input" placeholder="Buscar por título, descrição ou categoria"
                value="@Busca"
                @oninput="e => Busca = e.Value?.ToString() ?? string.Empty" />
         <select class="docs-select" value="@FiltroPublicado"
@@ -220,15 +224,29 @@
             <option value="HELP">HELP</option>
             <option value="EVOLUTTECH">EvolutTech</option>
         </select>
+        <select class="docs-select" value="@FiltroVisibilidade"
+                @onchange="e => FiltroVisibilidade = e.Value?.ToString() ?? string.Empty">
+            <option value="">Públicas e internas</option>
+            <option value="P">Só públicas</option>
+            <option value="I">🔒 Só internas</option>
+        </select>
     </div>
+
+    @if (!string.IsNullOrEmpty(_erro))
+    {
+        <div class="docs-empty" style="color:#b91c1c; border-color:#fecaca; background:#fef2f2;">
+            @_erro
+            <button class="docs-btn" style="margin-left:10px;" @onclick="() => CarregarAsync()">Tentar de novo</button>
+        </div>
+    }
 
     @if (carregando)
     {
-        <div class="docs-empty">Carregando documentacoes...</div>
+        <div class="docs-empty">Carregando documentações...</div>
     }
     else if (!DocumentacoesFiltradas.Any())
     {
-        <div class="docs-empty">Nenhuma documentacao encontrada.</div>
+        <div class="docs-empty">Nenhuma documentação encontrada.</div>
     }
     else
     {
@@ -239,8 +257,9 @@
                         <th>Tutorial</th>
                         <th>Categoria</th>
                         <th>Status</th>
+                        <th>Alterado em</th>
                         <th>Link do cliente</th>
-                        <th style="text-align:right;">Acoes</th>
+                        <th style="text-align:right;">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -250,9 +269,9 @@
                             <td>
                                 <div class="docs-tutorial">
                                     <div class="docs-thumb">
-                                        @if (doc.Thumbnail != null)
+                                        @if (doc.CapaUrl != null)
                                         {
-                                            <img src="/api/thumbnail/@doc.Codigo" alt="@doc.Titulo" />
+                                            <img src="@doc.CapaUrl" alt="@doc.Titulo" loading="lazy" />
                                         }
                                         else
                                         {
@@ -268,13 +287,45 @@
                             <td>@doc.Categoria</td>
                             <td>
                                 <span class="docs-pill @(doc.Publicado == "S" ? "" : "off")">
-                                    @(doc.Publicado == "S" ? "Publicado" : "Rascunho")
+                                    @(doc.Publicado == "S" ? (doc.EhInterna ? "Liberada" : "Publicado") : "Rascunho")
                                 </span>
+                                @if (doc.EhInterna)
+                                {
+                                    <span class="docs-pill" style="background:#fef3c7;color:#92400e;margin-left:4px;"
+                                          title="Só a equipe e a IA veem">🔒 Interna</span>
+                                }
                             </td>
-                            <td>/curso-tutorial/@UserState.CurrentCompanyId/@doc.Slug</td>
+                            <td style="white-space:nowrap;">
+                                @doc.DataHoraAlteracao.ToString("dd/MM/yyyy HH:mm")
+                                @if (!string.IsNullOrWhiteSpace(doc.UsuarioAlteracao))
+                                {
+                                    <div style="font-size:11px;color:#94a3b8;">@doc.UsuarioAlteracao</div>
+                                }
+                            </td>
+                            <td>
+                                @if (doc.EhInterna)
+                                {
+                                    <span style="font-size:12px;color:#94a3b8;">Interna: só a equipe e a IA</span>
+                                }
+                                else if (doc.Publicado == "S")
+                                {
+                                    <div style="display:flex;align-items:center;gap:6px;">
+                                        <span style="font-size:12px;color:#64748b;word-break:break-all;">@EvolutCRM.Services.DocumentacaoService.UrlPublica(doc)</span>
+                                        <button class="docs-btn" style="padding:4px 8px;flex-shrink:0;" title="Copiar link público"
+                                                @onclick="() => CopiarLink(doc)">🔗 Copiar</button>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span style="font-size:12px;color:#94a3b8;">Rascunho: sem link público</span>
+                                }
+                            </td>
                             <td>
                                 <div class="docs-row-actions">
-                                    <button class="docs-btn" @onclick="async () => await AbrirCliente(doc)">Ver</button>
+                                    <button class="docs-btn" @onclick="async () => await AbrirCliente(doc)"
+                                            title="@(doc.Publicado == "S" && !doc.EhInterna ? "Abre o link público" : "Abre uma pré-visualização para a equipe (link válido por 12 horas)")">
+                                        @(doc.Publicado == "S" && !doc.EhInterna ? "Ver" : "Pré-visualizar")
+                                    </button>
                                     <button class="docs-btn" @onclick="() => Editar(doc.Codigo)">Editar</button>
                                     <button class="docs-btn" style="color:#b91c1c; border-color:#fecaca;"
                                             @onclick="() => ExcluirAsync(doc)">
@@ -288,57 +339,58 @@
             </table>
         </div>
     }
+
+    @if (TotalPaginas > 1)
+    {
+        <div style="display:flex; align-items:center; justify-content:space-between;
+            margin-top:14px; gap:10px; flex-wrap:wrap;">
+
+            <span style="font-size:12px; color:#64748b; font-weight:600;">
+                Mostrando @(((paginaAtual - 1) * itensPorPagina) + 1)–@(Math.Min(paginaAtual * itensPorPagina, TotalFiltrado))
+                de @TotalFiltrado documentação(ões)
+            </span>
+
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+
+                <button class="docs-btn"
+                        disabled="@(paginaAtual == 1)"
+                        @onclick="() => paginaAtual = 1">
+                    «
+                </button>
+
+                <button class="docs-btn"
+                        disabled="@(paginaAtual == 1)"
+                        @onclick="() => paginaAtual--">
+                    ‹ Anterior
+                </button>
+
+                @for (int p = Math.Max(1, paginaAtual - 2);
+                          p <= Math.Min(TotalPaginas, paginaAtual + 2); p++)
+                {
+                    var pagina = p;
+                    <button class="docs-btn @(pagina == paginaAtual ? "primary" : "")"
+                            @onclick="() => paginaAtual = pagina">
+                        @pagina
+                    </button>
+                }
+
+                <button class="docs-btn"
+                        disabled="@(paginaAtual == TotalPaginas)"
+                        @onclick="() => paginaAtual++">
+                    Próxima ›
+                </button>
+
+                <button class="docs-btn"
+                        disabled="@(paginaAtual == TotalPaginas)"
+                        @onclick="() => paginaAtual = TotalPaginas">
+                    »
+                </button>
+
+            </div>
+        </div>
+    }
 </div>
 
-@if (TotalPaginas > 1)
-{
-    <div style="display:flex; align-items:center; justify-content:space-between;
-        margin-top:14px; gap:10px; flex-wrap:wrap;">
-
-        <span style="font-size:12px; color:#64748b; font-weight:600;">
-            Mostrando @(((paginaAtual - 1) * itensPorPagina) + 1)–@(Math.Min(paginaAtual * itensPorPagina, TotalFiltrado))
-            de @TotalFiltrado documentação(ões)
-        </span>
-
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-
-            <button class="docs-btn"
-                    disabled="@(paginaAtual == 1)"
-                    @onclick="() => paginaAtual = 1">
-                «
-            </button>
-
-            <button class="docs-btn"
-                    disabled="@(paginaAtual == 1)"
-                    @onclick="() => paginaAtual--">
-                ‹ Anterior
-            </button>
-
-            @for (int p = Math.Max(1, paginaAtual - 2);
-                      p <= Math.Min(TotalPaginas, paginaAtual + 2); p++)
-            {
-                var pagina = p;
-                <button class="docs-btn @(pagina == paginaAtual ? "primary" : "")"
-                        @onclick="() => paginaAtual = pagina">
-                    @pagina
-                </button>
-            }
-
-            <button class="docs-btn"
-                    disabled="@(paginaAtual == TotalPaginas)"
-                    @onclick="() => paginaAtual++">
-                Próxima ›
-            </button>
-
-            <button class="docs-btn"
-                    disabled="@(paginaAtual == TotalPaginas)"
-                    @onclick="() => paginaAtual = TotalPaginas">
-                »
-            </button>
-
-        </div>
-    </div>
-}
 
 @code {
     private List<DocumentacaoTutorialModel> documentacoes = new();
@@ -361,6 +413,13 @@
         set { _filtroPublicado = value; paginaAtual = 1; }
     }
 
+    private string _filtroVisibilidade = "";
+    private string FiltroVisibilidade
+    {
+        get => _filtroVisibilidade;
+        set { _filtroVisibilidade = value; paginaAtual = 1; }
+    }
+
     private string _filtroSistema = "";
     private string FiltroSistema
     {
@@ -372,10 +431,15 @@
         documentacoes.Where(x =>
             (string.IsNullOrWhiteSpace(_filtroPublicado) || x.Publicado == _filtroPublicado) &&
             (string.IsNullOrWhiteSpace(_filtroSistema) || x.Sistema == _filtroSistema) &&
+            (string.IsNullOrWhiteSpace(_filtroVisibilidade) || x.Visibilidade == _filtroVisibilidade) &&
             (string.IsNullOrWhiteSpace(busca) ||
-             x.Titulo.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
-             x.Descricao.Contains(busca, StringComparison.OrdinalIgnoreCase) ||
-             x.Categoria.Contains(busca, StringComparison.OrdinalIgnoreCase)));
+             Contem(x.Titulo, busca) || Contem(x.Descricao, busca) || Contem(x.Categoria, busca)));
+
+    /// <summary>Contém, ignorando maiúsculas e acentos ("configuracao" acha "Configuração").</summary>
+    private static bool Contem(string? texto, string termo) =>
+        !string.IsNullOrEmpty(texto) &&
+        System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(texto, termo.Trim(),
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
 
     private int TotalFiltrado => DocumentacoesFiltradas.Count();
     private int TotalPaginas => (int)Math.Ceiling(TotalFiltrado / (double)itensPorPagina);
@@ -385,25 +449,81 @@
             .Skip((paginaAtual - 1) * itensPorPagina)
             .Take(itensPorPagina);
 
+    private string? _erro;
+    private bool _abaAtiva = true;
+
     protected override async Task OnInitializedAsync()
     {
+        Abas.OnMudanca += AoMudarAba;
         await CarregarAsync();
     }
 
-    private async Task CarregarAsync()
+    /// <summary>
+    /// A aba da lista fica aberta enquanto você edita em outras abas.
+    /// Quando ela volta a ficar ativa, recarrega para mostrar o que foi criado, editado ou excluído.
+    /// </summary>
+    private void AoMudarAba()
     {
-        carregando = true;
-        paginaAtual = 1;
-        documentacoes = await DocumentacaoService.ListarAsync(UserState.CurrentCompanyId);
-        carregando = false;
+        var ativaAgora = Abas.RotaAtiva == "documentacoes";
+        if (ativaAgora && !_abaAtiva)
+            _ = InvokeAsync(async () =>
+            {
+                await CarregarAsync(manterPagina: true);
+                StateHasChanged();
+            });
+        _abaAtiva = ativaAgora;
+    }
+
+    public void Dispose() => Abas.OnMudanca -= AoMudarAba;
+
+    private async Task CarregarAsync(bool manterPagina = false)
+    {
+        // ao recarregar, mantém a lista na tela (sem piscar "Carregando...")
+        carregando = documentacoes.Count == 0;
+        _erro = null;
+        try
+        {
+            documentacoes = await DocumentacaoService.ListarAsync(UserState.CurrentCompanyId);
+            if (!manterPagina) paginaAtual = 1;
+            else if (paginaAtual > Math.Max(1, TotalPaginas)) paginaAtual = Math.Max(1, TotalPaginas);
+        }
+        catch (Exception ex)
+        {
+            _erro = "Não foi possível carregar as documentações agora.";
+            EvolutCRM.Services.LogHelper.Log($"[DOC] Erro ao listar documentações: {ex.Message}");
+        }
+        finally
+        {
+            carregando = false;
+        }
     }
 
     private void NovaDocumentacao() => Nav.NavigateTo("/documentacoes/novo");
+    private void NovaInterna() => Nav.NavigateTo("/documentacoes/novo?interna=1");
     private void Editar(int codigo) => Nav.NavigateTo($"/documentacoes/{codigo}");
+
+    private async Task CopiarLink(DocumentacaoTutorialModel doc)
+    {
+        var url = Nav.BaseUri.TrimEnd('/') + EvolutCRM.Services.DocumentacaoService.UrlPublica(doc);
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", url);
+            await JS.InvokeVoidAsync("crmToast", "Link copiado: " + url, "success");
+        }
+        catch
+        {
+            // navegador sem permissão de área de transferência: mostra o link para copiar à mão
+            await JS.InvokeVoidAsync("prompt", "Copie o link:", url);
+        }
+    }
 
     private async Task AbrirCliente(DocumentacaoTutorialModel doc)
     {
-        await JS.InvokeVoidAsync("open", $"/curso-tutorial/{UserState.CurrentCompanyId}/{doc.Slug}", "_blank");
+        // Publicada: link público. Rascunho: pré-visualização (o link público não mostra rascunho).
+        var url = doc.Publicado == "S" && !doc.EhInterna
+            ? EvolutCRM.Services.DocumentacaoService.UrlPublica(doc)
+            : DocumentacaoService.UrlPrevia(doc);
+        await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
     private static string ObterInicial(string texto)
@@ -417,7 +537,15 @@
 
         if (!confirmar) return;
 
-        await DocumentacaoService.ExcluirAsync(doc.Codigo, UserState.CurrentCompanyId);
-        await CarregarAsync();
+        try
+        {
+            await DocumentacaoService.ExcluirAsync(doc.Codigo, UserState.CurrentCompanyId);
+            Abas.Fechar($"documentacoes/{doc.Codigo}");   // fecha o editor dela, se estiver aberto
+            await CarregarAsync(manterPagina: true);
+        }
+        catch (Exception ex)
+        {
+            _erro = $"Não foi possível excluir \"{doc.Titulo}\": {ex.Message}";
+        }
     }
 }

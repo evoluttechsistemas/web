@@ -1,0 +1,213 @@
+@using EvolutCRM.Services
+@implements IDisposable
+@inject IaUsoService IaUso
+@inject AdminService AdminService
+@inject UserState UserState
+@inject IJSRuntime JS
+
+@* Gasto da IA e saldo estimado de crédito da OpenAI (só para administradores).
+   Amarelo a partir de US$ 2,00 e vermelho a partir de US$ 1,00. *@
+
+@if (_admin && _resumo != null)
+{
+    <div class="iac">
+        <button type="button" class="iac-pilula iac-@_resumo.Estado" title="Crédito da IA (estimado)" @onclick="Alternar">
+            <span class="iac-ponto"></span>
+            <span class="iac-rot">IA</span>
+            <span class="iac-valor">
+                @(_resumo.SaldoEstimado is decimal s ? Usd(s) : "informar saldo")
+            </span>
+        </button>
+
+        @if (_aberto)
+        {
+            <div class="iac-fundo" @onclick="Fechar"></div>
+            <div class="iac-painel" role="dialog">
+                <div class="iac-topo">
+                    <div>
+                        <div class="iac-titulo">Crédito da IA</div>
+                        <div class="iac-sub">OpenAI · valores estimados pelo HELP</div>
+                    </div>
+                    <span class="iac-selo iac-selo-@_resumo.Estado">@TextoEstado(_resumo.Estado)</span>
+                </div>
+
+                <div class="iac-saldo iac-saldo-@_resumo.Estado">
+                    <span>Saldo estimado</span>
+                    <strong>@(_resumo.SaldoEstimado is decimal se ? Usd(se) : "—")</strong>
+                    @if (_resumo.InformadoEm is DateTime em)
+                    {
+                        <small>
+                            @Usd(_resumo.SaldoInformado ?? 0) informado em @em.ToString("dd/MM HH:mm") por @_resumo.InformadoPor
+                            · gasto desde então @Usd(_resumo.GastoDesdeSaldo)
+                        </small>
+                    }
+                    else
+                    {
+                        <small>Informe abaixo o saldo que aparece no painel da OpenAI.</small>
+                    }
+                </div>
+
+                <div class="iac-grade">
+                    <div><span>Hoje</span><strong>@Usd(_resumo.GastoHoje)</strong><small>@_resumo.ChamadasHoje chamada(s)</small></div>
+                    <div><span>Este mês</span><strong>@Usd(_resumo.GastoMes)</strong><small>desde o dia 1º</small></div>
+                </div>
+
+                @if (_resumo.PorModeloHoje.Any())
+                {
+                    <div class="iac-secao">Hoje por modelo</div>
+                    <div class="iac-lista">
+                        @foreach (var m in _resumo.PorModeloHoje)
+                        {
+                            <div class="iac-linha">
+                                <span>@m.Modelo</span>
+                                <span class="iac-dim">@m.Chamadas×</span>
+                                <strong>@Usd(m.CustoUsd)</strong>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="iac-secao">Travas das rotinas automáticas (hoje)</div>
+                <div class="iac-travas">
+                    @foreach (var t in LimiteDiarioIa.Resumo().Split(" | ", StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        <span>@t</span>
+                    }
+                </div>
+
+                <div class="iac-secao">Atualizar saldo</div>
+                <div class="iac-form">
+                    <div class="iac-moeda">
+                        <span>US$</span>
+                        <input id="iac-saldo" type="number" min="0" step="0.01" placeholder="Saldo no painel da OpenAI"
+                               value="@_novoSaldo" @oninput="e => _novoSaldo = e.Value?.ToString()" />
+                    </div>
+                    <button type="button" class="iac-salvar" @onclick="SalvarSaldo" disabled="@_salvando">
+                        @(_salvando ? "Salvando..." : "Salvar")
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(_erro))
+                {
+                    <div class="iac-erro">@_erro</div>
+                }
+                <div class="iac-nota">
+                    Sempre que colocar crédito na OpenAI, informe aqui o saldo novo. Transcrição de áudio do WhatsApp não entra na conta.
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private bool _admin;
+    private bool _aberto;
+    private bool _salvando;
+    private string? _novoSaldo;
+    private string? _erro;
+    private string _estadoAnterior = "";
+    private IaUsoService.Resumo? _resumo;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var i = 0; i < 100 && !UserState.IsReady; i++) await Task.Delay(50);
+        if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser)) return;
+
+        try
+        {
+            _admin = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser.Trim().ToUpperInvariant(), "ADMIN_ACESSAR");
+        }
+        catch { _admin = false; }
+        if (!_admin) return;
+
+        await AtualizarAsync(avisar: false);
+        _ = LoopAsync();
+    }
+
+    private async Task LoopAsync()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(_cts.Token))
+                await InvokeAsync(() => AtualizarAsync(avisar: true));
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task AtualizarAsync(bool avisar)
+    {
+        try
+        {
+            _resumo = await IaUso.ObterResumoAsync();
+            var estado = _resumo.Estado;
+
+            // Avisa uma vez quando piora (ok → atenção → crítico)
+            if (avisar && estado != _estadoAnterior && (estado == "atencao" || estado == "critico"))
+            {
+                var msg = estado == "critico"
+                    ? $"🔴 Crédito da IA crítico: {Usd(_resumo.SaldoEstimado ?? 0)}. A IA vai parar em breve; coloque crédito na OpenAI."
+                    : $"🟡 Crédito da IA baixo: {Usd(_resumo.SaldoEstimado ?? 0)}.";
+                try { await JS.InvokeVoidAsync("crmToast", msg, estado == "critico" ? "danger" : "warning"); } catch { }
+            }
+            _estadoAnterior = estado;
+            StateHasChanged();
+        }
+        catch { /* tabela ainda não criada ou banco fora: tenta no próximo ciclo */ }
+    }
+
+    private async Task Alternar()
+    {
+        _aberto = !_aberto;
+        _erro = null;
+        if (_aberto) await AtualizarAsync(avisar: false);
+    }
+
+    private void Fechar() => _aberto = false;
+
+    private async Task SalvarSaldo()
+    {
+        _erro = null;
+        if (!decimal.TryParse(_novoSaldo, System.Globalization.NumberStyles.Any,
+                              System.Globalization.CultureInfo.InvariantCulture, out var v) || v < 0 || v > 100000)
+        {
+            _erro = "Digite o saldo em dólares, por exemplo 18.50.";
+            return;
+        }
+
+        _salvando = true;
+        try
+        {
+            await IaUso.InformarSaldoAsync(v, UserState.CurrentUser ?? "");
+            _novoSaldo = null;
+            _estadoAnterior = "";
+            await AtualizarAsync(avisar: false);
+        }
+        catch (Exception ex)
+        {
+            _erro = "Não foi possível salvar: " + ex.Message;
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+
+    private static string Usd(decimal v) =>
+        "US$ " + v.ToString(v < 1 && v > -1 && v != 0 ? "0.000" : "0.00", new System.Globalization.CultureInfo("pt-BR"));
+
+    private static string TextoEstado(string e) => e switch
+    {
+        "critico" => "Crítico",
+        "atencao" => "Atenção",
+        "ok" => "Normal",
+        _ => "Sem saldo informado"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _timer?.Dispose();
+    }
+}

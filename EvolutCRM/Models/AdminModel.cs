@@ -104,27 +104,11 @@
             }
         }
 
-        private int DiasAtrasoComJuros
-        {
-            get
-            {
-                int dias = DiasAtraso - 2;
-                return dias > 0 ? dias : 0;
-            }
-        }
+        // Multa de 2% + juros de 2% ao dia a partir do 3º dia de atraso (regra em RegraAtraso)
+        public decimal ValorMulta => RegraAtraso.Multa(Valor ?? 0m, DiasAtraso);
+        public decimal ValorJuros => RegraAtraso.Juros(Valor ?? 0m, DiasAtraso);
 
-        public decimal ValorComJuros
-        {
-            get
-            {
-                var valor = Valor ?? 0m;
-                if (DiasAtrasoComJuros <= 0)
-                    return valor;
-
-                decimal juros = valor * (2m / 30m) * DiasAtrasoComJuros / 100m;
-                return Math.Round(valor + juros, 2);
-            }
-        }
+        public decimal ValorComJuros => RegraAtraso.ValorAtualizado(Valor ?? 0m, DiasAtraso);
     }
 
     public class ContaBancariaDto
@@ -174,26 +158,11 @@
 
         public int DiasAtraso => (DateTime.Today - DataVencimento.Date).Days;
 
-        private int DiasAtrasoComJuros
-        {
-            get
-            {
-                int dias = DiasAtraso - 2;
-                return dias > 0 ? dias : 0;
-            }
-        }
+        // Multa de 2% + juros de 2% ao dia a partir do 3º dia de atraso (regra em RegraAtraso)
+        public decimal ValorMulta => RegraAtraso.Multa(Valor, DiasAtraso);
+        public decimal ValorJuros => RegraAtraso.Juros(Valor, DiasAtraso);
 
-        public decimal ValorComJuros
-        {
-            get
-            {
-                if (DiasAtrasoComJuros <= 0)
-                    return Valor;
-
-                decimal juros = Valor * (2m / 30m) * DiasAtrasoComJuros / 100m;
-                return Math.Round(Valor + juros, 2);
-            }
-        }
+        public decimal ValorComJuros => RegraAtraso.ValorAtualizado(Valor, DiasAtraso);
     }
 
     public class MercadoPagoConfigDto
@@ -214,5 +183,38 @@
         public string CodCliente { get; set; } = "";
         public string IpOrigem { get; set; } = "";
         public DateTime DataHora { get; set; }
+    }
+
+    /// <summary>Tipo de conta do contas a receber (CodTipoConta / NomeTipoConta).</summary>
+    public class TipoContaReceberDto
+    {
+        public int Codigo { get; set; }
+        public string Nome { get; set; } = "";
+    }
+
+    /// <summary>Uma parcela do lançamento rápido (prévia editável antes de salvar).</summary>
+    public class ParcelaLancamentoDto
+    {
+        public int Numero { get; set; }
+        public DateTime Vencimento { get; set; }
+        public decimal Valor { get; set; }
+    }
+
+    public static class RegraAtraso
+    {
+        public const int DiasCarencia = 2;
+        public const decimal MultaPercentual = 2m;   // 2% uma vez
+        public const decimal JurosPorDia = 2m;       // 2% ao dia (2% ao mês pro rata seria 2m / 30m)
+
+        public static int DiasComJuros(int diasAtraso) => Math.Max(0, diasAtraso - DiasCarencia);
+
+        public static decimal Multa(decimal valor, int diasAtraso) =>
+            DiasComJuros(diasAtraso) > 0 ? Math.Round(valor * MultaPercentual / 100m, 2) : 0m;
+
+        public static decimal Juros(decimal valor, int diasAtraso) =>
+            Math.Round(valor * JurosPorDia / 100m * DiasComJuros(diasAtraso), 2);
+
+        public static decimal ValorAtualizado(decimal valor, int diasAtraso) =>
+            valor + Multa(valor, diasAtraso) + Juros(valor, diasAtraso);
     }
 }

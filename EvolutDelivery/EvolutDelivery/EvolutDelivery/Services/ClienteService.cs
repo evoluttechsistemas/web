@@ -69,6 +69,27 @@ WHERE REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefone, ''), '(', ''), ')', ''), 
             string cpfCnpj,
             Endereco endereco)
         {
+            // Se mesmo assim outro sistema (ex.: ERP) gravar o mesmo código, tenta de novo
+            for (int tentativa = 1; ; tentativa++)
+            {
+                try
+                {
+                    return await CriarClienteDeliveryInternoAsync(nome, telefone, email, cpfCnpj, endereco);
+                }
+                catch (SqlException ex) when ((ex.Number == 2627 || ex.Number == 2601) && tentativa < 3)
+                {
+                    await Task.Delay(50 * tentativa);
+                }
+            }
+        }
+
+        private async Task<int> CriarClienteDeliveryInternoAsync(
+            string nome,
+            string telefone,
+            string email,
+            string cpfCnpj,
+            Endereco endereco)
+        {
             using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
 
@@ -77,7 +98,9 @@ WHERE REPLACE(REPLACE(REPLACE(REPLACE(ISNULL(Telefone, ''), '(', ''), ')', ''), 
             try
             {
                 // GERA NOVO CÓDIGO
-                var sqlCodigo = @"SELECT ISNULL(MAX(Codigo), 0) + 1 FROM ClienteAFV";
+                // UPDLOCK + HOLDLOCK: trava a faixa até o COMMIT, então dois pedidos
+                // simultâneos não conseguem pegar o mesmo código.
+                var sqlCodigo = @"SELECT ISNULL(MAX(Codigo), 0) + 1 FROM ClienteAFV WITH (UPDLOCK, HOLDLOCK)";
 
                 int novoCodigo;
                 using (var cmdCodigo = new SqlCommand(sqlCodigo, conn, tran))
@@ -138,6 +161,88 @@ VALUES
                 tran.Rollback();
                 throw;
             }
+        }
+
+        // =========================================================
+        // ADMIN: RESUMO E LISTAGEM DE CLIENTES DA EMPRESA LOGADA
+        // =========================================================
+        public async Task<(int TotalClientes, int ClientesComPedido, int ClientesComEmail)> ObterResumoAdminAsync(int codEmp, string cnpjEmpresa)
+        {
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+SELECT
+    (SELECT COUNT(1) FROM ClienteAFV WHERE CNPJ = @CNPJ) AS TotalClientes,
+    (SELECT COUNT(DISTINCT CodCliente) FROM PedidoDelivery WHERE CodEmp = @CodEmp) AS ClientesComPedido,
+    (SELECT COUNT(1) FROM ClienteAFV WHERE CNPJ = @CNPJ AND LTRIM(RTRIM(ISNULL(Email, ''))) <> '') AS ClientesComEmail";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@CNPJ", cnpjEmpresa ?? "");
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return (0, 0, 0);
+
+            return (GetInt(reader, "TotalClientes"), GetInt(reader, "ClientesComPedido"), GetInt(reader, "ClientesComEmail"));
+        }
+
+        public async Task<List<Cliente>> ListarClientesAdminAsync(int codEmp, string cnpjEmpresa, string? busca, int limite = 300)
+        {
+            var lista = new List<Cliente>();
+            busca = (busca ?? "").Trim();
+
+            using var conn = new SqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            var sql = @"
+SELECT TOP (@Limite)
+    c.Codigo,
+    c.Nome,
+    c.Telefone,
+    c.Email,
+    ISNULL(t.TotalPedidos, 0) AS TotalPedidos,
+    ISNULL(t.TotalGasto, 0) AS TotalGasto
+FROM ClienteAFV c
+LEFT JOIN
+(
+    SELECT
+        CodCliente,
+        COUNT(1) AS TotalPedidos,
+        SUM(CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(Status, '')))) IN ('CANCELADO', 'R', 'REP', 'REPROVADO')
+                 THEN 0 ELSE ValorTotal END) AS TotalGasto
+    FROM PedidoDelivery
+    WHERE CodEmp = @CodEmp
+    GROUP BY CodCliente
+) t ON t.CodCliente = c.Codigo
+WHERE c.CNPJ = @CNPJ
+  AND (@Busca = '' OR c.Nome LIKE @BuscaLike OR c.Telefone LIKE @BuscaLike)
+ORDER BY ISNULL(t.TotalPedidos, 0) DESC, c.Nome";
+
+            using var cmd = new SqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@Limite", Math.Clamp(limite, 1, 1000));
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+            cmd.Parameters.AddWithValue("@CNPJ", cnpjEmpresa ?? "");
+            cmd.Parameters.AddWithValue("@Busca", busca);
+            cmd.Parameters.AddWithValue("@BuscaLike", "%" + busca + "%");
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                lista.Add(new Cliente
+                {
+                    Codigo = GetInt(reader, "Codigo"),
+                    CodEmp = codEmp,
+                    Nome = reader["Nome"]?.ToString() ?? "",
+                    Telefone = reader["Telefone"]?.ToString() ?? "",
+                    Email = reader["Email"]?.ToString() ?? "",
+                    TotalPedidos = GetInt(reader, "TotalPedidos"),
+                    TotalGasto = reader["TotalGasto"] == DBNull.Value ? 0 : Convert.ToDecimal(reader["TotalGasto"])
+                });
+            }
+
+            return lista;
         }
 
         // =========================================================

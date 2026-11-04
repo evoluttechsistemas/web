@@ -2,13 +2,103 @@
 @rendermode InteractiveServer
 @layout AdminLayout
 @using EvolutDelivery.Services
+@inject ILogger<AdminDashboard> Logger
 @inject PedidoService PedidoService
+@inject LojaStatusService LojaStatusService
+@inject IJSRuntime JS
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
+@using EvolutDelivery.Helpers
+@using Microsoft.AspNetCore.Components.Authorization
 
 <PageTitle>Dashboard - Admin</PageTitle>
 
 <style>
+    /* ===== STATUS DA LOJA ===== */
+    .loja-status {
+        background: white;
+        border-radius: 14px;
+        padding: 20px 22px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        border-left: 6px solid #16a34a;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+        .loja-status.fechada {
+            border-left-color: #dc2626;
+            background: #fffafa;
+        }
+
+    .loja-status-titulo {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 4px;
+    }
+
+    .loja-status-sub {
+        font-size: .88rem;
+        color: #64748b;
+    }
+
+    .loja-status-data {
+        font-size: .78rem;
+        color: #94a3b8;
+        margin-top: 6px;
+    }
+
+    .loja-status-acoes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        flex: 1 1 360px;
+        justify-content: flex-end;
+    }
+
+        .loja-status-acoes input {
+            flex: 1 1 240px;
+            min-width: 0;
+            padding: 11px 14px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: .9rem;
+            outline: none;
+        }
+
+            .loja-status-acoes input:focus {
+                border-color: #2563eb;
+            }
+
+    .btn-loja {
+        border: none;
+        border-radius: 10px;
+        padding: 12px 20px;
+        font-weight: 800;
+        font-size: .92rem;
+        cursor: pointer;
+        color: #fff;
+        white-space: nowrap;
+    }
+
+        .btn-loja.fechar {
+            background: #dc2626;
+        }
+
+        .btn-loja.abrir {
+            background: #16a34a;
+        }
+
+        .btn-loja:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+
     .dashboard-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -76,18 +166,72 @@
 
 <h2 style="margin-bottom:24px;">📈 Dashboard Geral</h2>
 
+@if (!string.IsNullOrWhiteSpace(mensagemErro))
+{
+    <div style="background:#fef2f2; color:#dc2626; padding:16px; border-radius:12px; margin-bottom:16px; font-weight:600;">
+        @mensagemErro
+    </div>
+}
+
+@if (statusCarregado)
+{
+    <div class="loja-status @(lojaFechada ? "fechada" : "")">
+        <div>
+            <div class="loja-status-titulo">@(lojaFechada ? "🔒 Loja FECHADA" : "🟢 Loja ABERTA")</div>
+            <div class="loja-status-sub">
+                @(lojaFechada
+                    ? "Os clientes veem a loja, mas não conseguem fazer pedidos."
+                    : "Os clientes estão fazendo pedidos normalmente.")
+            </div>
+            @if (alteradoEm != null)
+            {
+                <div class="loja-status-data">
+                    Alterado em @alteradoEm.Value.ToString("dd/MM/yyyy HH:mm")@(string.IsNullOrWhiteSpace(alteradoPor) ? "" : $" por {alteradoPor}")
+                </div>
+            }
+            @if (!tabelaStatusExiste)
+            {
+                <div class="loja-status-data" style="color:#b45309;font-weight:600;">
+                    Para usar esta opção, rode o script Database/StatusLoja.sql no banco.
+                </div>
+            }
+        </div>
+
+        <div class="loja-status-acoes">
+            <input type="text"
+                   maxlength="@LojaStatusService.MaxMensagem"
+                   placeholder="Mensagem para os clientes (opcional). Ex.: Voltamos amanhã às 8h"
+                   @bind="mensagemFechada"
+                   disabled="@(!tabelaStatusExiste || salvandoStatus)" />
+
+            @if (lojaFechada)
+            {
+                <button class="btn-loja abrir" @onclick="AbrirLoja" disabled="@(!tabelaStatusExiste || salvandoStatus)">
+                    Abrir loja
+                </button>
+            }
+            else
+            {
+                <button class="btn-loja fechar" @onclick="FecharLoja" disabled="@(!tabelaStatusExiste || salvandoStatus)">
+                    Fechar loja
+                </button>
+            }
+        </div>
+    </div>
+}
+
 <div class="dashboard-grid">
 
     <div class="stat-card">
         <h3>📦 Pedidos Hoje</h3>
         <div class="number">@totalPedidosHoje</div>
-        <div class="change">+12% vs ontem</div>
+        <div class="change">@ComparacaoOntem(totalPedidosHoje, totalPedidosOntem)</div>
     </div>
 
     <div class="stat-card success">
         <h3>💰 Faturamento Hoje</h3>
         <div class="number">R$ @faturamentoHoje.ToString("N2")</div>
-        <div class="change">+8% vs ontem</div>
+        <div class="change">@ComparacaoOntem(faturamentoHoje, faturamentoOntem)</div>
     </div>
 
     <div class="stat-card warning">
@@ -115,28 +259,129 @@
 </div>
 
 @code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
     private int totalPedidosHoje = 0;
+    private int totalPedidosOntem = 0;
     private decimal faturamentoHoje = 0;
+    private decimal faturamentoOntem = 0;
     private int pedidosPendentes = 0;
     private int pedidosEmEntrega = 0;
+    private string mensagemErro = "";
+
+    // ===== STATUS DA LOJA =====
+    private int codEmpLogada = 0;
+    private string usuarioLogado = "";
+    private bool statusCarregado = false;
+    private bool tabelaStatusExiste = true;
+    private bool lojaFechada = false;
+    private string mensagemFechada = "";
+    private DateTime? alteradoEm;
+    private string alteradoPor = "";
+    private bool salvandoStatus = false;
+
+    private async Task CarregarStatusLojaAsync()
+    {
+        var status = await LojaStatusService.ObterAsync(codEmpLogada);
+        tabelaStatusExiste = status.TabelaExiste;
+        lojaFechada = status.Fechada;
+        mensagemFechada = status.Mensagem;
+        alteradoEm = status.AlteradoEm;
+        alteradoPor = status.AlteradoPor;
+        statusCarregado = true;
+    }
+
+    private async Task FecharLoja()
+    {
+        var ok = await JS.InvokeAsync<bool>("confirm",
+            "Fechar a loja agora? Os clientes não vão conseguir fazer pedidos até você abrir de novo.");
+        if (!ok) return;
+
+        await SalvarStatusAsync(true);
+    }
+
+    private async Task AbrirLoja()
+    {
+        await SalvarStatusAsync(false);
+    }
+
+    private async Task SalvarStatusAsync(bool fechar)
+    {
+        salvandoStatus = true;
+        try
+        {
+            await LojaStatusService.DefinirAsync(codEmpLogada, fechar, fechar ? mensagemFechada : "", usuarioLogado);
+            await CarregarStatusLojaAsync();
+        }
+        catch (Exception ex)
+        {
+            mensagemErro = "Não foi possível alterar o status da loja.";
+            Logger.LogError(ex, "Erro ao alterar o status da loja {CodEmp}", codEmpLogada);
+        }
+        finally
+        {
+            salvandoStatus = false;
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            var estatisticas = await PedidoService.ObterEstatisticasAsync(1, DateTime.Today);
-            
-            totalPedidosHoje = estatisticas.Values.Sum();
-            pedidosPendentes = estatisticas.GetValueOrDefault("Pendentes", 0);
-            pedidosEmEntrega = estatisticas.GetValueOrDefault("EmEntrega", 0);
+            var user = (await AuthState).User;
+            if (!EmpresaLogadaHelper.TryObter(user, out var codEmp, out _))
+            {
+                mensagemErro = "Sessão inválida. Saia e faça login novamente.";
+                return;
+            }
 
-            // Calcular faturamento (exemplo)
-            var pedidos = await PedidoService.ListarPedidosAsync(1, dataInicio: DateTime.Today);
-            faturamentoHoje = pedidos.Sum(p => p.ValorTotal);
+            codEmpLogada = codEmp;
+            usuarioLogado = user.Identity?.Name ?? "";
+
+            try
+            {
+                await CarregarStatusLojaAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Erro ao carregar o status da loja {CodEmp}", codEmp);
+            }
+
+            var hoje = DateTime.Today;
+            var ontem = hoje.AddDays(-1);
+
+            var pedidosHoje = await PedidoService.ListarPedidosAsync(codEmp, dataInicio: hoje);
+            var pedidosOntem = await PedidoService.ListarPedidosAsync(codEmp, dataInicio: ontem, dataFim: hoje.AddTicks(-1));
+
+            totalPedidosHoje = pedidosHoje.Count;
+            totalPedidosOntem = pedidosOntem.Count;
+
+            faturamentoHoje = pedidosHoje.Where(p => !Cancelado(p.Status)).Sum(p => p.ValorTotal);
+            faturamentoOntem = pedidosOntem.Where(p => !Cancelado(p.Status)).Sum(p => p.ValorTotal);
+
+            pedidosPendentes = pedidosHoje.Count(p => StatusEh(p.Status, "PENDENTE", "P"));
+            pedidosEmEntrega = pedidosHoje.Count(p => StatusEh(p.Status, "SAIU_ENTREGA"));
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Erro ao carregar dashboard: {ex.Message}");
+            mensagemErro = "Erro ao carregar o dashboard.";
+            Logger.LogError(ex, "Erro ao carregar o dashboard");
         }
+    }
+
+    private static bool StatusEh(string? status, params string[] valores) =>
+        valores.Contains((status ?? "").Trim().ToUpperInvariant());
+
+    private static bool Cancelado(string? status) =>
+        StatusEh(status, "CANCELADO", "R", "REP", "REPROVADO");
+
+    private static string ComparacaoOntem(decimal hoje, decimal ontem)
+    {
+        if (ontem <= 0)
+            return hoje > 0 ? "Sem pedidos ontem" : "Igual a ontem";
+
+        var variacao = (hoje - ontem) / ontem * 100m;
+        var sinal = variacao > 0 ? "+" : "";
+        return $"{sinal}{variacao:0}% vs ontem";
     }
 }

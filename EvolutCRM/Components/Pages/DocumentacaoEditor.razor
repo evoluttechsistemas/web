@@ -6,6 +6,8 @@
 @inject NavigationManager Nav
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
+@inject EvolutCRM.Abas.AbaService Abas
+@implements IAsyncDisposable
 
 @using Microsoft.JSInterop
 @using EvolutCRM.Models
@@ -338,6 +340,11 @@
         color: #1e293b;
         caret-color: #2563eb;
     }
+
+        /* Garante o cursor visível mesmo se um conteúdo colado trouxer outro caret-color */
+        .de-editor, .de-editor * {
+            caret-color: #2563eb !important;
+        }
 
         /* Typography in the editor */
         .de-editor h1 {
@@ -754,7 +761,17 @@
         }
 </style>
 
-<div class="de-root">
+@if (_erroCarga != null)
+{
+    <div style="max-width:560px;margin:80px auto;padding:28px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;text-align:center;font-family:inherit;">
+        <div style="font-size:2.4rem;margin-bottom:8px;">📄</div>
+        <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:8px;">@_erroCarga</div>
+        <button class="de-btn primary" style="margin-top:12px;" @onclick="Voltar">Voltar para Documentações</button>
+    </div>
+}
+else
+{
+<div class="de-root" data-de-sujo="@(MetaSujo ? "1" : "0")">
 
     <!-- Topbar -->
     <div class="de-topbar">
@@ -766,19 +783,30 @@
                    @bind:event="oninput"
                    @onblur="GerarSlugSeVazio" />
             <span class="de-badge @(tutorial.Publicado == "S" ? "pub" : "")">
-                @(tutorial.Publicado == "S" ? "Publicado" : "Rascunho")
+                @(tutorial.Publicado == "S" ? (tutorial.EhInterna ? "Liberada" : "Publicado") : "Rascunho")
             </span>
+            @if (tutorial.EhInterna)
+            {
+                <span class="de-badge" style="background:#fef3c7;color:#92400e;" title="Só a equipe e a IA veem. Não aparece na central de ajuda dos clientes.">🔒 Interna</span>
+            }
         </div>
         <div class="de-topbar-right">
             @if (!string.IsNullOrWhiteSpace(mensagem))
             {
                 <span class="de-alert @tipoMensagem" style="margin:0; padding:6px 10px;">@mensagem</span>
             }
+            @if (tutorial.Codigo > 0)
+            {
+                <button class="de-btn" @onclick="Visualizar"
+                        title="Abre a última versão salva, como o cliente vê (rascunho abre em pré-visualização)">
+                    👁 Visualizar
+                </button>
+            }
             <select class="de-select" @bind="tutorial.Publicado">
                 <option value="N">Rascunho</option>
-                <option value="S">Publicado</option>
+                <option value="S">@(tutorial.EhInterna ? "Liberada (a IA usa)" : "Publicado")</option>
             </select>
-            <button class="de-btn primary" disabled="@salvando" @onclick="SalvarAsync">
+            <button class="de-btn primary" disabled="@salvando" @onclick="SalvarAsync" title="Salvar (Ctrl+S)">
                 @(salvando ? "Salvando..." : "Salvar")
             </button>
         </div>
@@ -791,6 +819,25 @@
 
             <div class="de-sidebar-section">
                 <div class="de-sidebar-label">Metadados</div>
+
+                <div class="de-field">
+                    <div class="de-field-label">Visibilidade</div>
+                    <select class="de-input" @bind="tutorial.Visibilidade">
+                        <option value="P">Pública: clientes veem na central de ajuda</option>
+                        <option value="I">🔒 Interna: só a equipe e a IA</option>
+                    </select>
+                    @if (tutorial.EhInterna)
+                    {
+                        <div style="font-size:11px;color:#64748b;margin-top:4px;line-height:1.45;">
+                            Use para registrar como um problema foi resolvido. A IA usa nas sugestões
+                            quando estiver <b>Liberada</b>; o cliente nunca vê esta página.
+                            @if (tutorial.Sistema == "HELP")
+                            {
+                                <span style="color:#b45309;"><br />⚠ Documentações do sistema HELP não entram na base da IA. Para a IA usar, escolha EvolutTech.</span>
+                            }
+                        </div>
+                    }
+                </div>
 
                 <div class="de-field">
                     <div class="de-field-label">Categoria</div>
@@ -808,8 +855,14 @@
 
                 <div class="de-field">
                     <div class="de-field-label">Slug público</div>
-                    <input class="de-input" @bind="tutorial.Slug"
+                    <input class="de-input" @bind="tutorial.Slug" @bind:after="NormalizarSlugDigitado"
                            placeholder="como-abrir-ticket" />
+                    @if (tutorial.Publicado == "S" && !tutorial.EhInterna && !string.IsNullOrEmpty(_slugSalvo) && tutorial.Slug != _slugSalvo)
+                    {
+                        <div style="font-size:11px;color:#b45309;margin-top:4px;">
+                            ⚠ Mudar o slug muda o link público: links já enviados para clientes deixam de funcionar.
+                        </div>
+                    }
                 </div>
 
                 <div class="de-field">
@@ -818,29 +871,29 @@
                 </div>
 
                 <div class="de-field">
-                    <div class="de-field-label">Thumbnail de capa</div>
+                    <div class="de-field-label">Thumbnail de capa <span style="font-weight:400;color:#94a3b8;">(obrigatória para publicar documentação pública)</span></div>
                     <div class="de-thumb-preview" @onclick="TriggerThumbnailInput">
                         @if (!string.IsNullOrWhiteSpace(_thumbnailPreview))
                         {
                             <img src="@_thumbnailPreview" alt="Capa" />
                         }
-                        else if (tutorial.Codigo > 0 && tutorial.Thumbnail != null)
+                        else if (tutorial.Codigo > 0 && tutorial.CapaUrl != null)
                         {
-                            <img src="/api/thumbnail/@tutorial.Codigo" alt="Capa" />
+                            <img src="@tutorial.CapaUrl" alt="Capa" />
                         }
                         else
                         {
                             <span>🖼 Clique para enviar imagem</span>
                         }
                     </div>
-                    @if (!string.IsNullOrWhiteSpace(_thumbnailPreview) || tutorial.Thumbnail != null)
+                    @if (!string.IsNullOrWhiteSpace(_thumbnailPreview) || tutorial.CapaUrl != null)
                     {
                         <div class="de-thumb-actions">
                             <button type="button" class="de-thumb-btn" @onclick="TriggerThumbnailInput">Trocar</button>
                             <button type="button" class="de-thumb-btn danger" @onclick="RemoverThumbnail">Remover</button>
                         </div>
                     }
-                    <InputFile id="thumb-input" OnChange="OnThumbnailSelecionada"
+                    <InputFile id="@($"thumb-input-{_editorId}")" OnChange="OnThumbnailSelecionada"
                                accept="image/png,image/jpeg,image/webp,image/gif"
                                style="display:none" />
                 </div>
@@ -952,7 +1005,7 @@
                     💡 Destaque
                 </button>
 
-                <InputFile id="img-input" OnChange="OnImagemSelecionada"
+                <InputFile id="@($"img-input-{_editorId}")" OnChange="OnImagemSelecionada"
                            accept="image/png,image/jpeg,image/webp,image/gif"
                            style="display:none" />
             </div>
@@ -961,7 +1014,7 @@
             <div class="de-content-scroll">
                 <div class="de-content-inner">
                     <div @key="@("editor-fixo")"
-                         id="de-editor"
+                         id="@_editorId"
                          class="de-editor"
                          contenteditable="true"
                          spellcheck="true"
@@ -973,6 +1026,7 @@
         </div>
     </div>
 </div>
+}
 
 <!-- Modal inserir vídeo -->
 @if (modalVideoAberto)
@@ -997,15 +1051,66 @@
 <script>
     window._deRef = null;
 
-    window.deInit = function (dotnetRef) {
+    // As abas do HELP mantêm as páginas ocultas no DOM (visibility: hidden).
+    // Por isso pode existir mais de um editor ao mesmo tempo: sempre usar o da aba visível.
+    window.deEditor = function () {
+        const visivel = (el) => el && !el.closest('.aba-painel.oculta') && el.offsetParent !== null;
+        const ativo = document.activeElement?.closest?.('.de-editor');
+        if (visivel(ativo)) return ativo;
+        return Array.from(document.querySelectorAll('.de-editor')).find(visivel)
+            || document.querySelector('.de-editor');
+    };
+
+    // Limpa o HTML colado: mantém cores/negrito/tabelas, remove o que pode esconder
+    // o cursor, travar a edição ou quebrar o layout (caret-color, user-select,
+    // contenteditable, position, larguras fixas, scripts etc.).
+    window.deLimparHtmlColado = function (html) {
+        const ini = html.indexOf('<!--StartFragment-->');
+        const fim = html.indexOf('<!--EndFragment-->');
+        if (ini !== -1 && fim > ini) html = html.substring(ini + 20, fim);
+
+        const tpl = document.createElement('template');
+        tpl.innerHTML = html;
+        tpl.content.querySelectorAll('script,style,meta,link,title,iframe,object,embed,button,input,select,textarea,form')
+            .forEach(n => n.remove());
+
+        const propsProibidas = /^(caret-color|user-select|-webkit-user-select|-webkit-user-modify|pointer-events|visibility|position|z-index|opacity|top|left|right|bottom|width|min-width|max-width|height|min-height|max-height|float|transform|cursor|outline.*)$/i;
+        const atributosProibidos = ['contenteditable', 'id', 'tabindex', 'draggable', 'spellcheck', 'class'];
+
+        tpl.content.querySelectorAll('*').forEach(el => {
+            Array.from(el.attributes).forEach(a => {
+                const nome = a.name.toLowerCase();
+                if (nome.startsWith('on') || atributosProibidos.includes(nome)) el.removeAttribute(a.name);
+            });
+            if (el.style && el.style.length) {
+                for (let i = el.style.length - 1; i >= 0; i--) {
+                    const prop = el.style[i];
+                    if (propsProibidas.test(prop)) el.style.removeProperty(prop);
+                }
+                if (!(el.getAttribute('style') || '').trim()) el.removeAttribute('style');
+            }
+        });
+        return tpl.innerHTML;
+    };
+
+    window.deInit = function (dotnetRef, editorId) {
         window._deRef = dotnetRef;
-        const editor = document.getElementById('de-editor');
+        const editor = document.getElementById(editorId);
         if (!editor) return;
+        editor._deRef = dotnetRef;
+        if (editor.dataset.deIniciado === '1') return;   // não duplicar eventos
+        editor.dataset.deIniciado = '1';
+
+        // Se a aba ficou oculta com o foco ainda no editor, não deixa digitar "às cegas"
+        editor.addEventListener('keydown', (e) => {
+            if (editor.closest('.aba-painel.oculta')) { e.preventDefault(); editor.blur(); }
+        });
 
         // Placeholder
         editor.addEventListener('input', () => {
             editor.classList.toggle('de-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
-            dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+            // Não envia o HTML ao servidor a cada tecla: o salvar lê o conteúdo direto do editor.
+            editor._deSujo = true;   // há alterações não salvas
         });
         editor.classList.toggle('de-placeholder', editor.innerHTML === '' || editor.innerHTML === '<br>');
 
@@ -1016,15 +1121,38 @@
                 if (item.type.startsWith('image/')) {
                     e.preventDefault();
                     const file = item.getAsFile();
+                    const sel = window.getSelection();
+                    const posicao = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
                     const reader = new FileReader();
                     reader.onload = async () => {
                         const base64 = reader.result.split(',')[1];
                         const url = await dotnetRef.invokeMethodAsync('SalvarImagemBase64JS', base64, item.type);
-                        if (url) window.deInsertImage(url);
+                        if (url) window.deInsertImage(url, '', posicao);
                     };
                     reader.readAsDataURL(file);
                     return;
                 }
+            }
+
+            const dados = e.clipboardData || e.originalEvent?.clipboardData;
+
+            // Código-fonte de uma página HTML inteira colado como texto
+            // (ex.: copiado do Bloco de Notas ou de um editor de código):
+            // renderiza a página em vez de colar as tags.
+            const texto = dados?.getData('text/plain') || '';
+            if (/^\s*(<!--[\s\S]*?-->\s*)*<(!doctype\s+html|html)[\s>]/i.test(texto)) {
+                e.preventDefault();
+                const pagina = new DOMParser().parseFromString(texto, 'text/html');
+                const raiz = pagina.getElementById('doc') || pagina.body;
+                document.execCommand('insertHTML', false, window.deLimparHtmlColado(raiz.innerHTML));
+                return;
+            }
+
+            // Texto/HTML colado: insere já limpo
+            const html = dados?.getData('text/html');
+            if (html) {
+                e.preventDefault();
+                document.execCommand('insertHTML', false, window.deLimparHtmlColado(html));
             }
         });
 
@@ -1085,7 +1213,7 @@
             { icon: '1.', label: 'Lista numerada', desc: 'Numerada', action: () => document.execCommand('insertOrderedList') },
             { icon: '💡', label: 'Destaque', desc: 'Caixa azul', action: () => window.deInsertCallout('info') },
             { icon: '⚠', label: 'Aviso', desc: 'Caixa amarela', action: () => window.deInsertCallout('warning') },
-            { icon: '🖼', label: 'Imagem', desc: 'Upload ou colar', action: () => document.getElementById('img-input').click() },
+            { icon: '🖼', label: 'Imagem', desc: 'Upload ou colar', action: () => document.getElementById('img-input-' + editorId)?.click() },
             { icon: '▶', label: 'Vídeo', desc: 'YouTube / Vimeo', action: () => dotnetRef.invokeMethodAsync('AbrirModalVideoJS') },
             { icon: '⊞', label: 'Tabela', desc: '3 colunas', action: () => window.deInsertTable() },
             { icon: '</>', label: 'Código', desc: 'Bloco de código', action: () => insertBlock('pre') },
@@ -1150,9 +1278,10 @@
             document.execCommand('formatBlock', false, tag);
         }
 
-        document.addEventListener('click', (e) => {
+        const fecharSlashAoClicarFora = (e) => {
             if (slashMenu && !slashMenu.contains(e.target)) removeSlash();
-        });
+        };
+        document.addEventListener('click', fecharSlashAoClicarFora);
 
         // Image selection / resize
         editor.addEventListener('click', (e) => {
@@ -1164,10 +1293,33 @@
             }
         });
 
-        document.addEventListener('click', (e) => {
+        const desmarcarImagens = (e) => {
             if (!e.target.closest('.de-img-wrap'))
                 editor.querySelectorAll('.de-img-wrap').forEach(w => w.classList.remove('selected'));
-        });
+        };
+        document.addEventListener('click', desmarcarImagens);
+
+        // Ctrl+S (ou Cmd+S): salva a documentação da aba visível
+        const atalhoSalvar = (e) => {
+            if (!(e.ctrlKey || e.metaKey) || (e.key || '').toLowerCase() !== 's') return;
+            if (!document.body.contains(editor) || editor.closest('.aba-painel.oculta')) return;
+            e.preventDefault();
+            // tira o foco do campo atual para o Blazor receber o último valor digitado (categoria, slug...)
+            const ativo = document.activeElement;
+            if (ativo && ativo !== editor && !editor.contains(ativo) && ativo.blur) ativo.blur();
+            setTimeout(() => dotnetRef.invokeMethodAsync('SalvarViaAtalho').catch(() => { }), 0);
+        };
+        document.addEventListener('keydown', atalhoSalvar);
+
+        // Chamado quando a aba do editor é fechada: solta os eventos da página e a referência ao .NET
+        editor._deLimpar = () => {
+            document.removeEventListener('click', fecharSlashAoClicarFora);
+            document.removeEventListener('click', desmarcarImagens);
+            document.removeEventListener('keydown', atalhoSalvar);
+            removeSlash();
+            editor._deRef = null;
+            if (window._deRef === dotnetRef) window._deRef = null;
+        };
 
         // Resize drag
         editor.addEventListener('mousedown', (e) => {
@@ -1186,11 +1338,34 @@
             const onUp = () => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
-                dotnetRef.invokeMethodAsync('OnEditorInput', editor.innerHTML);
+                editor._deSujo = true;   // imagem redimensionada
             };
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp);
         });
+    };
+
+    // Alterações não salvas
+    window.deEstaSujo = function (editorId) {
+        return !!document.getElementById(editorId)?._deSujo;
+    };
+    window.deMarcarSalvo = function (editorId) {
+        const el = document.getElementById(editorId);
+        if (el) el._deSujo = false;
+    };
+    // Fechar/recarregar o navegador com alguma documentação não salva: o navegador pergunta antes
+    if (!window._deAvisoSaida) {
+        window._deAvisoSaida = true;
+        window.addEventListener('beforeunload', (e) => {
+            const sujo = Array.from(document.querySelectorAll('.de-editor')).some(ed => ed._deSujo)
+                || document.querySelector('[data-de-sujo="1"]');
+            if (sujo) { e.preventDefault(); e.returnValue = ''; }
+        });
+    }
+
+    window.deDestroy = function (editorId) {
+        const el = document.getElementById(editorId);
+        if (el && el._deLimpar) el._deLimpar();
     };
 
     window._deContentBuffer = [];
@@ -1206,31 +1381,37 @@
     window.deSetContentFinalize = function() {
         const html = window._deContentBuffer.join('');
         window._deContentBuffer = [];
-        const el = document.getElementById('de-editor');
+        const el = window.deEditor();
         if (!el) return;
         el.innerHTML = html || '';
         el.classList.toggle('de-placeholder', !html || html === '<br>');
     };
 
     window.deSetContent = function (html) {
-        const el = document.getElementById('de-editor');
+        const el = window.deEditor();
         if (!el) return;
         el.innerHTML = html || '';
         el.classList.toggle('de-placeholder', !html || html === '<br>');
     };
 
-    window.deGetContent = function () {
-        return document.getElementById('de-editor')?.innerHTML || '';
+    window.deGetContent = function (editorId) {
+        const el = editorId ? document.getElementById(editorId) : window.deEditor();
+        return el?.innerHTML || '';
     };
 
     window.deExecCmd = function (cmd, value) {
-        document.getElementById('de-editor')?.focus();
+        window.deEditor()?.focus();
         document.execCommand(cmd, false, value ?? null);
     };
 
-    window.deInsertImage = function (url, altText) {
-        const editor = document.getElementById('de-editor');
+    window.deInsertImage = function (url, altText, posicao) {
+        const editor = window.deEditor();
         editor.focus();
+        if (posicao && editor.contains(posicao.startContainer)) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(posicao);
+        }
         const wrap = document.createElement('div');
         wrap.className = 'de-img-wrap';
         wrap.contentEditable = 'false';
@@ -1257,7 +1438,7 @@
         const btnDel = document.createElement('button');
         btnDel.className = 'de-img-ctrl-btn';
         btnDel.textContent = '✕ Remover';
-        btnDel.onclick = () => { wrap.remove(); window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML); };
+        btnDel.onclick = () => { wrap.remove(); };
 
         ctrls.appendChild(btnFloat);
         ctrls.appendChild(btnDel);
@@ -1266,11 +1447,10 @@
         wrap.appendChild(handle);
 
         document.execCommand('insertHTML', false, wrap.outerHTML);
-        window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
     };
 
     window.deInsertVideo = function (url) {
-        const editor = document.getElementById('de-editor');
+        const editor = window.deEditor();
         editor.focus();
         let html = '';
 
@@ -1301,11 +1481,10 @@
         }
 
         document.execCommand('insertHTML', false, html);
-        window._deRef?.invokeMethodAsync('OnEditorInput', editor.innerHTML);
     };
 
     window.deInsertBlockquote = function () {
-        document.getElementById('de-editor')?.focus();
+        window.deEditor()?.focus();
         document.execCommand('formatBlock', false, 'blockquote');
     };
 
@@ -1315,7 +1494,7 @@
                 <span class="de-callout-icon">${icons[type] || '💡'}</span>
                 <div contenteditable="true" style="flex:1;outline:none;">Escreva aqui o destaque...</div>
             </div><p><br></p>`;
-        document.getElementById('de-editor')?.focus();
+        window.deEditor()?.focus();
         document.execCommand('insertHTML', false, html);
     };
 
@@ -1328,7 +1507,7 @@
                     <tr><td>Dado</td><td>Dado</td><td>Dado</td></tr>
                 </tbody>
             </table></div><p><br></p>`;
-        document.getElementById('de-editor')?.focus();
+        window.deEditor()?.focus();
         document.execCommand('insertHTML', false, html);
     };
 
@@ -1341,6 +1520,8 @@
 @code {
 
     private string _htmlInicial = ""; // só para renderização inicial
+    // Id único por instância: as abas mantêm várias páginas no DOM ao mesmo tempo
+    private readonly string _editorId = "de-editor-" + Guid.NewGuid().ToString("N")[..8];
     [Parameter] public int Codigo { get; set; }
     private string _thumbnailPreview = "";
     private DocumentacaoTutorialModel tutorial = new();
@@ -1351,6 +1532,8 @@
     private string videoUrl = "";
     private string _htmlCorpo = "";
     private DotNetObjectReference<DocumentacaoEditor>? _dotnetRef;
+    private string? _erroCarga;     // documentação não encontrada / erro ao abrir
+    private string? _slugSalvo;     // slug gravado no banco (para avisar quando o link público muda)
 
     private const long MaxImagemBytes = 8 * 1024 * 1024;
 
@@ -1360,12 +1543,25 @@
     {
         if (Codigo > 0)
         {
-            var existente = await DocumentacaoService.BuscarAsync(Codigo, UserState.CurrentCompanyId);
-            if (existente != null)
+            try
             {
+                var existente = await DocumentacaoService.BuscarAsync(Codigo, UserState.CurrentCompanyId);
+                if (existente == null)
+                {
+                    // não abre um editor vazio (salvar ali criaria outra documentação)
+                    _erroCarga = $"A documentação #{Codigo} não foi encontrada. Ela pode ter sido excluída.";
+                    return;
+                }
                 tutorial = existente;
                 _htmlCorpo = BlocosParaHtml(tutorial.Blocos);
                 _htmlInicial = _htmlCorpo; // só na primeira carga
+                _slugSalvo = tutorial.Slug;
+            }
+            catch (Exception ex)
+            {
+                _erroCarga = "Não foi possível abrir a documentação agora. Tente novamente em instantes.";
+                EvolutCRM.Services.LogHelper.Log($"[DOC] Erro ao abrir a documentação #{Codigo}: {ex.Message}");
+                return;
             }
         }
 
@@ -1373,6 +1569,16 @@
         {
             tutorial.CodEmp = UserState.CurrentCompanyId;
             tutorial.UsuarioCriacao = UserState.CurrentUser ?? "";
+
+            // Aberto pela Curadoria da IA ou pelo "Nova interna": já vem como interna e com o título
+            var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(Nav.Uri).Query);
+            if (query.TryGetValue("interna", out var interna) && interna.ToString() == "1")
+            {
+                tutorial.Visibilidade = "I";
+                if (string.IsNullOrWhiteSpace(tutorial.Categoria)) tutorial.Categoria = "Como resolvemos";
+            }
+            if (query.TryGetValue("titulo", out var titulo) && !string.IsNullOrWhiteSpace(titulo))
+                tutorial.Titulo = titulo.ToString();
         }
     }
 
@@ -1381,7 +1587,16 @@
         if (!firstRender) return;
 
         _dotnetRef = DotNetObjectReference.Create(this);
-        await JS.InvokeVoidAsync("deInit", _dotnetRef);
+        await JS.InvokeVoidAsync("deInit", _dotnetRef, _editorId);
+
+        if (_erroCarga == null)
+        {
+            _snapshotSalvo = SnapshotMeta();
+            // fechar a aba com alterações não salvas pede confirmação
+            _rotaAba = Codigo > 0 ? $"documentacoes/{Codigo}" : "documentacoes/novo";
+            _guardaFechamento = PodeFecharSemPerderAsync;
+            Abas.RegistrarGuardaFechamento(_rotaAba, _guardaFechamento);
+        }
 
         // Remove essa linha:
         // _htmlInicial = "";
@@ -1395,21 +1610,46 @@
         return chunks.ToArray();
     }
 
-    public void Dispose() => _dotnetRef?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        // A aba foi fechada: solta os eventos da página no navegador e a referência ao componente
+        if (_rotaAba != null && _guardaFechamento != null)
+            Abas.RemoverGuardaFechamento(_rotaAba, _guardaFechamento);
+        _ctsMensagem?.Cancel();
+        try { await JS.InvokeVoidAsync("deDestroy", _editorId); }
+        catch { /* navegador já desconectado */ }
+        _dotnetRef?.Dispose();
+        _dotnetRef = null;
+    }
+
+    private void NormalizarSlugDigitado()
+        => tutorial.Slug = EvolutCRM.Services.DocumentacaoService.NormalizarSlug(tutorial.Slug);
+
+    private async Task Visualizar()
+    {
+        if (tutorial.Codigo <= 0) return;
+        var url = tutorial.Publicado == "S" && !tutorial.EhInterna && _slugSalvo == tutorial.Slug
+            ? EvolutCRM.Services.DocumentacaoService.UrlPublica(tutorial)
+            : DocumentacaoService.UrlPrevia(tutorial);
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
 
     // ── Chamados pelo JS ────────────────────────────────────────────────────
 
     [JSInvokable]
-    public void OnEditorInput(string html)
+    public async Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
     {
-        _htmlCorpo = html;
-    }
-
-    [JSInvokable]
-    public Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
-    {
-        // Retorna direto como data URL — vai inline no HTML
-        return Task.FromResult<string?>($"data:{mimeType};base64,{base64}");
+        // Print colado (Ctrl+V): grava em arquivo e devolve a URL. O HTML guarda só o endereço.
+        try
+        {
+            var dados = Convert.FromBase64String(base64);
+            return await DocumentacaoService.SalvarImagemAsync(dados, mimeType, UserState.CurrentCompanyId);
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() => MostrarMensagem($"Erro ao salvar imagem: {ex.Message}", "error"));
+            return null;
+        }
     }
 
     [JSInvokable]
@@ -1456,7 +1696,7 @@
 
     private async Task TriggerImageInput()
     {
-        await JS.InvokeVoidAsync("deTriggerFile", "img-input");
+        await JS.InvokeVoidAsync("deTriggerFile", $"img-input-{_editorId}");
     }
 
     private async Task OnImagemSelecionada(InputFileChangeEventArgs e)
@@ -1475,15 +1715,19 @@
             return;
         }
 
-        // Converte para base64 inline
-        await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms);
-        var base64 = Convert.ToBase64String(ms.ToArray());
-        var mimeType = arquivo.ContentType;
-        var url = $"data:{mimeType};base64,{base64}";
-
-        await JS.InvokeVoidAsync("deInsertImage", url, arquivo.Name);
+        // Grava em arquivo; o HTML guarda só a URL
+        try
+        {
+            await using var stream = arquivo.OpenReadStream(MaxImagemBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            var url = await DocumentacaoService.SalvarImagemAsync(ms.ToArray(), arquivo.ContentType, UserState.CurrentCompanyId);
+            await JS.InvokeVoidAsync("deInsertImage", url, arquivo.Name);
+        }
+        catch (Exception ex)
+        {
+            MostrarMensagem($"Erro ao salvar imagem: {ex.Message}", "error");
+        }
     }
 
     
@@ -1509,12 +1753,12 @@
 
     private async Task SalvarAsync()
     {
-        if (salvando) return;
+        if (salvando || _erroCarga != null) return;
 
         mensagem = "";
         salvando = true;
 
-        var htmlAtual = await JS.InvokeAsync<string>("deGetContent");
+        var htmlAtual = await JS.InvokeAsync<string>("deGetContent", _editorId);
         _htmlCorpo = htmlAtual;
 
         tutorial.CodEmp = UserState.CurrentCompanyId;
@@ -1523,6 +1767,7 @@
         tutorial.UsuarioAlteracao = UserState.CurrentUser ?? tutorial.UsuarioCriacao;
 
         GerarSlugSeVazio();
+        tutorial.Slug = EvolutCRM.Services.DocumentacaoService.NormalizarSlug(tutorial.Slug);
 
         if (string.IsNullOrWhiteSpace(tutorial.Titulo) || string.IsNullOrWhiteSpace(tutorial.Slug))
         {
@@ -1530,9 +1775,38 @@
             salvando = false;
             return;
         }
-        if (tutorial.Thumbnail == null && string.IsNullOrWhiteSpace(_thumbnailPreview))
+
+        try
         {
-            MostrarMensagem("Informe a thumbnail de capa.", "error");
+            var outra = await DocumentacaoService.SlugEmUsoAsync(tutorial.Slug, tutorial.CodEmp, tutorial.Codigo);
+            if (outra != null)
+            {
+                MostrarMensagem($"O slug \"{tutorial.Slug}\" já é usado pela documentação \"{outra}\". Escolha outro.", "error");
+                salvando = false;
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarMensagem($"Erro ao validar o slug: {ex.Message}", "error");
+            salvando = false;
+            return;
+        }
+
+        // Publicada e com slug alterado: o link antigo deixa de funcionar
+        if (tutorial.Publicado == "S" && !tutorial.EhInterna && !string.IsNullOrEmpty(_slugSalvo) && tutorial.Slug != _slugSalvo)
+        {
+            var confirmou = await JS.InvokeAsync<bool>("confirm",
+                $"O link público vai mudar de \"{_slugSalvo}\" para \"{tutorial.Slug}\". Links já enviados para clientes deixam de funcionar. Continuar?");
+            if (!confirmou)
+            {
+                salvando = false;
+                return;
+            }
+        }
+        if (tutorial.Publicado == "S" && !tutorial.EhInterna && tutorial.CapaUrl == null && string.IsNullOrWhiteSpace(_thumbnailPreview))
+        {
+            MostrarMensagem("Para publicar, envie a capa (thumbnail). Rascunhos podem ser salvos sem capa.", "error");
             salvando = false;
             return;
         }
@@ -1542,13 +1816,34 @@
 
         try
         {
+            var eraNova = tutorial.Codigo == 0;
             var codigo = await DocumentacaoService.SalvarAsync(tutorial);
             tutorial.Codigo = codigo;
             Codigo = codigo;
+            _slugSalvo = tutorial.Slug;
+            _snapshotSalvo = SnapshotMeta();
+            try { await JS.InvokeVoidAsync("deMarcarSalvo", _editorId); } catch { }
+
+            if (eraNova)
+            {
+                // Abre a documentação salva na aba dela e fecha a aba "Nova documentação".
+                // Assim o próximo "Nova documentação" começa em branco.
+                Nav.NavigateTo($"/documentacoes/{codigo}", replace: true);
+                Abas.Fechar("documentacoes/novo");
+                return;
+            }
+
             MostrarMensagem("Documentação salva com sucesso.", "success");
 
-            if (!Nav.Uri.Contains($"/documentacoes/{codigo}", StringComparison.OrdinalIgnoreCase))
-                Nav.NavigateTo($"/documentacoes/{codigo}", replace: true);
+            // Se o conteúdo tinha imagens em base64 (ex.: colado de outro lugar), o salvar
+            // trocou por arquivos: atualiza o editor para ele também ficar leve.
+            var htmlGravado = tutorial.Blocos.FirstOrDefault()?.Conteudo;
+            if (htmlGravado != null && htmlGravado != _htmlCorpo)
+            {
+                _htmlCorpo = htmlGravado;
+                await JS.InvokeVoidAsync("deSetContent", htmlGravado);
+            }
+
         }
         catch (Exception ex)
         {
@@ -1664,31 +1959,76 @@
     private void GerarSlugSeVazio()
     {
         if (!string.IsNullOrWhiteSpace(tutorial.Slug) || string.IsNullOrWhiteSpace(tutorial.Titulo)) return;
-
-        tutorial.Slug = tutorial.Titulo
-            .ToLowerInvariant()
-            .Normalize(System.Text.NormalizationForm.FormD);
-
-        tutorial.Slug = new string(tutorial.Slug
-            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) !=
-                        System.Globalization.UnicodeCategory.NonSpacingMark)
-            .ToArray());
-
-        tutorial.Slug = System.Text.RegularExpressions.Regex.Replace(tutorial.Slug, "[^a-z0-9]+", "-").Trim('-');
+        tutorial.Slug = EvolutCRM.Services.DocumentacaoService.NormalizarSlug(tutorial.Titulo);
     }
 
     private void Voltar() => Nav.NavigateTo("/documentacoes");
 
+    private CancellationTokenSource? _ctsMensagem;
+
+    /// <summary>Mostra a mensagem no topo; some sozinha (sucesso em 4 s, erro em 10 s).</summary>
     private void MostrarMensagem(string texto, string tipo)
     {
         mensagem = texto;
         tipoMensagem = tipo;
         StateHasChanged();
+
+        _ctsMensagem?.Cancel();
+        var cts = _ctsMensagem = new CancellationTokenSource();
+        var espera = tipo == "success" ? 4000 : 10000;
+        _ = Task.Delay(espera, cts.Token).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            _ = InvokeAsync(() =>
+            {
+                if (mensagem == texto) { mensagem = ""; StateHasChanged(); }
+            });
+        }, TaskScheduler.Default);
+    }
+
+    // ── Alterações não salvas ──────────────────────────────────────────────
+
+    private string? _snapshotSalvo;
+    private string? _rotaAba;
+    private Func<Task<bool>>? _guardaFechamento;
+
+    /// <summary>Retrato dos campos da barra lateral/topo, para saber se mudaram desde o último salvar.</summary>
+    private string SnapshotMeta() => string.Join("\u001f",
+        tutorial.Titulo, tutorial.Categoria, tutorial.Sistema, tutorial.Slug, tutorial.Ordem,
+        tutorial.Descricao, tutorial.Publicado, tutorial.UrlThumbnail, tutorial.Visibilidade,
+        tutorial.Thumbnail?.Length ?? -1, _thumbnailPreview.Length);
+
+    private bool MetaSujo => _erroCarga == null && _snapshotSalvo != null && SnapshotMeta() != _snapshotSalvo;
+
+    private async Task<bool> TemAlteracoesAsync()
+    {
+        if (MetaSujo) return true;
+        try { return await JS.InvokeAsync<bool>("deEstaSujo", _editorId); }
+        catch { return false; }
+    }
+
+    /// <summary>Chamado antes de fechar a aba: com alterações não salvas, pergunta.</summary>
+    private async Task<bool> PodeFecharSemPerderAsync()
+    {
+        if (!await TemAlteracoesAsync()) return true;
+        var titulo = string.IsNullOrWhiteSpace(tutorial.Titulo) ? "esta documentação" : $"\"{tutorial.Titulo}\"";
+        return await JS.InvokeAsync<bool>("confirm",
+            $"Há alterações não salvas em {titulo}. Fechar mesmo assim e perder as alterações?");
+    }
+
+    [JSInvokable]
+    public async Task SalvarViaAtalho()
+    {
+        await InvokeAsync(async () =>
+        {
+            await SalvarAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task TriggerThumbnailInput()
     {
-        await JS.InvokeVoidAsync("deTriggerFile", "thumb-input");
+        await JS.InvokeVoidAsync("deTriggerFile", $"thumb-input-{_editorId}");
     }
 
     private async Task OnThumbnailSelecionada(InputFileChangeEventArgs e)

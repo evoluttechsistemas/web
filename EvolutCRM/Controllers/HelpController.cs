@@ -1,9 +1,13 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using EvolutCRM.Models;
 using EvolutCRM.Services;
 
 namespace EvolutCRM.Controllers
 {
+    // Exige login: aberto, qualquer um na internet podia chamar a IA (gpt-4.1) e gastar o crédito.
+    // O Card agora chama o AiService direto, sem passar por aqui.
+    [Authorize]
     [ApiController]
     [Route("api/help")]
     public class HelpController : ControllerBase

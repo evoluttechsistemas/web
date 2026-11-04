@@ -1,0 +1,12 @@
+﻿@inject NavigationManager Nav
+
+@code {
+    protected override void OnInitialized()
+    {
+        // Ex.: BaseUri = https://site/EvolutDelivery/  ->  pathBase = /EvolutDelivery
+        var pathBase = new Uri(Nav.BaseUri).AbsolutePath.TrimEnd('/');
+        var returnUrl = pathBase + "/" + Nav.ToBaseRelativePath(Nav.Uri);
+
+        Nav.NavigateTo($"login?ReturnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+    }
+}

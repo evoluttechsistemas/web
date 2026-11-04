@@ -8,6 +8,8 @@
 @inject EvolutCRM.Services.DocumentacaoService DocumentacaoService
 @inject EvolutCRM.Services.UserState UserState
 @inject NavigationManager Nav
+@inject PersistentComponentState EstadoPersistente
+@implements IDisposable
 
 @using EvolutCRM.Components.Layout
 @using EvolutCRM.Models
@@ -1235,6 +1237,22 @@
     }
 </style>
 
+<PageTitle>@TituloPagina</PageTitle>
+<HeadContent>
+    <meta name="description" content="@DescricaoPagina" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="@TituloPagina" />
+    <meta property="og:description" content="@DescricaoPagina" />
+    @if (ImagemPagina != null)
+    {
+        <meta property="og:image" content="@ImagemPagina" />
+    }
+    @if (_modoPrevia)
+    {
+        <meta name="robots" content="noindex, nofollow" />
+    }
+</HeadContent>
+
 <div class="ct-root">
 
     <header class="ct-topbar">
@@ -1264,6 +1282,13 @@
         </div>
     </header>
 
+    @if (!string.IsNullOrEmpty(_aviso))
+    {
+        <div style="max-width:1100px;margin:16px auto 0;padding:12px 16px;border-radius:10px;background:#fff7ed;border:1px solid #fdba74;color:#9a3412;font-size:14px;font-weight:600;">
+            @_aviso
+        </div>
+    }
+
     @if (carregando)
     {
         <div class="ct-loading">
@@ -1291,7 +1316,7 @@
                     <div class="ct-hero-stats">
                         <div class="ct-hero-stat"><strong>@todosOsTutoriais.Count</strong><span>Tutoriais</span></div>
                         <div class="ct-hero-stat"><strong>@categorias.Count</strong><span>Categorias</span></div>
-                        <div class="ct-hero-stat"><strong>100%</strong><span>Gratuito</span></div>
+                        <div class="ct-hero-stat"><strong>@UltimaAtualizacao</strong><span>Última atualização</span></div>
                     </div>
                 </div>
             </div>
@@ -1338,9 +1363,9 @@
                         var d = doc;
                         <div class="ct-card" @onclick="() => AbrirTutorial(d)">
                             <div class="ct-card-img">
-                                @if (d.Thumbnail != null)
+                                @if (d.CapaUrl != null)
                                 {
-                                    <img src="/api/thumbnail/@d.Codigo" alt="@d.Titulo" />
+                                    <img src="@d.CapaUrl" alt="@d.Titulo" loading="lazy" />
                                 }
                                 else
                                 {
@@ -1395,9 +1420,9 @@
                                 @onclick="() => Selecionar(idx)">
                             <span class="ct-lesson-idx">@(idx + 1)</span>
                             <span class="ct-lesson-thumb-mini">
-                                @if (item.Thumbnail != null)
+                                @if (item.CapaUrl != null)
                                 {
-                                    <img src="/api/thumbnail/@item.Codigo" alt="" />
+                                    <img src="@item.CapaUrl" alt="" loading="lazy" />
                                 }
                                 else
                                 {
@@ -1414,6 +1439,14 @@
             </aside>
 
             <main>
+                @if (_modoPrevia)
+                {
+                    <div style="margin:0 0 14px;padding:12px 16px;border-radius:10px;background:#eff6ff;border:1px solid #93c5fd;color:#1e3a8a;font-size:14px;">
+                        <strong>👁 Pré-visualização.</strong>
+                        @(Atual?.Publicado == "S" ? "Esta é a última versão salva." : "Esta documentação é um rascunho e ainda não está publicada para os clientes.")
+                        O link de pré-visualização vale por 12 horas.
+                    </div>
+                }
                 @if (Atual != null)
                 {
                     <article class="ct-article">
@@ -1421,9 +1454,9 @@
                             <div class="ct-read-fill" id="ct-read-fill"></div>
                         </div>
                         <div class="ct-cover">
-                            @if (Atual.Thumbnail != null)
+                            @if (Atual.CapaUrl != null)
                             {
-                                <img src="/api/thumbnail/@Atual.Codigo" alt="@Atual.Titulo" />
+                                <img src="@Atual.CapaUrl" alt="@Atual.Titulo" />
                             }
                             else
                             {
@@ -1439,25 +1472,22 @@
                                 <div class="ct-cover-title">@Atual.Titulo</div>
                             </div>
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(Atual.Descricao))
-                        {
-                            <div class="ct-article-header">
-                                <p class="ct-article-desc">@Atual.Descricao</p>
-                                <div class="ct-meta-row">
-                                    <span class="ct-meta-tag">📅 @Atual.DataHoraAlteracao.ToString("dd/MM/yyyy HH:mm")</span>
-                                    <span class="ct-meta-tag">📖 Aula @(indiceAtual + 1) de @tutoriaisCurso.Count</span>
-                                </div>
-                            </div>
-                        }
-                        <div class="ct-article-body">
-                            @foreach (var bloco in Atual.Blocos.OrderBy(x => x.Ordem))
+                        <div class="ct-article-header">
+                            @if (!string.IsNullOrWhiteSpace(Atual.Descricao))
                             {
-                                @if (!string.IsNullOrWhiteSpace(bloco.Conteudo))
-                                {
-                                    <div class="ct-rich">
-                                        @((MarkupString)PrepararHtmlSeguro(bloco.Conteudo))
-                                    </div>
-                                }
+                                <p class="ct-article-desc">@Atual.Descricao</p>
+                            }
+                            <div class="ct-meta-row">
+                                <span class="ct-meta-tag">📅 Atualizado em @Atual.DataHoraAlteracao.ToString("dd/MM/yyyy HH:mm")</span>
+                                <span class="ct-meta-tag">📖 Aula @(indiceAtual + 1) de @tutoriaisCurso.Count</span>
+                            </div>
+                        </div>
+                        <div class="ct-article-body">
+                            @foreach (var html in HtmlDaAula(Atual))
+                            {
+                                <div class="ct-rich">
+                                    @((MarkupString)html)
+                                </div>
                             }
                         </div>
                         <div class="ct-article-footer">
@@ -1496,6 +1526,10 @@
 @code {
     [Parameter] public int? CodEmp { get; set; }
     [Parameter] public string? Slug { get; set; }
+    [SupplyParameterFromQuery(Name = "previa")] public string? Previa { get; set; }
+
+    private bool _modoPrevia;     // aberto por link de pré-visualização (pode ser rascunho)
+    private string? _aviso;       // link não encontrado, pré-visualização vencida, erro ao carregar
 
     private List<DocumentacaoTutorialModel> todosOsTutoriais = new();
     private List<DocumentacaoTutorialModel> tutoriaisCurso = new();
@@ -1506,6 +1540,25 @@
     private string buscaGlobal = "";
     private string categoriaAtiva = "";
     private List<string> categorias = new();
+
+    // HTML já limpo de cada aula: o filtro roda uma vez por aula, não a cada atualização da tela
+    private readonly Dictionary<int, List<string>> _htmlSeguroPorAula = new();
+
+    // Pré-render: o que foi carregado no servidor é reaproveitado quando a página
+    // fica interativa, em vez de consultar o banco de novo.
+    private const string ChaveEstado = "curso-tutorial";
+    private PersistingComponentStateSubscription _assinaturaEstado;
+
+    private sealed class EstadoSalvo
+    {
+        public int CodEmp { get; set; }
+        public List<DocumentacaoTutorialModel> Todos { get; set; } = new();
+        public List<DocumentacaoTutorialModel> Curso { get; set; } = new();
+        public int Indice { get; set; }
+        public string Modo { get; set; } = "catalogo";
+        public bool Previa { get; set; }
+        public string? Aviso { get; set; }
+    }
 
     private DocumentacaoTutorialModel? Atual =>
         tutoriaisCurso.Count > 0
@@ -1523,24 +1576,135 @@
         todosOsTutoriais.Where(x =>
             (string.IsNullOrWhiteSpace(categoriaAtiva) || x.Categoria == categoriaAtiva) &&
             (string.IsNullOrWhiteSpace(buscaGlobal) ||
-             x.Titulo.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase) ||
-             x.Descricao.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase) ||
-             x.Categoria.Contains(buscaGlobal, StringComparison.OrdinalIgnoreCase)));
+             Contem(x.Titulo, buscaGlobal) || Contem(x.Descricao, buscaGlobal) || Contem(x.Categoria, buscaGlobal) ||
+             _achadosNoConteudo.Contains(x.Codigo)));
+
+    /// <summary>Contém, ignorando maiúsculas e acentos ("configuracao" acha "Configuração").</summary>
+    private static bool Contem(string? texto, string termo) =>
+        !string.IsNullOrEmpty(texto) &&
+        System.Globalization.CultureInfo.InvariantCulture.CompareInfo.IndexOf(texto, termo.Trim(),
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+
+    // ── Busca no texto dos tutoriais (no banco, com espera de 350 ms entre as teclas) ──
+    private HashSet<int> _achadosNoConteudo = new();
+    private CancellationTokenSource? _ctsBusca;
+
+    private async Task BuscarNoConteudoComEsperaAsync(string termo)
+    {
+        _ctsBusca?.Cancel();
+        termo = termo.Trim();
+        if (termo.Length < 3)
+        {
+            _achadosNoConteudo = new();
+            return;
+        }
+
+        var cts = _ctsBusca = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(350, cts.Token);
+            var achados = await DocumentacaoService.BuscarNoConteudoAsync(codEmpAtual, termo);
+            if (cts.IsCancellationRequested) return;
+            _achadosNoConteudo = achados;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException) { }
+        catch (Exception ex)
+        {
+            EvolutCRM.Services.LogHelper.Log($"[DOC] Erro na busca da central de ajuda: {ex.Message}");
+        }
+    }
+
+    // ── Título da aba / prévia do link compartilhado ──
+    private bool EmAula => modoVisualizacao == "curso" && string.IsNullOrWhiteSpace(buscaGlobal) && Atual != null;
+
+    private string TituloPagina => EmAula
+        ? $"{Atual!.Titulo} | Central de Ajuda EvolutTech"
+        : "Central de Ajuda | EvolutTech";
+
+    private string DescricaoPagina => EmAula && !string.IsNullOrWhiteSpace(Atual!.Descricao)
+        ? Atual.Descricao
+        : "Tutoriais e documentações para aproveitar ao máximo o sistema EvolutTech.";
+
+    private string? ImagemPagina
+    {
+        get
+        {
+            var capa = EmAula ? Atual!.CapaUrl : null;
+            if (string.IsNullOrEmpty(capa)) return null;
+            return capa.StartsWith("/") ? Nav.BaseUri.TrimEnd('/') + capa : capa;
+        }
+    }
+
+    private string UltimaAtualizacao => todosOsTutoriais.Count == 0
+        ? "—"
+        : todosOsTutoriais.Max(x => x.DataHoraAlteracao).ToString("dd/MM/yyyy");
 
     protected override async Task OnInitializedAsync()
     {
+        _assinaturaEstado = EstadoPersistente.RegisterOnPersisting(PersistirEstado);
+
         codEmpAtual = CodEmp.GetValueOrDefault() > 0
             ? CodEmp.Value
             : UserState.CurrentCompanyId;
 
-        todosOsTutoriais = await DocumentacaoService.ListarAsync(codEmpAtual, somentePublicados: true);
+        if (EstadoPersistente.TryTakeFromJson<EstadoSalvo>(ChaveEstado, out var salvo)
+            && salvo != null && salvo.CodEmp == codEmpAtual)
+        {
+            todosOsTutoriais = salvo.Todos;
+            tutoriaisCurso = salvo.Curso;
+            indiceAtual = salvo.Indice;
+            modoVisualizacao = salvo.Modo;
+            _modoPrevia = salvo.Previa;
+            _aviso = salvo.Aviso;
+            categorias = CalcularCategorias();
+            carregando = false;
+            return;
+        }
 
-        categorias = todosOsTutoriais
-            .Select(x => x.Categoria)
-            .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Distinct()
-            .OrderBy(c => c)
-            .ToList();
+        try
+        {
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            _aviso = "Não foi possível carregar os tutoriais agora. Tente novamente em instantes.";
+            EvolutCRM.Services.LogHelper.Log($"[DOC] Erro na central de ajuda (empresa {codEmpAtual}): {ex.Message}");
+        }
+
+        carregando = false;
+    }
+
+    private async Task CarregarAsync()
+    {
+        // Link de pré-visualização (gerado no HELP): mostra a documentação mesmo em rascunho
+        if (!string.IsNullOrWhiteSpace(Previa))
+        {
+            var previa = DocumentacaoService.LerTokenPrevia(Previa);
+            var doc = previa is { } p ? await DocumentacaoService.BuscarAsync(p.Codigo, p.CodEmp) : null;
+            if (doc != null)
+            {
+                codEmpAtual = doc.CodEmp;
+                doc.Thumbnail = doc.Thumbnail != null ? Array.Empty<byte>() : null;
+                _modoPrevia = true;
+                todosOsTutoriais = new() { doc };
+                tutoriaisCurso = new() { doc };
+                indiceAtual = 0;
+                modoVisualizacao = "curso";
+                categorias = CalcularCategorias();
+                return;
+            }
+            _aviso = "Este link de pré-visualização venceu ou não é válido. Gere outro no HELP (botão Visualizar).";
+        }
+
+        todosOsTutoriais = await DocumentacaoService.ListarAsync(codEmpAtual, somentePublicados: true);
+        categorias = CalcularCategorias();
+
+        if (!string.IsNullOrWhiteSpace(Slug) && _aviso == null
+            && !todosOsTutoriais.Any(x => x.Slug.Equals(Slug, StringComparison.OrdinalIgnoreCase)))
+        {
+            _aviso = "O tutorial deste link não foi encontrado ou ainda não foi publicado. Veja abaixo os tutoriais disponíveis.";
+        }
 
         if (!string.IsNullOrWhiteSpace(Slug))
         {
@@ -1568,8 +1732,49 @@
             tutoriaisCurso = todosOsTutoriais.ToList();
             modoVisualizacao = "catalogo";
         }
+    }
 
-        carregando = false;
+    private List<string> CalcularCategorias() => todosOsTutoriais
+        .Select(x => x.Categoria)
+        .Where(c => !string.IsNullOrWhiteSpace(c))
+        .Distinct()
+        .OrderBy(c => c)
+        .ToList();
+
+    private Task PersistirEstado()
+    {
+        EstadoPersistente.PersistAsJson(ChaveEstado, new EstadoSalvo
+        {
+            CodEmp = codEmpAtual,
+            Todos = todosOsTutoriais,
+            Curso = tutoriaisCurso,
+            Indice = indiceAtual,
+            Modo = modoVisualizacao,
+            Previa = _modoPrevia,
+            Aviso = _aviso
+        });
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _assinaturaEstado.Dispose();
+        _ctsBusca?.Cancel();
+    }
+
+    private List<string> HtmlDaAula(DocumentacaoTutorialModel aula)
+    {
+        if (!_htmlSeguroPorAula.TryGetValue(aula.Codigo, out var lista))
+        {
+            lista = aula.Blocos
+                .OrderBy(x => x.Ordem)
+                .Where(b => !string.IsNullOrWhiteSpace(b.Conteudo))
+                .Select(b => PrepararHtmlSeguro(b.Conteudo))
+                .ToList();
+            // só guarda depois que o conteúdo da aula foi carregado
+            if (aula.Blocos.Count > 0) _htmlSeguroPorAula[aula.Codigo] = lista;
+        }
+        return lista;
     }
 
     private async Task CarregarAulaAtual()
@@ -1578,9 +1783,23 @@
         var idx = Math.Clamp(indiceAtual, 0, tutoriaisCurso.Count - 1);
         if (tutoriaisCurso[idx].Blocos.Count == 0)
         {
-            tutoriaisCurso[idx] =
-                await DocumentacaoService.BuscarAsync(tutoriaisCurso[idx].Codigo, codEmpAtual)
-                ?? tutoriaisCurso[idx];
+            DocumentacaoTutorialModel? aula;
+            try
+            {
+                aula = await DocumentacaoService.BuscarAsync(tutoriaisCurso[idx].Codigo, codEmpAtual);
+            }
+            catch (Exception ex)
+            {
+                _aviso = "Não foi possível abrir este tutorial agora. Tente novamente em instantes.";
+                EvolutCRM.Services.LogHelper.Log($"[DOC] Erro ao abrir a aula #{tutoriaisCurso[idx].Codigo}: {ex.Message}");
+                return;
+            }
+            if (aula != null)
+            {
+                // a capa vem por arquivo ou /api/thumbnail; não precisa manter os bytes em memória
+                aula.Thumbnail = aula.Thumbnail != null ? Array.Empty<byte>() : null;
+                tutoriaisCurso[idx] = aula;
+            }
         }
     }
 
@@ -1633,6 +1852,7 @@
         buscaGlobal = e.Value?.ToString() ?? "";
         if (!string.IsNullOrWhiteSpace(buscaGlobal))
             modoVisualizacao = "catalogo";
+        _ = BuscarNoConteudoComEsperaAsync(buscaGlobal);
     }
 
     private static string PrepararHtmlSeguro(string conteudo)
@@ -1642,9 +1862,10 @@
         html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-img-controls"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-resize-handle"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         html = System.Text.RegularExpressions.Regex.Replace(html, @"<div class=""de-video-controls"">[\s\S]*?</div>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"<script[\s\S]*?</script>", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        html = System.Text.RegularExpressions.Regex.Replace(html, @"on\w+=""[^""]*""", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return html;
+        // Segurança: o HtmlSanitizer só deixa passar o que é permitido (texto, cores, tabelas,
+        // imagens, vídeos do YouTube/Vimeo). Remove scripts, eventos, links javascript:,
+        // iframes de outros sites, <style>, <meta>, formulários etc.
+        return EvolutCRM.Services.HtmlSeguro.Limpar(html);
     }
 
     private static string ObterInicial(string texto)

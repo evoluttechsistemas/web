@@ -43,5 +43,9 @@ namespace EvolutCRM.Models
         public string VideoFileName { get; set; } = "";
         public string Interno { get; set; } = "N";
 
+        // Agenda do ticket: quem finalizou e quando
+        public string? AgendaResolvidaPor { get; set; }
+        public DateTime? AgendaResolvidaEm { get; set; }
+
     }
 }

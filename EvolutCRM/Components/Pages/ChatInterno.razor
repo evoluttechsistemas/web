@@ -1999,64 +1999,6 @@
     </div>
 }
 
-<script>
-    window.enablePasteImageChatInterno = function(textareaId, dotnetRef) {
-        const el = document.getElementById(textareaId);
-
-        if (!el) {
-            console.warn('[PasteChat] textarea ainda não existe:', textareaId);
-            return false;
-        }
-
-        if (el.dataset.pasteImageChatBound === '1') {
-            return true;
-        }
-
-        el.dataset.pasteImageChatBound = '1';
-
-        console.log('[PasteChat] textarea encontrado, registrando paste');
-
-        el.addEventListener('paste', async function(e) {
-            if (!e.clipboardData) return;
-
-            const items = e.clipboardData.items;
-
-            for (const item of items) {
-                if (item.type && item.type.startsWith('image/')) {
-
-                    e.preventDefault();
-
-                    const file = item.getAsFile();
-                    if (!file) return;
-
-                    const reader = new FileReader();
-
-                    reader.onload = async function(event) {
-                        try {
-                            const dataUrl = event.target.result;
-
-                            await dotnetRef.invokeMethodAsync(
-                                'ReceberImagemColada',
-                                dataUrl,
-                                file.name || 'print.png'
-                            );
-
-                            console.log('[PasteChat] imagem enviada ao Blazor');
-                        }
-                        catch (err) {
-                            console.error('[PasteChat] Erro:', err);
-                        }
-                    };
-
-                    reader.readAsDataURL(file);
-                    return;
-                }
-            }
-        });
-
-        return true;
-    };
-</script>
 
 @code {
     [Parameter] public bool IsVisible { get; set; } = true;
@@ -2775,16 +2717,18 @@
         {
             try
             {
+                // Função em wwwroot/js/paste-image.js (carregado em todas as páginas)
                 await JS.InvokeAsync<bool>(
-                    "enablePasteImageChatInterno",
+                    "ligarColarImagemChat",
                     "ct-textarea",
-                    _dotNetRef
+                    _dotNetRef,
+                    nameof(ReceberImagemColada)
                 );
             }
-            catch
+            catch (Exception ex)
             {
-                // textarea ou JS ainda não disponível;
-                // tenta novamente no próximo render
+                // textarea ainda não existe ou circuito caindo: tenta de novo no próximo render
+                Console.WriteLine($"[ChatInterno] Não ligou o colar imagem: {ex.Message}");
             }
         }
     }

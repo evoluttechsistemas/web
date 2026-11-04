@@ -1,7 +1,10 @@
-@page "/delivery/{slug}/pedido-confirmado/{CodPedido:int}"
+@page "/delivery/{slug}/pedido-confirmado/{Token}"
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
+@using EvolutDelivery.Helpers
 @inject PedidoService PedidoService
+@inject EmpresaService EmpresaService
+@inject PedidoLinkService PedidoLink
 @inject NavigationManager Nav
 
 <PageTitle>Pedido Confirmado!</PageTitle>
@@ -117,12 +120,24 @@
     </div>
 
     <div class="sucesso-card">
+        @if (carregando)
+        {
+            <p>Carregando pedido...</p>
+        }
+        else if (pedido == null)
+        {
+            <h1>Pedido não encontrado</h1>
+            <p>Este link é inválido ou expirou. Consulte seus pedidos em "Meus pedidos".</p>
+        }
+        else
+        {
         <h1>Pedido Confirmado!</h1>
         <p>Seu pedido foi recebido com sucesso</p>
 
         <div class="pedido-numero">
-            #@CodPedido
+            #@pedido.Codigo
         </div>
+        }
 
         @if (pedido != null)
         {
@@ -141,7 +156,7 @@
 
                 <div class="linha">
                     <strong>📞 Telefone:</strong>
-                    <span>@pedido.TelefoneCliente</span>
+                    <span>@PrivacidadeHelper.MascararTelefone(pedido.TelefoneCliente)</span>
                 </div>
 
                 @if (pedido.TipoEntrega == "ENTREGA")
@@ -153,7 +168,7 @@
 
                     <div class="linha">
                         <strong>📍 Endereço:</strong>
-                        <span>@pedido.EnderecoCompleto</span>
+                        <span>@PrivacidadeHelper.MascararEnderecoCompleto(pedido.EnderecoCompleto)</span>
                     </div>
                 }
                 else
@@ -191,9 +206,12 @@
         }
 
         <div class="btn-container">
-            <button class="btn btn-primary" @onclick="RastrearPedido">
-                📍 Acompanhar Pedido
-            </button>
+            @if (pedido != null)
+            {
+                <button class="btn btn-primary" @onclick="RastrearPedido">
+                    📍 Acompanhar Pedido
+                </button>
+            }
 
             <button class="btn btn-secondary" @onclick="VoltarInicio">
                 🏠 Voltar ao Início
@@ -209,13 +227,45 @@
     public string? slug { get; set; }
 
     [Parameter]
-    public int CodPedido { get; set; }
+    public string? Token { get; set; }
 
     private Pedido? pedido;
+    private bool carregando = true;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        pedido = await PedidoService.BuscarPorIdAsync(CodPedido);
+        carregando = true;
+        pedido = null;
+
+        try
+        {
+            // 1) Token precisa ser válido (não alterado e não expirado)
+            if (!PedidoLink.TryLerToken(Token, out var codPedido, out var codEmpToken))
+                return;
+
+            // 2) O token precisa ser da mesma loja do slug
+            if (string.IsNullOrWhiteSpace(slug))
+                return;
+
+            var empresa = await EmpresaService.BuscarPorSlugAsync(slug);
+            if (empresa == null || empresa.Codigo != codEmpToken)
+                return;
+
+            // 3) O pedido precisa pertencer a essa empresa
+            var encontrado = await PedidoService.BuscarPorIdAsync(codPedido);
+            if (encontrado == null || encontrado.CodEmp != empresa.Codigo)
+                return;
+
+            pedido = encontrado;
+        }
+        catch
+        {
+            pedido = null;
+        }
+        finally
+        {
+            carregando = false;
+        }
     }
 
     private void RastrearPedido()

@@ -1,0 +1,1186 @@
+﻿@page "/admin/ia-curadoria"
+@using EvolutCRM.Services
+@inject IaCuradoriaService Curadoria
+@inject AdminService AdminService
+@inject UserState UserState
+@inject NavigationManager Nav
+@inject IaGabaritoService Gabarito
+@inject IaGabaritoJob GabaritoJob
+@implements IDisposable
+
+@* ═══════════════════════════════════════════════════════════════════════
+   Curadoria da IA (Configurações › Inteligência artificial)
+   1) Casos para revisar: o que a IA aprendeu dos tickets sem o cliente confirmar,
+      e os casos suspensos por 2 ou mais 👎. Aprovar / Corrigir / Descartar.
+   2) Lacunas: perguntas sem base, reescritas pelo atendente ou com 👎, agrupadas por assunto.
+   3) Documentações que aparecem em sugestões com 👎.
+   ═══════════════════════════════════════════════════════════════════════ *@
+
+<style>
+    .cia {
+        --cia-ink: #0f172a; --cia-ink2: #334155; --cia-muted: #526079; --cia-line: #e2e8f0;
+        --cia-bg: #f4f6fb; --cia-card: #fff; --cia-blue: #1d4ed8; --cia-blue-50: #eff6ff;
+        --cia-green: #15803d; --cia-green-50: #ecfdf3; --cia-amber: #92400e; --cia-amber-50: #fff7e6;
+        --cia-red: #b91c1c; --cia-red-50: #fef2f2;
+        font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--cia-ink);
+        background: var(--cia-bg); min-height: 100%; padding: 24px; box-sizing: border-box;
+    }
+    .cia h1 { margin: 0; font-size: 22px; font-weight: 700; }
+    .cia-sub { margin: 4px 0 0; font-size: 14px; color: var(--cia-muted); max-width: 820px; line-height: 1.5; }
+    .cia-abas { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0 16px; border-bottom: 1px solid var(--cia-line); }
+    .cia-aba { border: 0; background: transparent; padding: 10px 14px; font: 600 14px 'IBM Plex Sans', sans-serif;
+        color: var(--cia-muted); border-bottom: 2px solid transparent; cursor: pointer; display: inline-flex; gap: 8px; align-items: center; }
+    .cia-aba[aria-selected="true"] { color: var(--cia-blue); border-bottom-color: var(--cia-blue); }
+    .cia-cont { min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 10px; background: #e6edf7;
+        color: #22324d; font-size: 12px; display: inline-grid; place-items: center; }
+    .cia-cont.alerta { background: var(--cia-amber-50); color: var(--cia-amber); }
+    .cia-barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; }
+    .cia-barra select, .cia-barra input { height: 36px; border: 1px solid #d5dde9; border-radius: 8px; padding: 0 10px;
+        font: 400 14px 'IBM Plex Sans', sans-serif; background: #fff; color: var(--cia-ink); }
+    .cia-barra input { min-width: 240px; flex: 1; max-width: 380px; }
+    .cia-btn { height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #d5dde9; background: #fff; color: var(--cia-ink2);
+        font: 600 13px 'IBM Plex Sans', sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .cia-btn:hover { background: #f8fafc; }
+    .cia-btn:disabled { opacity: .6; cursor: default; }
+    .cia-btn.prim { background: var(--cia-blue); border-color: var(--cia-blue); color: #fff; }
+    .cia-btn.ok { background: var(--cia-green); border-color: var(--cia-green); color: #fff; }
+    .cia-btn.perigo { color: var(--cia-red); border-color: #f3c4c4; }
+    .cia-lista { display: flex; flex-direction: column; gap: 12px; }
+    .cia-card { background: var(--cia-card); border: 1px solid var(--cia-line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .cia-card.suspenso { border-color: #f5d0a0; }
+    .cia-topo { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+    .cia-titulo { font-size: 15px; font-weight: 600; margin: 0; }
+    .cia-selos { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cia-selo { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f4f8; color: #3c4a60; }
+    .cia-selo.ambar { background: var(--cia-amber-50); color: var(--cia-amber); font-weight: 600; }
+    .cia-selo.verde { background: var(--cia-green-50); color: var(--cia-green); }
+    .cia-selo.vermelho { background: var(--cia-red-50); color: var(--cia-red); }
+    .cia-campo { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 8px; font-size: 14px; line-height: 1.5; }
+    .cia-campo b { color: var(--cia-muted); font-weight: 600; font-size: 13px; }
+    .cia-campo.solucao span { background: var(--cia-blue-50); border-radius: 8px; padding: 6px 10px; white-space: pre-wrap; }
+    .cia-campo textarea, .cia-campo input { width: 100%; box-sizing: border-box; border: 1px solid #cfd8e6; border-radius: 8px; padding: 8px 10px;
+        font: 400 14px 'IBM Plex Sans', sans-serif; color: var(--cia-ink); resize: vertical; }
+    .cia-acoes { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+    .cia-link { color: var(--cia-blue); background: none; border: 0; padding: 0; font: 600 13px 'IBM Plex Sans', sans-serif; cursor: pointer; }
+    .cia-vazio { background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 28px; text-align: center; color: var(--cia-muted); font-size: 14px; }
+    .cia-aviso { border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 14px; }
+    .cia-aviso.ok { background: var(--cia-green-50); color: var(--cia-green); }
+    .cia-aviso.erro { background: var(--cia-red-50); color: var(--cia-red); }
+    .cia-aviso.info { background: var(--cia-blue-50); color: #1e3a8a; }
+    .cia-exemplos { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .cia-exemplos li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 14px; padding: 6px 0; border-top: 1px solid #f1f4f8; }
+    .cia-exemplos small { color: var(--cia-muted); }
+    .cia-tabela { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--cia-line); border-radius: 12px; overflow: hidden; font-size: 14px; }
+    .cia-tabela th { text-align: left; font-size: 12px; color: var(--cia-muted); font-weight: 600; padding: 10px 12px; background: #f8fafc; }
+    .cia-tabela td { padding: 10px 12px; border-top: 1px solid #f1f4f8; }
+    .cia-rolar { overflow-x: auto; }
+    .cia-lote { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 14px; font-size: 13px; color: var(--cia-muted); }
+    .cia-confirma { background: #fff; border: 1px solid #f5d0a0; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+        display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
+    .cia-caso { border: 1px solid var(--cia-line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+    .cia-caso small { color: var(--cia-muted); }
+    .cia-rascunho { width: 100%; box-sizing: border-box; min-height: 220px; border: 1px solid #cfd8e6; border-radius: 8px; padding: 10px;
+        font: 400 14px 'IBM Plex Sans', sans-serif; color: var(--cia-ink); white-space: pre-wrap; }
+    .cia-nota { display: inline-grid; place-items: center; min-width: 64px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .cia-nota.n2 { background: var(--cia-green-50); color: var(--cia-green); }
+    .cia-nota.n1 { background: var(--cia-amber-50); color: var(--cia-amber); }
+    .cia-nota.n0 { background: var(--cia-red-50); color: var(--cia-red); }
+    .cia-nota.nx { background: #f1f4f8; color: #3c4a60; }
+    .cia-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+    .cia-bloco { background: #f8fafc; border-radius: 8px; padding: 8px 10px; font-size: 14px; white-space: pre-wrap; }
+    .cia-bloco b { display: block; font-size: 12px; color: var(--cia-muted); margin-bottom: 2px; }
+    .cia-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    @@media (max-width: 700px) {
+        .cia { padding: 16px; }
+        .cia-campo { grid-template-columns: 1fr; gap: 2px; }
+    }
+</style>
+
+<div class="cia">
+    <h1>Curadoria da IA</h1>
+    <p class="cia-sub">
+        A IA só usa para responder o que o cliente confirmou que resolveu ou o que alguém aprovou aqui.
+        Revise os casos aprendidos, acompanhe o que levou 👎 e veja os assuntos em que a base ainda não tem resposta.
+    </p>
+
+    @if (_carregandoInicio)
+    {
+        <div class="cia-vazio" style="margin-top:20px;">Carregando...</div>
+    }
+    else if (!_podeAcessar)
+    {
+        <div class="cia-aviso erro" style="margin-top:20px;">Você não tem permissão para acessar a curadoria da IA.</div>
+    }
+    else
+    {
+        <div class="cia-abas" role="tablist">
+            <button type="button" role="tab" class="cia-aba" aria-selected="@(_aba == "casos" ? "true" : "false")" @onclick='() => TrocarAba("casos")'>
+                Casos para revisar
+                <span class="cia-cont @(_qtdSuspensos > 0 ? "alerta" : "")">@(_qtdPendentes + _qtdSuspensos)</span>
+            </button>
+            <button type="button" role="tab" class="cia-aba" aria-selected="@(_aba == "lacunas" ? "true" : "false")" @onclick='() => TrocarAba("lacunas")'>
+                Lacunas da IA
+            </button>
+            <button type="button" role="tab" class="cia-aba" aria-selected="@(_aba == "docs" ? "true" : "false")" @onclick='() => TrocarAba("docs")'>
+                Documentações com 👎
+            </button>
+            <button type="button" role="tab" class="cia-aba" aria-selected="@(_aba == "repetidos" ? "true" : "false")" @onclick='() => TrocarAba("repetidos")'>
+                Casos repetidos
+            </button>
+            <button type="button" role="tab" class="cia-aba" aria-selected="@(_aba == "gabarito" ? "true" : "false")" @onclick='() => TrocarAba("gabarito")'>
+                Gabarito
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_aviso))
+        {
+            <div class="cia-aviso @(_avisoOk ? "ok" : "erro")" role="status">@_aviso</div>
+        }
+
+        @if (!_colunasOk && _aba == "casos")
+        {
+            <div class="cia-aviso erro">
+                As colunas de revisão não existem no banco e o sistema não conseguiu criá-las (falta permissão de ALTER TABLE).
+                Rode o script <b>Scripts/2026-10-28_IA_Curadoria.sql</b>. Enquanto isso, a IA usa só os casos confirmados pelo cliente.
+            </div>
+        }
+
+        @* ───────────────────────── 1) CASOS ───────────────────────── *@
+        @if (_aba == "casos" && _colunasOk)
+        {
+            <div class="cia-barra">
+                <label class="cia-vh" for="cia-filtro">Mostrar</label>
+                <select id="cia-filtro" value="@_filtro" @onchange="TrocarFiltroAsync">
+                    <option value="pendentes">Não confirmados pelo cliente (@_qtdPendentes)</option>
+                    <option value="suspensos">Suspensos por 👎 (@_qtdSuspensos)</option>
+                    <option value="todos">Todos</option>
+                </select>
+                <label class="cia-vh" for="cia-busca">Buscar</label>
+                <input id="cia-busca" type="search" placeholder="Buscar por assunto, solução, tag ou nº do ticket"
+                       @bind="_busca" @bind:event="oninput" @onkeydown="BuscarNoEnterAsync" />
+                <button type="button" class="cia-btn" @onclick="CarregarCasosAsync" disabled="@_carregando">Buscar</button>
+            </div>
+
+            @if (_filtro == "pendentes" && (_qtdLoteAprovar > 0 || _qtdLoteDescartar > 0))
+            {
+                <div class="cia-lote">
+                    <span>Em lote:</span>
+                    <button type="button" class="cia-btn" disabled="@(_salvando || _qtdLoteAprovar == 0)" @onclick='() => _lote = "aprovar"'>
+                        Aprovar confiança ≥ @IaCuradoriaService.LoteAprovarMinimo% (@_qtdLoteAprovar)
+                    </button>
+                    <button type="button" class="cia-btn perigo" disabled="@(_salvando || _qtdLoteDescartar == 0)" @onclick='() => _lote = "descartar"'>
+                        Descartar confiança abaixo de @IaCuradoriaService.LoteDescartarAbaixoDe% (@_qtdLoteDescartar)
+                    </button>
+                </div>
+            }
+
+            @if (_lote != "")
+            {
+                <div class="cia-confirma" role="alertdialog" aria-label="Confirmar ação em lote">
+                    @if (_lote == "aprovar")
+                    {
+                        <span>Aprovar <b>@_qtdLoteAprovar casos</b> com confiança da IA de @IaCuradoriaService.LoteAprovarMinimo% ou mais? Eles passam a ser usados pela IA.</span>
+                    }
+                    else
+                    {
+                        <span>Descartar <b>@_qtdLoteDescartar casos</b> com confiança abaixo de @IaCuradoriaService.LoteDescartarAbaixoDe%? A IA não vai usar nenhum deles.</span>
+                    }
+                    <div class="cia-acoes" style="padding:0;">
+                        <button type="button" class="cia-btn @(_lote == "aprovar" ? "ok" : "perigo")" disabled="@_salvando" @onclick="ConfirmarLoteAsync">
+                            @(_salvando ? "Aplicando..." : "Confirmar")
+                        </button>
+                        <button type="button" class="cia-btn" disabled="@_salvando" @onclick='() => _lote = ""'>Cancelar</button>
+                    </div>
+                </div>
+            }
+
+            @if (_carregando)
+            {
+                <div class="cia-vazio">Carregando casos...</div>
+            }
+            else if (_casos.Count == 0)
+            {
+                <div class="cia-vazio">Nada para revisar aqui. 👍</div>
+            }
+            else
+            {
+                <div class="cia-lista">
+                    @foreach (var c in _casos)
+                    {
+                        var editando = _editando == c.Codigo;
+                        var descartando = _descartando == c.Codigo;
+                        <article class="cia-card @(c.Suspenso ? "suspenso" : "")" @key="c.Codigo">
+                            <div class="cia-topo">
+                                <h2 class="cia-titulo">@(string.IsNullOrWhiteSpace(c.TopicoTitulo) ? Cortar(c.Resumo, 90) : c.TopicoTitulo)</h2>
+                                <div class="cia-selos">
+                                    @if (c.Suspenso)
+                                    {
+                                        <span class="cia-selo ambar">Suspenso · @c.QtdNegativos 👎</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="cia-selo">Cliente não confirmou</span>
+                                    }
+                                    <span class="cia-selo">Confiança da IA: @c.Confianca%</span>
+                                    @if (!string.IsNullOrWhiteSpace(c.Categoria))
+                                    {
+                                        <span class="cia-selo">@c.Categoria</span>
+                                    }
+                                    @if (c.QtdPositivos > 0)
+                                    {
+                                        <span class="cia-selo verde">Usado @c.QtdPositivos× quase igual</span>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (!editando)
+                            {
+                                @if (!string.IsNullOrWhiteSpace(c.PerguntaCliente))
+                                {
+                                    <div class="cia-campo"><b>Pergunta</b><span>@c.PerguntaCliente</span></div>
+                                }
+                                <div class="cia-campo"><b>Resumo</b><span>@c.Resumo</span></div>
+                                @if (!string.IsNullOrWhiteSpace(c.CausaProvavel))
+                                {
+                                    <div class="cia-campo"><b>Causa provável</b><span>@c.CausaProvavel</span></div>
+                                }
+                                <div class="cia-campo solucao"><b>Solução</b><span>@c.Solucao</span></div>
+                                @if (!string.IsNullOrWhiteSpace(c.Tags))
+                                {
+                                    <div class="cia-campo"><b>Tags</b><span>@c.Tags.Replace(";", ", ")</span></div>
+                                }
+                                @if (c.Suspenso && !string.IsNullOrWhiteSpace(c.Motivo))
+                                {
+                                    <div class="cia-campo"><b>Motivo</b><span>@c.Motivo</span></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="cia-campo">
+                                    <b><label for="cia-resumo-@c.Codigo">Resumo</label></b>
+                                    <textarea id="cia-resumo-@c.Codigo" rows="2" maxlength="300" @bind="_edResumo"></textarea>
+                                </div>
+                                <div class="cia-campo">
+                                    <b><label for="cia-causa-@c.Codigo">Causa provável</label></b>
+                                    <textarea id="cia-causa-@c.Codigo" rows="2" maxlength="1000" @bind="_edCausa"></textarea>
+                                </div>
+                                <div class="cia-campo">
+                                    <b><label for="cia-sol-@c.Codigo">Solução</label></b>
+                                    <textarea id="cia-sol-@c.Codigo" rows="4" maxlength="1200" @bind="_edSolucao"
+                                              placeholder="O passo concreto: caminho de tela, tecla, configuração..."></textarea>
+                                </div>
+                                <div class="cia-campo">
+                                    <b><label for="cia-tags-@c.Codigo">Tags</label></b>
+                                    <input id="cia-tags-@c.Codigo" @bind="_edTags" placeholder="separadas por vírgula" />
+                                </div>
+                            }
+
+                            @if (descartando)
+                            {
+                                <div class="cia-campo">
+                                    <b><label for="cia-motivo-@c.Codigo">Por que descartar?</label></b>
+                                    <input id="cia-motivo-@c.Codigo" @bind="_motivoDescarte" maxlength="300"
+                                           placeholder="Opcional. Ex.: solução errada, era outro problema" />
+                                </div>
+                            }
+
+                            <div class="cia-acoes">
+                                @if (editando)
+                                {
+                                    <button type="button" class="cia-btn ok" disabled="@_salvando" @onclick="() => SalvarCorrecaoAsync(c)">Salvar e aprovar</button>
+                                    <button type="button" class="cia-btn" disabled="@_salvando" @onclick="CancelarEdicao">Cancelar</button>
+                                }
+                                else if (descartando)
+                                {
+                                    <button type="button" class="cia-btn perigo" disabled="@_salvando" @onclick="() => ConfirmarDescarteAsync(c)">Confirmar descarte</button>
+                                    <button type="button" class="cia-btn" disabled="@_salvando" @onclick="() => _descartando = 0">Cancelar</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="cia-btn ok" disabled="@_salvando" @onclick="() => AprovarAsync(c)">Aprovar</button>
+                                    <button type="button" class="cia-btn" disabled="@_salvando" @onclick="() => ComecarEdicao(c)">Corrigir</button>
+                                    <button type="button" class="cia-btn perigo" disabled="@_salvando" @onclick="() => ComecarDescarte(c)">Descartar</button>
+                                    <button type="button" class="cia-link" @onclick='() => Nav.NavigateTo("/ticket/" + c.CodTicket)'>Abrir ticket #@c.CodTicket</button>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        }
+
+        @* ───────────────────────── 2) LACUNAS ───────────────────────── *@
+        @if (_aba == "lacunas")
+        {
+            <div class="cia-aviso info">
+                Perguntas em que a IA ficou <b>sem base</b>, o atendente <b>reescreveu</b> a sugestão (menos de 40% aproveitado)
+                ou deu <b>👎</b>, agrupadas por assunto. Os assuntos do topo são os que mais valem uma documentação.
+            </div>
+            <div class="cia-barra">
+                <label class="cia-vh" for="cia-dias">Período</label>
+                <select id="cia-dias" value="@_dias" @onchange="TrocarDiasAsync">
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="90">Últimos 90 dias</option>
+                </select>
+                <button type="button" class="cia-btn" disabled="@_carregando" @onclick="() => CarregarLacunasAsync(true)">Atualizar</button>
+            </div>
+
+            @if (_carregando)
+            {
+                <div class="cia-vazio">Agrupando as perguntas por assunto...</div>
+            }
+            else if (_lacunas.Count == 0)
+            {
+                <div class="cia-vazio">Nenhuma lacuna no período. A IA encontrou base para tudo que foi perguntado.</div>
+            }
+            else
+            {
+                <div class="cia-lista">
+                    @foreach (var g in _lacunas)
+                    {
+                        var aberto = _lacunaAberta == g;
+                        <article class="cia-card">
+                            <div class="cia-topo">
+                                <h2 class="cia-titulo">@g.Titulo</h2>
+                                <div class="cia-selos">
+                                    <span class="cia-selo ambar">@(Math.Max(g.QtdTickets, 1)) @(Math.Max(g.QtdTickets, 1) == 1 ? "ticket" : "tickets")</span>
+                                    @if (g.SemBase > 0) { <span class="cia-selo">Sem base: @g.SemBase</span> }
+                                    @if (g.Reescritas > 0) { <span class="cia-selo">Reescritas: @g.Reescritas</span> }
+                                    @if (g.Negativas > 0) { <span class="cia-selo vermelho">👎 @g.Negativas</span> }
+                                    <span class="cia-selo">Última: @g.Ultima.ToString("dd/MM HH:mm")</span>
+                                </div>
+                            </div>
+
+                            @if (aberto)
+                            {
+                                <ul class="cia-exemplos">
+                                    @foreach (var e in g.Exemplos)
+                                    {
+                                        <li>
+                                            <span>@e.Pergunta</span>
+                                            <small>@e.Data.ToString("dd/MM") · @MotivosTexto(e)</small>
+                                            @if (e.CodTicket > 0)
+                                            {
+                                                <button type="button" class="cia-link" @onclick='() => Nav.NavigateTo("/ticket/" + e.CodTicket)'>ticket #@e.CodTicket</button>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            }
+
+                            <div class="cia-acoes">
+                                <button type="button" class="cia-btn" @onclick="() => _lacunaAberta = aberto ? null : g">
+                                    @(aberto ? "Esconder perguntas" : TextoVer(g))
+                                </button>
+                                <button type="button" class="cia-btn prim" title="Abre uma documentação interna (só equipe e IA) já com o título"
+                                        @onclick='() => CriarDocumentacaoInterna(g.Titulo)'>Criar documentação</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        }
+
+        @* ───────────────────────── 3) DOCUMENTAÇÕES COM 👎 ───────────────────────── *@
+        @if (_aba == "docs")
+        {
+            <div class="cia-aviso info">
+                Documentações usadas em sugestões que o atendente marcou com 👎. Vale conferir se estão desatualizadas,
+                incompletas ou se a IA está usando o trecho certo.
+            </div>
+            <div class="cia-barra">
+                <label class="cia-vh" for="cia-dias-docs">Período</label>
+                <select id="cia-dias-docs" value="@_dias" @onchange="TrocarDiasAsync">
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="90">Últimos 90 dias</option>
+                </select>
+            </div>
+
+            @if (_carregando)
+            {
+                <div class="cia-vazio">Carregando...</div>
+            }
+            else if (_docs.Count == 0)
+            {
+                <div class="cia-vazio">Nenhuma documentação com 👎 no período.</div>
+            }
+            else
+            {
+                <div class="cia-rolar">
+                    <table class="cia-tabela">
+                        <thead>
+                            <tr><th>Documentação</th><th>👎</th><th>Último</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in _docs)
+                            {
+                                <tr>
+                                    <td>@d.Titulo</td>
+                                    <td>@d.QtdNegativos</td>
+                                    <td>@d.Ultima.ToString("dd/MM/yyyy")</td>
+                                    <td><button type="button" class="cia-link" @onclick='() => Nav.NavigateTo("/documentacoes/" + d.CodDoc)'>Abrir</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+
+        @* ───────────────────────── 4) CASOS REPETIDOS ───────────────────────── *@
+        @if (_aba == "repetidos")
+        {
+            <div class="cia-aviso info">
+                Casos que a IA usa e tratam do <b>mesmo problema</b>. <b>Conflito</b> = soluções diferentes: fique com a certa e descarte as outras.
+                <b>Vale documentar</b> = 3 ou mais casos com a mesma solução: transforme em documentação oficial.
+                <b>Repetido</b> = 2 casos iguais.
+            </div>
+            <div class="cia-barra">
+                <label class="cia-vh" for="cia-tipo-grupo">Mostrar</label>
+                <select id="cia-tipo-grupo" @bind="_filtroGrupo">
+                    <option value="">Todos (@_grupos.Count)</option>
+                    <option value="conflito">Conflitos (@_grupos.Count(g => g.Tipo == "conflito"))</option>
+                    <option value="documentar">Vale documentar (@_grupos.Count(g => g.Tipo == "documentar"))</option>
+                    <option value="repetido">Repetidos (@_grupos.Count(g => g.Tipo == "repetido"))</option>
+                </select>
+                <button type="button" class="cia-btn" disabled="@_carregando" @onclick="() => CarregarGruposAsync(true)">Atualizar</button>
+            </div>
+
+            @if (_carregando)
+            {
+                <div class="cia-vazio">Comparando os casos...</div>
+            }
+            else if (GruposFiltrados.Count == 0)
+            {
+                <div class="cia-vazio">Nenhum caso repetido ou conflitante. 👍</div>
+            }
+            else
+            {
+                <div class="cia-lista">
+                    @foreach (var g in GruposFiltrados)
+                    {
+                        var comRascunho = _grupoRascunho == g;
+                        <article class="cia-card @(g.Tipo == "conflito" ? "suspenso" : "")">
+                            <div class="cia-topo">
+                                <h2 class="cia-titulo">@g.Titulo</h2>
+                                <div class="cia-selos">
+                                    @if (g.Tipo == "conflito") { <span class="cia-selo ambar">Conflito: soluções diferentes</span> }
+                                    else if (g.Tipo == "documentar") { <span class="cia-selo verde">Vale documentar</span> }
+                                    else { <span class="cia-selo">Repetido</span> }
+                                    <span class="cia-selo">@g.Casos.Count casos</span>
+                                </div>
+                            </div>
+
+                            <div class="cia-grade">
+                                @foreach (var c in g.Casos)
+                                {
+                                    <div class="cia-caso" @key="c.CodInsight">
+                                        <small>
+                                            @c.CriadoEm.ToString("dd/MM/yyyy")@(string.IsNullOrWhiteSpace(c.Versao) ? "" : " · versão " + c.Versao)
+                                        </small>
+                                        <div><b>Problema:</b> @c.Resumo</div>
+                                        <div class="cia-bloco"><b>Solução</b>@c.Solucao</div>
+                                        <div class="cia-acoes" style="padding:0;">
+                                            <button type="button" class="cia-link" @onclick='() => Nav.NavigateTo("/ticket/" + c.CodTicket)'>ticket #@c.CodTicket</button>
+                                            <button type="button" class="cia-btn perigo" style="height:30px;" disabled="@_salvando" @onclick="() => DescartarRepetidoAsync(c)">Descartar este</button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (comRascunho)
+                            {
+                                <label class="cia-vh" for="cia-rascunho">Rascunho da documentação</label>
+                                <textarea id="cia-rascunho" class="cia-rascunho" @bind="_rascunhoTexto"></textarea>
+                                <small style="color:var(--cia-muted);">Revise, copie e cole no editor de documentação. Depois que a documentação existir, pode descartar os casos repetidos.</small>
+                            }
+
+                            <div class="cia-acoes">
+                                @if (g.Tipo != "repetido")
+                                {
+                                    <button type="button" class="cia-btn" disabled="@_gerandoRascunho" @onclick="() => GerarRascunhoAsync(g)">
+                                        @(_gerandoRascunho && _grupoRascunho == g ? "Escrevendo..." : "Gerar rascunho de documentação")
+                                    </button>
+                                }
+                                <button type="button" class="cia-btn prim" title="Abre uma documentação interna (só equipe e IA) já com o título"
+                                        @onclick='() => CriarDocumentacaoInterna(g.Titulo)'>Criar documentação</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        }
+
+        @* ───────────────────────── 5) GABARITO ───────────────────────── *@
+        @if (_aba == "gabarito")
+        {
+
+            <div class="cia-barra">
+                @if (GabaritoJob.Rodando)
+                {
+                    <span class="cia-selo ambar">Rodando: @GabaritoJob.Feitos de @GabaritoJob.Total</span>
+                }
+                else
+                {
+                    <button type="button" class="cia-btn prim" disabled="@(_gabarito.Count == 0)" @onclick="RodarGabaritoAsync">
+                        Rodar gabarito (@_gabarito.Count @(_gabarito.Count == 1 ? "pergunta" : "perguntas"))
+                    </button>
+                }
+                <button type="button" class="cia-btn" @onclick="NovaPergunta">Nova pergunta</button>
+                <button type="button" class="cia-btn" disabled="@_carregando" @onclick="SugerirPerguntasAsync">Sugerir de tickets confirmados</button>
+                @if (!string.IsNullOrEmpty(GabaritoJob.UltimoErro) && !GabaritoJob.Rodando)
+                {
+                    <span class="cia-selo vermelho">@GabaritoJob.UltimoErro</span>
+                }
+            </div>
+
+            @if (_editandoGabarito != null)
+            {
+                <article class="cia-card" style="margin-bottom:14px;">
+                    <h2 class="cia-titulo">@(_editandoGabarito.Codigo > 0 ? "Editar pergunta" : "Nova pergunta")</h2>
+                    <div class="cia-campo">
+                        <b><label for="cia-g-perg">Pergunta do cliente</label></b>
+                        <textarea id="cia-g-perg" rows="3" maxlength="2000" @bind="_editandoGabarito.Pergunta"
+                                  placeholder="Do jeito que ele mandou, com erro de digitação e tudo"></textarea>
+                    </div>
+                    <div class="cia-campo">
+                        <b><label for="cia-g-resp">Resposta certa</label></b>
+                        <textarea id="cia-g-resp" rows="4" maxlength="2000" @bind="_editandoGabarito.RespostaEsperada"
+                                  placeholder="O que de fato resolve: caminho de tela, tecla, configuração"></textarea>
+                    </div>
+                    <div class="cia-campo">
+                        <b><label for="cia-g-assunto">Assunto</label></b>
+                        <input id="cia-g-assunto" maxlength="200" @bind="_editandoGabarito.Assunto" />
+                    </div>
+                    <div class="cia-campo">
+                        <b><label for="cia-g-ticket">Ticket de origem</label></b>
+                        <input id="cia-g-ticket" type="number" min="0" @bind="_editandoGabarito.CodTicketOrigem" placeholder="Opcional" />
+                    </div>
+                    <div class="cia-acoes">
+                        <button type="button" class="cia-btn ok" disabled="@_salvando" @onclick="SalvarPerguntaAsync">Salvar</button>
+                        <button type="button" class="cia-btn" disabled="@_salvando" @onclick="() => _editandoGabarito = null">Cancelar</button>
+                    </div>
+                </article>
+            }
+
+            @if (_sugestoesGabarito.Count > 0)
+            {
+                <h2 class="cia-titulo" style="margin:6px 0 10px;">Sugestões (@_sugestoesGabarito.Count): confira antes de adicionar</h2>
+                <div class="cia-lista" style="margin-bottom:18px;">
+                    @foreach (var sg in _sugestoesGabarito.ToList())
+                    {
+                        <article class="cia-card">
+                            <div class="cia-grade">
+                                <div class="cia-bloco"><b>Pergunta do cliente</b>@sg.Pergunta</div>
+                                <div class="cia-bloco"><b>Resposta registrada</b>@sg.RespostaEsperada</div>
+                            </div>
+                            <div class="cia-acoes">
+                                <button type="button" class="cia-btn ok" disabled="@_salvando" @onclick="() => AdicionarSugestaoAsync(sg)">Adicionar</button>
+                                <button type="button" class="cia-btn" @onclick="() => EditarSugestao(sg)">Editar e adicionar</button>
+                                <button type="button" class="cia-btn" @onclick="() => _sugestoesGabarito.Remove(sg)">Ignorar</button>
+                                @if (sg.CodTicketOrigem is > 0)
+                                {
+                                    <button type="button" class="cia-link" @onclick='() => Nav.NavigateTo("/ticket/" + sg.CodTicketOrigem)'>ticket #@sg.CodTicketOrigem</button>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+
+            @if (_execucoes.Count > 0)
+            {
+                <h2 class="cia-titulo" style="margin:6px 0 10px;">Execuções</h2>
+                <div class="cia-rolar" style="margin-bottom:18px;">
+                    <table class="cia-tabela">
+                        <thead>
+                            <tr><th>Quando</th><th>Modelo</th><th>Certas</th><th>Parciais</th><th>Erradas</th><th>Falhas</th><th>Pontuação</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < _execucoes.Count; i++)
+                            {
+                                var e = _execucoes[i];
+                                var anterior = _execucoes.Skip(i + 1).FirstOrDefault(x => x.Concluida);
+                                <tr>
+                                    <td>@e.DataHora.ToString("dd/MM HH:mm") @(e.Concluida ? "" : "(em andamento)")</td>
+                                    <td>@e.Modelo</td>
+                                    <td>@e.Certas</td>
+                                    <td>@e.Parciais</td>
+                                    <td>@e.Erradas</td>
+                                    <td>@e.Falhas</td>
+                                    <td>
+                                        <b>@e.Pontuacao.ToString("0.0")%</b>
+                                        @if (e.Concluida && anterior != null)
+                                        {
+                                            var dif = e.Pontuacao - anterior.Pontuacao;
+                                            <small style="color:@(dif >= 0 ? "var(--cia-green)" : "var(--cia-red)");"> @(dif >= 0 ? "▲" : "▼") @Math.Abs(dif).ToString("0.0")</small>
+                                        }
+                                    </td>
+                                    <td><button type="button" class="cia-link" @onclick="() => VerResultadosAsync(e.Codigo)">Ver</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            @if (_resultados.Count > 0)
+            {
+                <div class="cia-barra">
+                    <h2 class="cia-titulo" style="margin:0;">Resultado da execução</h2>
+                    <label class="cia-vh" for="cia-filtro-res">Mostrar</label>
+                    <select id="cia-filtro-res" @bind="_filtroResultado">
+                        <option value="problemas">Erradas, parciais e o que piorou</option>
+                        <option value="todos">Todos</option>
+                    </select>
+                </div>
+                <div class="cia-lista" style="margin-bottom:18px;">
+                    @foreach (var r in ResultadosFiltrados)
+                    {
+                        <article class="cia-card">
+                            <div class="cia-topo">
+                                <span class="cia-nota @ClasseNota(r.Nota)">@TextoNota(r.Nota)</span>
+                                @if (r.NotaAnterior != null && r.NotaAnterior != r.Nota)
+                                {
+                                    <span class="cia-selo @(r.Nota > r.NotaAnterior ? "verde" : "vermelho")">
+                                        @(r.Nota > r.NotaAnterior ? "Melhorou" : "Piorou") (antes: @TextoNota(r.NotaAnterior.Value))
+                                    </span>
+                                }
+                            </div>
+                            <div class="cia-grade">
+                                <div class="cia-bloco"><b>Pergunta</b>@r.Pergunta</div>
+                                <div class="cia-bloco"><b>Resposta certa</b>@r.RespostaEsperada</div>
+                                <div class="cia-bloco"><b>A IA respondeu (@r.Confianca)</b>@r.Resposta</div>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(r.Motivo))
+                            {
+                                <small style="color:var(--cia-muted);">Juiz: @r.Motivo</small>
+                            }
+                        </article>
+                    }
+                </div>
+            }
+
+            <h2 class="cia-titulo" style="margin:6px 0 10px;">Perguntas do gabarito (@_gabarito.Count)</h2>
+            @if (_gabarito.Count == 0)
+            {
+                <div class="cia-vazio">Ainda não tem pergunta. Use "Sugerir de tickets confirmados" para começar rápido; o ideal é chegar a umas 100.</div>
+            }
+            else
+            {
+                <div class="cia-rolar">
+                    <table class="cia-tabela">
+                        <thead><tr><th>Pergunta</th><th>Resposta certa</th><th>Última</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var gi in _gabarito)
+                            {
+                                <tr @key="gi.Codigo">
+                                    <td>@Cortar(gi.Pergunta, 140)</td>
+                                    <td>@Cortar(gi.RespostaEsperada, 140)</td>
+                                    <td>
+                                        @if (gi.UltimaNota != null)
+                                        {
+                                            <span class="cia-nota @ClasseNota(gi.UltimaNota.Value)">@TextoNota(gi.UltimaNota.Value)</span>
+                                        }
+                                    </td>
+                                    <td style="white-space:nowrap;">
+                                        <button type="button" class="cia-link" @onclick="() => EditarPergunta(gi)">Editar</button>
+                                        ·
+                                        <button type="button" class="cia-link" style="color:var(--cia-red);" @onclick="() => ExcluirPerguntaAsync(gi)">Excluir</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        }
+    }
+</div>
+
+@code {
+    private bool _carregandoInicio = true;
+    private bool _podeAcessar;
+    private bool _colunasOk = true;
+    private string _aba = "casos";
+
+    private bool _carregando;
+    private bool _salvando;
+    private string _aviso = "";
+    private bool _avisoOk;
+
+    // Casos
+    private string _filtro = "pendentes";
+    private string _busca = "";
+    private List<IaCasoRevisao> _casos = new();
+    private int _qtdPendentes;
+    private int _qtdSuspensos;
+    private int _editando;
+    private int _descartando;
+    private int _qtdLoteAprovar;
+    private int _qtdLoteDescartar;
+    private string _lote = "";   // "", "aprovar" ou "descartar" (confirmação aberta)
+    private string _edResumo = "", _edCausa = "", _edSolucao = "", _edTags = "";
+    private string _motivoDescarte = "";
+
+    // Lacunas e documentações
+    private int _dias = 30;
+    private List<IaLacunaGrupo> _lacunas = new();
+    private IaLacunaGrupo? _lacunaAberta;
+    private List<IaDocNegativa> _docs = new();
+
+    private int CodEmp => UserState.CurrentCompanyId;
+    private string Usuario => (UserState.CurrentUser ?? "").Trim();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var u = Usuario.ToUpper();
+            if (u.Length > 0)
+            {
+                var perms = await AdminService.GetPermissoesUsuarioAsync(u);
+                _podeAcessar = perms.Contains("ADMIN_ACESSAR");
+            }
+
+            if (_podeAcessar)
+            {
+                _colunasOk = await Curadoria.DisponivelAsync();
+                await AtualizarContagemAsync();
+                await CarregarCasosAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Avisar("Erro ao abrir a curadoria: " + ex.Message, false);
+        }
+        finally
+        {
+            _carregandoInicio = false;
+        }
+    }
+
+    private async Task TrocarAba(string aba)
+    {
+        if (_aba == aba) return;
+        _aba = aba;
+        _aviso = "";
+        if (aba == "casos") await CarregarCasosAsync();
+        else if (aba == "lacunas") await CarregarLacunasAsync(false);
+        else if (aba == "repetidos") await CarregarGruposAsync(false);
+        else if (aba == "gabarito") await CarregarGabaritoAsync();
+        else await CarregarDocsAsync();
+    }
+
+    // ───────────── Casos ─────────────
+
+    private async Task AtualizarContagemAsync()
+    {
+        if (!_colunasOk) return;
+        try
+        {
+            (_qtdPendentes, _qtdSuspensos) = await Curadoria.ContarAsync(CodEmp);
+            (_qtdLoteAprovar, _qtdLoteDescartar) = await Curadoria.ContarLoteAsync(CodEmp);
+        }
+        catch { /* contagem é só informativa */ }
+    }
+
+    private async Task ConfirmarLoteAsync()
+    {
+        var acao = _lote;
+        _salvando = true;
+        StateHasChanged();
+        try
+        {
+            if (acao == "aprovar")
+            {
+                var n = await Curadoria.AprovarLoteAsync(CodEmp, Usuario);
+                Avisar($"{n} caso(s) aprovado(s). A IA já pode usar.", true);
+            }
+            else if (acao == "descartar")
+            {
+                var n = await Curadoria.DescartarLoteAsync(CodEmp, Usuario);
+                Avisar($"{n} caso(s) descartado(s).", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Avisar("Não foi possível aplicar em lote: " + ex.Message, false);
+        }
+        finally
+        {
+            _lote = "";
+            _salvando = false;
+        }
+
+        await AtualizarContagemAsync();
+        await CarregarCasosAsync();
+    }
+
+    private async Task CarregarCasosAsync()
+    {
+        if (!_colunasOk) return;
+        _carregando = true;
+        try
+        {
+            _casos = await Curadoria.ListarCasosAsync(CodEmp, _filtro, _busca);
+            _editando = 0;
+            _descartando = 0;
+        }
+        catch (Exception ex)
+        {
+            Avisar("Erro ao carregar os casos: " + ex.Message, false);
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task TrocarFiltroAsync(ChangeEventArgs e)
+    {
+        _filtro = e.Value?.ToString() ?? "pendentes";
+        await CarregarCasosAsync();
+    }
+
+    private async Task BuscarNoEnterAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await CarregarCasosAsync();
+    }
+
+    private async Task AprovarAsync(IaCasoRevisao c)
+    {
+        _salvando = true;
+        try
+        {
+            await Curadoria.AprovarAsync(c.Codigo, Usuario);
+            Remover(c);
+            Avisar($"Caso do ticket #{c.CodTicket} aprovado. A IA já pode usar.", true);
+        }
+        catch (Exception ex) { Avisar("Não foi possível aprovar: " + ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private void ComecarEdicao(IaCasoRevisao c)
+    {
+        _descartando = 0;
+        _editando = c.Codigo;
+        _edResumo = c.Resumo;
+        _edCausa = c.CausaProvavel;
+        _edSolucao = c.Solucao;
+        _edTags = c.Tags.Replace(";", ", ");
+    }
+
+    private void CancelarEdicao() => _editando = 0;
+
+    private async Task SalvarCorrecaoAsync(IaCasoRevisao c)
+    {
+        if (string.IsNullOrWhiteSpace(_edResumo) || string.IsNullOrWhiteSpace(_edSolucao))
+        {
+            Avisar("Resumo e solução são obrigatórios.", false);
+            return;
+        }
+
+        _salvando = true;
+        try
+        {
+            await Curadoria.AprovarAsync(c.Codigo, Usuario, _edResumo, _edCausa, _edSolucao, _edTags);
+            Remover(c);
+            Avisar($"Caso do ticket #{c.CodTicket} corrigido e aprovado.", true);
+        }
+        catch (Exception ex) { Avisar("Não foi possível salvar: " + ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private void ComecarDescarte(IaCasoRevisao c)
+    {
+        _editando = 0;
+        _descartando = c.Codigo;
+        _motivoDescarte = "";
+    }
+
+    private async Task ConfirmarDescarteAsync(IaCasoRevisao c)
+    {
+        _salvando = true;
+        try
+        {
+            await Curadoria.DescartarAsync(c.Codigo, Usuario, _motivoDescarte);
+            Remover(c);
+            Avisar($"Caso do ticket #{c.CodTicket} descartado. A IA não vai usar.", true);
+        }
+        catch (Exception ex) { Avisar("Não foi possível descartar: " + ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private void Remover(IaCasoRevisao c)
+    {
+        _casos.Remove(c);
+        _editando = 0;
+        _descartando = 0;
+        if (c.Suspenso) _qtdSuspensos = Math.Max(0, _qtdSuspensos - 1);
+        else
+        {
+            _qtdPendentes = Math.Max(0, _qtdPendentes - 1);
+            if (c.Confianca >= IaCuradoriaService.LoteAprovarMinimo) _qtdLoteAprovar = Math.Max(0, _qtdLoteAprovar - 1);
+            if (c.Confianca < IaCuradoriaService.LoteDescartarAbaixoDe) _qtdLoteDescartar = Math.Max(0, _qtdLoteDescartar - 1);
+        }
+    }
+
+    // ───────────── Lacunas e documentações ─────────────
+
+    private async Task CarregarLacunasAsync(bool forcar)
+    {
+        _carregando = true;
+        StateHasChanged();
+        try
+        {
+            _lacunas = await Curadoria.ListarLacunasAsync(CodEmp, _dias, forcar);
+            _lacunaAberta = null;
+        }
+        catch (Exception ex) { Avisar("Erro ao carregar as lacunas: " + ex.Message, false); }
+        finally { _carregando = false; }
+    }
+
+    private async Task CarregarDocsAsync()
+    {
+        _carregando = true;
+        try { _docs = await Curadoria.ListarDocsComNegativoAsync(CodEmp, _dias); }
+        catch (Exception ex) { Avisar("Erro ao carregar as documentações: " + ex.Message, false); }
+        finally { _carregando = false; }
+    }
+
+    private async Task TrocarDiasAsync(ChangeEventArgs e)
+    {
+        _dias = int.TryParse(e.Value?.ToString(), out var d) ? d : 30;
+        if (_aba == "lacunas") await CarregarLacunasAsync(false);
+        else await CarregarDocsAsync();
+    }
+
+    private static string TextoVer(IaLacunaGrupo g)
+        => g.QtdPerguntas == 1 ? "Ver 1 pergunta" : $"Ver {g.QtdPerguntas} perguntas";
+
+    private static string MotivosTexto(IaLacunaExemplo e)
+    {
+        var m = new List<string>();
+        if (e.SemBase) m.Add("sem base");
+        if (e.Reescrita) m.Add("reescrita pelo atendente");
+        if (e.Negativa) m.Add("👎");
+        return string.Join(", ", m);
+    }
+
+    /// <summary>Abre o editor com uma documentação interna (só equipe e IA), já com o título do assunto.</summary>
+    private void CriarDocumentacaoInterna(string? titulo)
+        => Nav.NavigateTo("/documentacoes/novo?interna=1&titulo=" + Uri.EscapeDataString(titulo ?? ""));
+
+    private void Avisar(string texto, bool ok)
+    {
+        _aviso = texto;
+        _avisoOk = ok;
+    }
+
+
+    // ───────────── Casos repetidos ─────────────
+
+    private List<IaGrupoCasos> _grupos = new();
+    private string _filtroGrupo = "";
+    private IaGrupoCasos? _grupoRascunho;
+    private string _rascunhoTexto = "";
+    private bool _gerandoRascunho;
+
+    private List<IaGrupoCasos> GruposFiltrados
+        => _filtroGrupo == "" ? _grupos : _grupos.Where(g => g.Tipo == _filtroGrupo).ToList();
+
+    private async Task CarregarGruposAsync(bool forcar)
+    {
+        _carregando = true;
+        StateHasChanged();
+        try
+        {
+            _grupos = await Curadoria.AgruparCasosAsync(CodEmp, forcar);
+            _grupoRascunho = null;
+        }
+        catch (Exception ex) { Avisar("Erro ao comparar os casos: " + ex.Message, false); }
+        finally { _carregando = false; }
+    }
+
+    private async Task DescartarRepetidoAsync(IaCasoParecido c)
+    {
+        _salvando = true;
+        try
+        {
+            await Curadoria.DescartarAsync(c.CodInsight, Usuario, "Caso repetido/conflitante descartado na curadoria");
+            IaCuradoriaService.RemoverDoAgrupamento(CodEmp, c.CodInsight);
+            foreach (var g in _grupos) g.Casos.RemoveAll(x => x.CodInsight == c.CodInsight);
+            _grupos.RemoveAll(g => g.Casos.Count < 2);
+            Avisar($"Caso do ticket #{c.CodTicket} descartado.", true);
+        }
+        catch (Exception ex) { Avisar("Não foi possível descartar: " + ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private async Task GerarRascunhoAsync(IaGrupoCasos g)
+    {
+        _grupoRascunho = g;
+        _gerandoRascunho = true;
+        _rascunhoTexto = "";
+        StateHasChanged();
+        try { _rascunhoTexto = await Curadoria.RascunharDocumentacaoAsync(g); }
+        catch (Exception ex) { Avisar("Não foi possível gerar o rascunho: " + ex.Message, false); _grupoRascunho = null; }
+        finally { _gerandoRascunho = false; }
+    }
+
+    // ───────────── Gabarito ─────────────
+
+    private List<IaGabaritoItem> _gabarito = new();
+    private List<IaGabaritoItem> _sugestoesGabarito = new();
+    private List<IaGabaritoExecucao> _execucoes = new();
+    private List<IaGabaritoResultado> _resultados = new();
+    private IaGabaritoItem? _editandoGabarito;
+    private string _filtroResultado = "problemas";
+    private System.Threading.Timer? _timerGabarito;
+
+    private List<IaGabaritoResultado> ResultadosFiltrados => _filtroResultado == "todos"
+        ? _resultados
+        : _resultados.Where(r => r.Nota < 2 || (r.NotaAnterior != null && r.Nota < r.NotaAnterior)).ToList();
+
+    private async Task CarregarGabaritoAsync()
+    {
+        _carregando = true;
+        try
+        {
+            _gabarito = await Gabarito.ListarAsync(CodEmp);
+            _execucoes = await Gabarito.ListarExecucoesAsync(CodEmp);
+            if (GabaritoJob.Rodando) AcompanharGabarito();
+        }
+        catch (Exception ex) { Avisar("Erro ao carregar o gabarito: " + ex.Message, false); }
+        finally { _carregando = false; }
+    }
+
+    private async Task RodarGabaritoAsync()
+    {
+        if (!GabaritoJob.Iniciar(CodEmp, Usuario))
+        {
+            Avisar("Já tem uma execução do gabarito rodando.", false);
+            return;
+        }
+        _resultados.Clear();
+        Avisar("Gabarito rodando. Pode continuar usando o sistema; o resultado aparece aqui.", true);
+        await Task.Delay(800);
+        _execucoes = await Gabarito.ListarExecucoesAsync(CodEmp);
+        AcompanharGabarito();
+    }
+
+    /// <summary>Atualiza a tela a cada 3 s enquanto o gabarito roda; ao terminar, mostra o resultado.</summary>
+    private void AcompanharGabarito()
+    {
+        _timerGabarito?.Dispose();
+        _timerGabarito = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                if (!GabaritoJob.Rodando)
+                {
+                    _timerGabarito?.Dispose();
+                    _timerGabarito = null;
+                    var exec = GabaritoJob.CodExecucao;
+                    _execucoes = await Gabarito.ListarExecucoesAsync(CodEmp);
+                    _gabarito = await Gabarito.ListarAsync(CodEmp);
+                    if (exec > 0) _resultados = await Gabarito.ResultadosAsync(CodEmp, exec);
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+            catch { /* tela fechada */ }
+        }, null, 3000, 3000);
+    }
+
+    private async Task VerResultadosAsync(int codExecucao)
+    {
+        try
+        {
+            _resultados = await Gabarito.ResultadosAsync(CodEmp, codExecucao);
+            if (_resultados.Count == 0) Avisar("Essa execução ainda não tem resultado.", false);
+        }
+        catch (Exception ex) { Avisar("Erro ao carregar o resultado: " + ex.Message, false); }
+    }
+
+    private void NovaPergunta() => _editandoGabarito = new IaGabaritoItem();
+
+    private void EditarPergunta(IaGabaritoItem gi) => _editandoGabarito = new IaGabaritoItem
+    {
+        Codigo = gi.Codigo,
+        Pergunta = gi.Pergunta,
+        RespostaEsperada = gi.RespostaEsperada,
+        Assunto = gi.Assunto,
+        CodTicketOrigem = gi.CodTicketOrigem,
+        Ativo = gi.Ativo
+    };
+
+    private async Task SalvarPerguntaAsync()
+    {
+        if (_editandoGabarito == null) return;
+        _salvando = true;
+        try
+        {
+            await Gabarito.SalvarAsync(CodEmp, _editandoGabarito, Usuario);
+            _sugestoesGabarito.RemoveAll(x => x.CodTicketOrigem != null && x.CodTicketOrigem == _editandoGabarito.CodTicketOrigem);
+            _editandoGabarito = null;
+            _gabarito = await Gabarito.ListarAsync(CodEmp);
+            Avisar("Pergunta salva no gabarito.", true);
+        }
+        catch (Exception ex) { Avisar(ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private async Task ExcluirPerguntaAsync(IaGabaritoItem gi)
+    {
+        try
+        {
+            await Gabarito.ExcluirAsync(CodEmp, gi.Codigo);
+            _gabarito.Remove(gi);
+            Avisar("Pergunta excluída do gabarito.", true);
+        }
+        catch (Exception ex) { Avisar("Não foi possível excluir: " + ex.Message, false); }
+    }
+
+    private async Task SugerirPerguntasAsync()
+    {
+        _carregando = true;
+        try
+        {
+            _sugestoesGabarito = await Gabarito.SugerirAsync(CodEmp, 20);
+            if (_sugestoesGabarito.Count == 0)
+                Avisar("Não achei tickets com solução confirmada pelo cliente que ainda não estejam no gabarito.", false);
+        }
+        catch (Exception ex) { Avisar("Erro ao sugerir: " + ex.Message, false); }
+        finally { _carregando = false; }
+    }
+
+    private async Task AdicionarSugestaoAsync(IaGabaritoItem sg)
+    {
+        _salvando = true;
+        try
+        {
+            await Gabarito.SalvarAsync(CodEmp, sg, Usuario);
+            _sugestoesGabarito.Remove(sg);
+            _gabarito = await Gabarito.ListarAsync(CodEmp);
+        }
+        catch (Exception ex) { Avisar(ex.Message, false); }
+        finally { _salvando = false; }
+    }
+
+    private void EditarSugestao(IaGabaritoItem sg)
+    {
+        _sugestoesGabarito.Remove(sg);
+        _editandoGabarito = sg;
+    }
+
+    private static string ClasseNota(int n) => n switch { 2 => "n2", 1 => "n1", 0 => "n0", _ => "nx" };
+    private static string TextoNota(int n) => n switch { 2 => "Certa", 1 => "Parcial", 0 => "Errada", _ => "Falhou" };
+
+    public void Dispose() => _timerGabarito?.Dispose();
+
+    private static string Cortar(string? s, int max)
+        => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s[..max] + "…");
+}

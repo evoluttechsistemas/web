@@ -14,6 +14,8 @@ namespace EvolutCRM.Services
         public const string WHATSAPP_LEMBRETE = "WHATSAPP_LEMBRETE";
         public const string WHATSAPP_COBRANCA = "WHATSAPP_COBRANCA";
         public const string WHATSAPP_PIX = "WHATSAPP_PIX";
+        public const string TITULO_LANCADO = "TITULO_LANCADO";       // parcelas criadas pelo lançamento rápido
+        public const string TITULO_CANCELADO = "TITULO_CANCELADO";   // títulos em aberto excluídos
 
         public LogFinanceiroService(IConfiguration config)
         {

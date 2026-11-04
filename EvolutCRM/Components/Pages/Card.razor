@@ -9,6 +9,7 @@
 @inject EvolutCRM.Services.UserState UserState
 @inject AdminService AdminService
 @inject NavigationManager Nav
+@inject EvolutCRM.Services.AiService AiSvc
 @inject IJSRuntime JS
 @inject EvolutCRM.Services.AgendaService AgendaService
 @inject EvolutCRM.Services.HealthMonitorService HealthMonitor
@@ -2762,6 +2763,18 @@ textarea[id^="obsAnotacao_"] {
                                            style="display:block; text-align:center; text-decoration:none;">
                                             Baixar imagem
                                         </a>
+                                        @if (cardModel.Codigo > 0 && AssistenteAtendenteService.EhImagemDoCard(anot))
+                                        {
+                                            var anotIA = anot;
+                                            <button type="button"
+                                                    title="Mandar esta imagem para o Assistente IA analisar"
+                                                    style="display:block; width:100%; margin-top:6px; padding:6px 8px; border-radius:8px;
+                                                           border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8;
+                                                           font-weight:700; font-size:12px; cursor:pointer;"
+                                                    @onclick="() => AbrirAssistenteComImagem(anotIA)">
+                                                ✨ Analisar com IA
+                                            </button>
+                                        }
                                     </div>
                                 }
                                 else if (ehPdf)
@@ -2859,7 +2872,27 @@ textarea[id^="obsAnotacao_"] {
             </div>
 
             <!-- COMPOSITOR — fixo na parte inferior (igual ao ticket) -->
-            <div style="flex:0 0 auto; background:#f0f2f5; border-top:1px solid #d1d5db; padding:10px 12px;">
+            <div style="flex:0 0 auto; background:#f0f2f5; border-top:1px solid #d1d5db; padding:10px 12px; position:relative;">
+
+                <!-- Assistente IA do comercial (chat com a IA sobre este card): botão redondo solto sobre a conversa, canto direito -->
+                @if (cardModel.Codigo > 0 && PodeEditarCRM)
+                {
+                    <button type="button"
+                            title="Assistente IA: pergunte se o sistema atende o lead, peça resumo ou resposta (só você vê)"
+                            aria-label="Assistente IA"
+                            aria-pressed="@(_aiaAberto ? "true" : "false")"
+                            style="position:absolute; right:16px; bottom:calc(100% + 10px); z-index:5;
+                                   width:40px; height:40px; border-radius:50%; padding:0;
+                                   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+                                   border:1px solid @(_aiaAberto ? "#1d4ed8" : "#d1d5db");
+                                   background:@(_aiaAberto ? "#1d4ed8" : "#fff"); color:@(_aiaAberto ? "#fff" : "#1e3a8a");
+                                   font-size:9px; font-weight:800; line-height:1; cursor:pointer;
+                                   box-shadow:0 2px 8px rgba(15,23,42,.18);"
+                            @onclick="AlternarAssistenteIA">
+                        <span style="font-size:13px; line-height:1;">✨</span>
+                        <span>IA</span>
+                    </button>
+                }
 
                 @if (!PodeEditarCRM)
                 {
@@ -3077,6 +3110,7 @@ textarea[id^="obsAnotacao_"] {
                                     <text>🤖</text>
                                 }
                             </button>
+
                         </div>
                     </div>
 
@@ -3496,6 +3530,20 @@ textarea[id^="obsAnotacao_"] {
     </div>
 }
 
+@if (cardModel.Codigo > 0)
+{
+    <AssistenteIAPainel @ref="_assistenteIA"
+                        Origem="card"
+                        Modo="comercial"
+                        CodCard="cardModel.Codigo"
+                        Card="cardModel"
+                        CodEmp="UserState.CurrentCompanyId"
+                        Usuario="@UserState.CurrentUser"
+                        Aberto="_aiaAberto"
+                        OnFechar="() => _aiaAberto = false"
+                        OnUsarNaResposta="UsarRespostaDoAssistente" />
+}
+
 @code {
     [Parameter] public int? id { get; set; }
 
@@ -3543,6 +3591,30 @@ textarea[id^="obsAnotacao_"] {
     private byte[]? VideoGravado;
     private string VideoGravadoNome = "";
     private string VideoGravadoMime = "";
+
+    // ── Assistente IA do comercial (painel lateral: AssistenteIAPainel.razor)
+    private AssistenteIAPainel? _assistenteIA;
+    private bool _aiaAberto;
+
+    private void AlternarAssistenteIA() => _aiaAberto = !_aiaAberto;
+
+    // "Analisar com IA" numa imagem do lead: abre o painel com a imagem pronta para perguntar
+    private async Task AbrirAssistenteComImagem(AnotacaoModel anot)
+    {
+        _aiaAberto = true;
+        StateHasChanged();
+        await Task.Yield();
+        if (_assistenteIA != null)
+            await _assistenteIA.AnalisarImagemDoCardAsync(anot);
+    }
+
+    // "Usar na resposta": o texto vai para a caixa de mensagem do card para revisar e enviar
+    private async Task UsarRespostaDoAssistente(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return;
+        await DefinirTextoCampo(texto);
+        await FocarCampoMensagem();
+    }
 
     // ── IA ──
     private bool CarregandoIA;
@@ -4591,23 +4663,8 @@ textarea[id^="obsAnotacao_"] {
                 return $"[{x.DataHora:dd/MM HH:mm}] {autor}: {texto}";
             }));
 
-            using var http = new HttpClient { BaseAddress = new Uri(Nav.BaseUri) };
-
-            var resp = await http.PostAsJsonAsync("/api/help/suggest", new
-            {
-                message = pergunta,
-                conversationContext = contexto
-            });
-
-            if (!resp.IsSuccessStatusCode)
-            {
-                var txt = await resp.Content.ReadAsStringAsync();
-                _aiErro = $"Erro IA ({(int)resp.StatusCode}): {txt}";
-                return;
-            }
-
-            var data = await resp.Content.ReadFromJsonAsync<AiChatResponse>();
-            SugestaoIA = data?.Reply?.Trim() ?? "";
+            // Chama o serviço direto (o endpoint /api/help/suggest agora exige login)
+            SugestaoIA = (await AiSvc.AskAsync(pergunta, contexto))?.Trim() ?? "";
 
             if (string.IsNullOrWhiteSpace(SugestaoIA))
             {

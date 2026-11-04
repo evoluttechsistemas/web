@@ -1,0 +1,307 @@
+@page "/respostas-rapidas"
+@using EvolutCRM.Services
+@inject RespostaRapidaService Respostas
+@inject AdminService AdminService
+@inject UserState UserState
+
+<PageTitle>Respostas rápidas</PageTitle>
+
+<style>
+    .rrp { padding: 20px 24px; max-width: 1180px; margin: 0 auto; font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #0f172a; }
+    .rrp-topo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+    .rrp-ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; color: #fff;
+        background: linear-gradient(135deg, #0f766e, #0e7490); box-shadow: 0 6px 16px rgba(15,118,110,.3); }
+    .rrp-topo h2 { margin: 0; font-size: 20px; font-weight: 800; }
+    .rrp-topo p { margin: 2px 0 0; font-size: 12px; color: #64748b; }
+    .rrp-topo p code { font-family: 'JetBrains Mono', ui-monospace, monospace; background: #f1f5f9; border-radius: 4px; padding: 1px 5px; color: #0f766e; }
+    .rrp-acoes { margin-left: auto; display: flex; gap: 8px; }
+    .rrp-btn { height: 38px; padding: 0 16px; border-radius: 10px; border: 1px solid #e2e8f0; background: #fff; font-weight: 700;
+        font-size: 13px; cursor: pointer; color: #0f172a; }
+    .rrp-btn:hover { border-color: #94a3b8; }
+    .rrp-btn.pri { background: #0f766e; border-color: #0f766e; color: #fff; }
+    .rrp-btn.pri:hover { background: #115e59; }
+    .rrp-btn.perigo { color: #b91c1c; border-color: #fecaca; }
+    .rrp-btn:disabled { opacity: .6; cursor: default; }
+
+    .rrp-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 16px; align-items: start; }
+    .rrp-lado { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 12px; }
+    .rrp-busca { width: 100%; height: 38px; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0 12px; font-size: 13px; margin-bottom: 8px; }
+    .rrp-busca:focus, .rrp-campo input:focus, .rrp-campo textarea:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+    .rrp-lista { display: flex; flex-direction: column; gap: 4px; max-height: 62vh; overflow: auto; }
+    .rrp-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px; border-radius: 12px;
+        cursor: pointer; border: 1px solid transparent; text-align: left; background: none; width: 100%; font: inherit; color: inherit; }
+    .rrp-item:hover { background: #f8fafc; }
+    .rrp-item.sel { background: #f0fdfa; border-color: #99f6e4; }
+    .rrp-item.inativo { opacity: .55; }
+    .rrp-at { grid-row: span 2; font: 700 12px/1 'JetBrains Mono', ui-monospace, monospace; color: #0f766e; background: #ccfbf1;
+        border-radius: 6px; padding: 6px 8px; align-self: start; }
+    .rrp-ti { font-size: 13px; font-weight: 700; }
+    .rrp-tx { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rrp-usos { grid-row: span 2; font-size: 11px; color: #94a3b8; font-variant-numeric: tabular-nums; align-self: center; }
+    .rrp-vazio { padding: 28px 16px; text-align: center; color: #64748b; font-size: 13px; }
+    .rrp-vazio div { font-size: 30px; margin-bottom: 6px; }
+
+    .rrp-form { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+    .rrp-form h3 { margin: 0; font-size: 15px; font-weight: 800; }
+    .rrp-linha { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 10px; }
+    .rrp-campo label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    .rrp-campo input, .rrp-campo textarea { width: 100%; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; font-size: 14px; font-family: inherit; }
+    .rrp-campo textarea { min-height: 130px; resize: vertical; line-height: 1.5; }
+    .rrp-barra { position: relative; }
+    .rrp-barra span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font: 700 14px 'JetBrains Mono', ui-monospace, monospace; color: #0f766e; }
+    .rrp-barra input { padding-left: 26px; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .rrp-vars { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .rrp-var { border: 1px dashed #99f6e4; background: #f0fdfa; color: #0f766e; border-radius: 999px; padding: 3px 10px;
+        font: 600 11px 'JetBrains Mono', ui-monospace, monospace; cursor: pointer; }
+    .rrp-prev { border-radius: 12px; background: #e7f6ec; padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; color: #14532d; }
+    .rrp-prev small { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #15803d; font-weight: 700; margin-bottom: 4px; }
+    .rrp-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+    .rrp-rod { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .rrp-msg { font-size: 12px; font-weight: 600; }
+    .rrp-msg.erro { color: #b91c1c; }
+    .rrp-msg.ok { color: #047857; }
+
+    @@media (max-width: 860px) {
+        .rrp-corpo { grid-template-columns: 1fr; }
+        .rrp-linha { grid-template-columns: 1fr; }
+    }
+</style>
+
+<div class="rrp">
+    <div class="rrp-topo">
+        <div class="rrp-ico">⚡</div>
+        <div>
+            <h2>Respostas rápidas</h2>
+            <p>No ticket, digite <code>/</code> + atalho na caixa de mensagem e escolha a resposta. Vale para toda a equipe.</p>
+        </div>
+        <div class="rrp-acoes">
+            <button type="button" class="rrp-btn pri" @onclick="Nova" disabled="@(!_pode)">+ Nova resposta</button>
+        </div>
+    </div>
+
+    @if (!_carregado)
+    {
+        <div class="rrp-vazio">Carregando…</div>
+    }
+    else if (!_pode)
+    {
+        <div class="rrp-vazio">Você não tem permissão para esta tela.</div>
+    }
+    else
+    {
+        <div class="rrp-corpo">
+            <div class="rrp-lado">
+                <input class="rrp-busca" id="rrp-busca" placeholder="Buscar por atalho, título ou texto…"
+                       value="@_busca" @oninput="@(e => _busca = e.Value?.ToString() ?? string.Empty)" />
+
+                @if (!_lista.Any())
+                {
+                    <div class="rrp-vazio">
+                        <div>💬</div>
+                        Nenhuma resposta rápida ainda.<br />Crie a primeira ou comece pelos exemplos.
+                        <div style="margin-top:12px; font-size:13px;">
+                            <button type="button" class="rrp-btn" @onclick="CriarExemplos" disabled="@_salvando">Criar 4 exemplos</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="rrp-lista">
+                        @foreach (var r in Filtradas)
+                        {
+                            <button type="button" class="rrp-item @(r.Codigo == _edit.Codigo ? "sel" : "") @(r.Ativo ? "" : "inativo")"
+                                    @onclick="() => Editar(r)">
+                                <span class="rrp-at">/@r.Atalho</span>
+                                <span class="rrp-ti">@r.Titulo@(r.Ativo ? "" : " · inativa")</span>
+                                <span class="rrp-usos" title="Vezes usada">@r.QtdUsos×</span>
+                                <span class="rrp-tx">@r.Texto</span>
+                            </button>
+                        }
+                        @if (!Filtradas.Any())
+                        {
+                            <div class="rrp-vazio">Nada encontrado para "@_busca".</div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="rrp-form">
+                <h3>@(_edit.Codigo > 0 ? "Editar resposta" : "Nova resposta")</h3>
+
+                <div class="rrp-linha">
+                    <div class="rrp-campo">
+                        <label for="rrp-atalho">Atalho</label>
+                        <div class="rrp-barra">
+                            <span>/</span>
+                            <input id="rrp-atalho" maxlength="30" placeholder="pix" value="@_edit.Atalho"
+                                   @oninput="e => _edit.Atalho = RespostaRapidaService.NormalizarAtalho(e.Value?.ToString())" />
+                        </div>
+                    </div>
+                    <div class="rrp-campo">
+                        <label for="rrp-titulo">Título</label>
+                        <input id="rrp-titulo" maxlength="100" placeholder="Ex.: Enviar chave PIX" @bind="_edit.Titulo" @bind:event="oninput" />
+                    </div>
+                </div>
+
+                <div class="rrp-campo">
+                    <label for="rrp-texto">Texto</label>
+                    <textarea id="rrp-texto" placeholder="Escreva a resposta como vai para o cliente…" @bind="_edit.Texto" @bind:event="oninput"></textarea>
+                    <div class="rrp-vars">
+                        @foreach (var v in new[] { "{saudacao}", "{primeiro_nome}", "{cliente}", "{atendente}" })
+                        {
+                            <button type="button" class="rrp-var" title="Inserir no fim do texto" @onclick="() => InserirVariavel(v)">@v</button>
+                        }
+                    </div>
+                </div>
+
+                <div class="rrp-prev">
+                    <small>Como o cliente vai ver (exemplo)</small>
+                    @(string.IsNullOrWhiteSpace(_edit.Texto) ? "—" : Exemplo(_edit.Texto))
+                </div>
+
+                <label class="rrp-check">
+                    <input type="checkbox" @bind="_edit.Ativo" /> Ativa (aparece na caixa de mensagem)
+                </label>
+
+                <div class="rrp-rod">
+                    <button type="button" class="rrp-btn pri" @onclick="Salvar" disabled="@_salvando">
+                        @(_salvando ? "Salvando…" : "Salvar")
+                    </button>
+                    @if (_edit.Codigo > 0)
+                    {
+                        if (_confirmarExclusao)
+                        {
+                            <button type="button" class="rrp-btn perigo" @onclick="Excluir" disabled="@_salvando">Confirmar exclusão</button>
+                            <button type="button" class="rrp-btn" @onclick="() => _confirmarExclusao = false">Voltar</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="rrp-btn perigo" @onclick="() => _confirmarExclusao = true">Excluir</button>
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(_msg))
+                    {
+                        <span class="rrp-msg @(_msgErro ? "erro" : "ok")">@_msg</span>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _carregado, _pode, _salvando, _confirmarExclusao, _msgErro;
+    private string _busca = "";
+    private string? _msg;
+    private List<RespostaRapidaService.RespostaRapida> _lista = new();
+    private RespostaRapidaService.RespostaRapida _edit = new();
+
+    private IEnumerable<RespostaRapidaService.RespostaRapida> Filtradas =>
+        string.IsNullOrWhiteSpace(_busca)
+            ? _lista
+            : _lista.Where(r => r.Atalho.Contains(_busca.Trim().TrimStart('/'), StringComparison.OrdinalIgnoreCase)
+                             || r.Titulo.Contains(_busca, StringComparison.OrdinalIgnoreCase)
+                             || r.Texto.Contains(_busca, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        for (var i = 0; i < 100 && !UserState.IsReady; i++) await Task.Delay(50);
+        try
+        {
+            var u = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+            _pode = u.Length > 0 && await AdminService.UsuarioTemPermissaoAsync(u, "TICKETS_RESPONDER");
+            if (_pode) await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Aviso("Erro ao carregar: " + ex.Message, true);
+        }
+        _carregado = true;
+    }
+
+    private async Task CarregarAsync() => _lista = await Respostas.ListarAsync(false);
+
+    private void Nova()
+    {
+        _edit = new RespostaRapidaService.RespostaRapida();
+        _confirmarExclusao = false;
+        _msg = null;
+    }
+
+    private void Editar(RespostaRapidaService.RespostaRapida r)
+    {
+        _edit = new RespostaRapidaService.RespostaRapida
+        {
+            Codigo = r.Codigo, Atalho = r.Atalho, Titulo = r.Titulo, Texto = r.Texto, Ativo = r.Ativo
+        };
+        _confirmarExclusao = false;
+        _msg = null;
+    }
+
+    private void InserirVariavel(string v)
+    {
+        var t = _edit.Texto ?? "";
+        _edit.Texto = t.Length == 0 || t.EndsWith(' ') || t.EndsWith('\n') ? t + v : t + " " + v;
+    }
+
+    private async Task Salvar()
+    {
+        _salvando = true;
+        try
+        {
+            var erro = await Respostas.SalvarAsync(_edit, UserState.CurrentUser ?? "");
+            if (erro != null) { Aviso(erro, true); return; }
+
+            var atalho = RespostaRapidaService.NormalizarAtalho(_edit.Atalho);
+            await CarregarAsync();
+            var salva = _lista.FirstOrDefault(r => r.Atalho == atalho);
+            if (salva != null) Editar(salva);
+            Aviso($"Salvo. No ticket, digite /{atalho}.", false);
+        }
+        catch (Exception ex) { Aviso("Erro ao salvar: " + ex.Message, true); }
+        finally { _salvando = false; }
+    }
+
+    private async Task Excluir()
+    {
+        _salvando = true;
+        try
+        {
+            await Respostas.ExcluirAsync(_edit.Codigo);
+            await CarregarAsync();
+            Nova();
+            Aviso("Resposta excluída.", false);
+        }
+        catch (Exception ex) { Aviso("Erro ao excluir: " + ex.Message, true); }
+        finally { _salvando = false; }
+    }
+
+    private async Task CriarExemplos()
+    {
+        _salvando = true;
+        try
+        {
+            var n = await Respostas.CriarExemplosAsync(UserState.CurrentUser ?? "");
+            await CarregarAsync();
+            Aviso($"{n} exemplo(s) criado(s). Ajuste os textos do jeito da equipe.", false);
+        }
+        catch (Exception ex) { Aviso("Erro: " + ex.Message, true); }
+        finally { _salvando = false; }
+    }
+
+    private void Aviso(string m, bool erro) { _msg = m; _msgErro = erro; }
+
+    // Prévia com valores de exemplo (no ticket entram os dados reais)
+    private string Exemplo(string texto)
+    {
+        var h = DateTime.Now.Hour;
+        var saud = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+        var atendente = System.Globalization.CultureInfo.GetCultureInfo("pt-BR").TextInfo
+            .ToTitleCase((UserState.CurrentUser ?? "Atendente").Trim().ToLowerInvariant());
+        return texto
+            .Replace("{saudacao}", saud, StringComparison.OrdinalIgnoreCase)
+            .Replace("{primeiro_nome}", "Carlos", StringComparison.OrdinalIgnoreCase)
+            .Replace("{cliente}", "Carlos Aquino", StringComparison.OrdinalIgnoreCase)
+            .Replace("{atendente}", atendente, StringComparison.OrdinalIgnoreCase);
+    }
+}

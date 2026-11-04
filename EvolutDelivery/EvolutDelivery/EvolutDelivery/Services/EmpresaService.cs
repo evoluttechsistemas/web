@@ -19,7 +19,7 @@ namespace EvolutDelivery.Services
             await conn.OpenAsync();
 
             var sql = @"
-                SELECT TOP 1 Codigo, Fantasia, CNPJ, Slug
+                SELECT TOP 1 Codigo, Fantasia, CNPJ, Slug, TaxaEntrega
                 FROM Empresa
                 WHERE Slug = @Slug";
 
@@ -35,7 +35,8 @@ namespace EvolutDelivery.Services
                     Codigo = reader["Codigo"] != DBNull.Value ? Convert.ToInt32(reader["Codigo"]) : 0,
                     Fantasia = reader["Fantasia"]?.ToString() ?? string.Empty,
                     CNPJ = reader["CNPJ"]?.ToString() ?? string.Empty,
-                    Slug = reader["Slug"]?.ToString() ?? string.Empty
+                    Slug = reader["Slug"]?.ToString() ?? string.Empty,
+                    TaxaEntrega = LerTaxaEntrega(reader)
                 };
             }
 
@@ -48,7 +49,7 @@ namespace EvolutDelivery.Services
             await conn.OpenAsync();
 
             var sql = @"
-                SELECT TOP 1 Codigo, Fantasia, CNPJ, Slug
+                SELECT TOP 1 Codigo, Fantasia, CNPJ, Slug, TaxaEntrega
                 FROM Empresa
                 WHERE Codigo = @Codigo";
 
@@ -64,11 +65,23 @@ namespace EvolutDelivery.Services
                     Codigo = reader["Codigo"] != DBNull.Value ? Convert.ToInt32(reader["Codigo"]) : 0,
                     Fantasia = reader["Fantasia"]?.ToString() ?? string.Empty,
                     CNPJ = reader["CNPJ"]?.ToString() ?? string.Empty,
-                    Slug = reader["Slug"]?.ToString() ?? string.Empty
+                    Slug = reader["Slug"]?.ToString() ?? string.Empty,
+                    TaxaEntrega = LerTaxaEntrega(reader)
                 };
             }
 
             return null;
+        }
+
+        // TaxaEntrega nula ou negativa = sem taxa
+        private static decimal LerTaxaEntrega(SqlDataReader reader)
+        {
+            var valor = reader["TaxaEntrega"];
+            if (valor == DBNull.Value)
+                return 0m;
+
+            var taxa = Convert.ToDecimal(valor);
+            return taxa > 0 ? Math.Round(taxa, 2, MidpointRounding.AwayFromZero) : 0m;
         }
 
         public async Task<string> GerarSlugUnicoAsync(string fantasia)

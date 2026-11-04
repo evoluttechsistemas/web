@@ -101,7 +101,8 @@ ORDER BY TopicoIndex;";
 
         const string deleteSql = @"
 DELETE FROM dbo.AiTicketInsights
-WHERE CodTicketChamadoC = @CodTicketChamadoC;";
+WHERE CodTicketChamadoC = @CodTicketChamadoC
+  AND TopicoIndex < 900;   -- 900+ = salvos pelo atendente no Assistente IA: não apaga ao regerar";
 
         const string insertSql = @"
 INSERT INTO dbo.AiTicketInsights
@@ -482,5 +483,54 @@ ORDER BY TopicoIndex;";
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Insight salvo pelo atendente no Assistente IA ("Salvar como insight").
+    /// Usa TopicoIndex a partir de 900 para não ser apagado quando o ticket regera os insights automáticos.
+    /// </summary>
+    public async Task InserirManualAsync(int ticketId, TicketInsight ins)
+    {
+        if (ins == null) throw new ArgumentNullException(nameof(ins));
+        if (string.IsNullOrWhiteSpace(ins.resumo) || string.IsNullOrWhiteSpace(ins.solucao))
+            throw new InvalidOperationException("Resumo e solução são obrigatórios.");
+
+        var tagsStr = ins.tags == null
+            ? null
+            : string.Join(";", ins.tags
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Select(t => Normalize(t)!.Replace(";", ""))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(12));
+
+        const string sql = @"
+DECLARE @Topico INT = (SELECT ISNULL(MAX(TopicoIndex), 899) + 1
+                         FROM dbo.AiTicketInsights WITH (UPDLOCK, HOLDLOCK)
+                        WHERE CodTicketChamadoC = @CodTicketChamadoC AND TopicoIndex >= 900);
+INSERT INTO dbo.AiTicketInsights
+(CodTicketChamadoC, TopicoIndex, TopicoTitulo, PerguntaCliente, Resumo, Categoria, Intencao, Gravidade,
+ Tags, CausaProvavel, Solucao, SolucaoConfirmada, Confianca)
+VALUES
+(@CodTicketChamadoC, @Topico, @TopicoTitulo, @PerguntaCliente, @Resumo, @Categoria, @Intencao, @Gravidade,
+ @Tags, @CausaProvavel, @Solucao, @SolucaoConfirmada, @Confianca);";
+
+        await using var conn = new SqlConnection(_cs);
+        await conn.OpenAsync();
+        await using var cmd = new SqlCommand(sql, conn);
+
+        cmd.Parameters.Add("@CodTicketChamadoC", SqlDbType.Int).Value = ticketId;
+        cmd.Parameters.Add("@TopicoTitulo", SqlDbType.NVarChar, 120).Value = ToDb(Trunc(Normalize(ins.topicoTitulo), 120));
+        cmd.Parameters.Add("@PerguntaCliente", SqlDbType.NVarChar, 800).Value = ToDb(Trunc(Normalize(ins.perguntaCliente), 800));
+        cmd.Parameters.Add("@Resumo", SqlDbType.NVarChar, 300).Value = ToDb(Trunc(Normalize(ins.resumo), 300));
+        cmd.Parameters.Add("@Categoria", SqlDbType.NVarChar, 40).Value = ToDb(Trunc(Normalize(ins.categoria), 40));
+        cmd.Parameters.Add("@Intencao", SqlDbType.NVarChar, 20).Value = ToDb(Trunc(Normalize(ins.intencao), 20));
+        cmd.Parameters.Add("@Gravidade", SqlDbType.NVarChar, 10).Value = ToDb(Trunc(Normalize(ins.gravidade), 10));
+        cmd.Parameters.Add("@Tags", SqlDbType.NVarChar, 200).Value = ToDb(Trunc(tagsStr, 200));
+        cmd.Parameters.Add("@CausaProvavel", SqlDbType.NVarChar, 1000).Value = ToDb(Trunc(Normalize(ins.causaProvavel), 1000));
+        cmd.Parameters.Add("@Solucao", SqlDbType.NVarChar, 1200).Value = ToDb(Trunc(Normalize(ins.solucao), 1200));
+        cmd.Parameters.Add("@SolucaoConfirmada", SqlDbType.Bit).Value = ins.solucaoConfirmada;
+        cmd.Parameters.Add("@Confianca", SqlDbType.Int).Value = ins.confianca;
+
+        await cmd.ExecuteNonQueryAsync();
     }
 }

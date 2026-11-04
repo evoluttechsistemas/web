@@ -3,9 +3,11 @@
 @using EvolutDelivery.Models
 @using EvolutDelivery.Services
 @inject EmpresaService empresaService
+@inject LojaStatusService lojaStatusService
 @inject StorageService storage
 @inject NavigationManager NavManager
-@inject ProdutoService produtoService
+@inject CarrinhoService carrinhoService
+@inject ILogger<Carrinho> Logger
 
 <PageTitle>Meu Carrinho</PageTitle>
 
@@ -456,7 +458,9 @@
             {
                 <div class="ca-item">
                     <img class="ca-item-img"
-                         src="@(string.IsNullOrEmpty(item.ImagemBase64) ? semImagem : item.ImagemBase64)"
+                         src="@ImagemUrl(item.Codigo)"
+                         onerror="this.onerror=null;this.style.visibility='hidden'"
+                         loading="lazy"
                          alt="@item.Nome" />
 
                     <div class="ca-item-info">
@@ -503,9 +507,21 @@
                 </div>
                 <div class="ca-footer-total">@Subtotal.ToString("C", new CultureInfo("pt-BR"))</div>
             </div>
-            <button class="btn-checkout" @onclick="IrParaCheckout">
-                Finalizar pedido →
-            </button>
+            @if (lojaFechada)
+            {
+                <div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:10px 12px;font-size:.85rem;font-weight:600;margin-bottom:10px;line-height:1.4;">
+                    🔒 Loja fechada no momento. @(string.IsNullOrWhiteSpace(mensagemLojaFechada) ? "Não estamos recebendo pedidos agora." : mensagemLojaFechada)
+                </div>
+                <button class="btn-checkout" disabled style="background:#cbd5e1;cursor:not-allowed;">
+                    Loja fechada
+                </button>
+            }
+            else
+            {
+                <button class="btn-checkout" @onclick="IrParaCheckout">
+                    Finalizar pedido →
+                </button>
+            }
         </div>
     }
 </div>
@@ -517,10 +533,12 @@
 
 @code {
 
-    private const string semImagem = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='140' viewBox='0 0 200 140'%3E%3Crect width='200' height='140' fill='%23f1f5f9'/%3E%3C/svg%3E";
+    private string ImagemUrl(int codigo) => $"img/{Uri.EscapeDataString(slug ?? "")}/{codigo}";
     [Parameter] public string slug { get; set; } = string.Empty;
 
     private List<ItemCarrinho> itens = new();
+    private bool lojaFechada = false;
+    private string mensagemLojaFechada = "";
     private bool mostrarToast = false;
     private string mensagemToast = "";
 
@@ -533,48 +551,61 @@
 
         try
         {
-            var salvo = await storage.GetAsync<List<ItemCarrinho>>($"carrinho_{slug}");
-            if (salvo != null)
+            // Navegador guarda só código/quantidade/observação.
+            // Nome, preço e regra de fracionamento vêm do banco.
+            // Status da loja (fechada pelo painel admin)
+            try
             {
-                itens = salvo;
-                StateHasChanged();
-
-                // Busca imagens em background
-                _ = CarregarImagensBackground();
+                var empresa = await empresaService.BuscarPorSlugAsync(slug);
+                if (empresa != null)
+                {
+                    var status = await lojaStatusService.ObterAsync(empresa.Codigo);
+                    lojaFechada = status.Fechada;
+                    mensagemLojaFechada = status.Mensagem;
+                }
             }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Não foi possível consultar o status da loja {Slug}", slug);
+            }
+
+            var salvo = await storage.ObterCarrinhoAsync(slug);
+            if (!salvo.Any())
+            {
+                StateHasChanged();
+                return;
+            }
+
+            var (validados, avisos) = await carrinhoService.ValidarAsync(slug, salvo);
+            itens = validados;
+
+            if (avisos.Any())
+                await storage.SalvarCarrinhoAsync(slug, itens);
+
+            StateHasChanged();
+
+            if (avisos.Any())
+                await ExibirToast(string.Join(" ", avisos));
         }
         catch (Exception ex)
         {
-            Console.WriteLine("ERRO CARRINHO: " + ex.ToString());
-        }
-    }
-
-    private string cnpj = "";
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (string.IsNullOrWhiteSpace(slug)) return;
-        var empresa = await empresaService.BuscarPorSlugAsync(slug);
-        cnpj = empresa?.CNPJ ?? "";
-    }
-
-    private async Task CarregarImagensBackground()
-    {
-        if (string.IsNullOrEmpty(cnpj)) return;
-
-        foreach (var item in itens)
-        {
-            if (string.IsNullOrEmpty(item.ImagemBase64))
-            {
-                item.ImagemBase64 = await Task.Run(() =>
-                    produtoService.BuscarImagemBase64(item.Codigo, cnpj));
-                await InvokeAsync(StateHasChanged);
-            }
+            Logger.LogError(ex, "Erro ao carregar o carrinho da loja {Slug}", slug);
         }
     }
 
     private async Task Aumentar(ItemCarrinho item)
     {
+        // Respeita o estoque (soma todas as linhas do mesmo produto)
+        if (item.EstoqueDisponivel != null)
+        {
+            var totalProduto = itens.Where(i => i.Codigo == item.Codigo).Sum(i => i.Quantidade);
+            if (totalProduto + PassoQuantidade(item) > item.EstoqueDisponivel.Value)
+            {
+                await ExibirToast($"Este produto tem apenas {CarrinhoService.FormatarQuantidade(item.EstoqueDisponivel.Value)} em estoque");
+                return;
+            }
+        }
+
         item.Quantidade += PassoQuantidade(item);
         NormalizarQuantidade(item);
         await SalvarCarrinho();
@@ -639,13 +670,13 @@
     private async Task LimparCarrinho()
     {
         itens.Clear();
-        await storage.RemoveAsync($"carrinho_{slug}");
+        await storage.LimparCarrinhoAsync(slug);
         await ExibirToast("Carrinho limpo");
     }
 
     private async Task SalvarCarrinho()
     {
-        await storage.SaveAsync($"carrinho_{slug}", itens);
+        await storage.SalvarCarrinhoAsync(slug, itens);
     }
 
     private void Voltar()

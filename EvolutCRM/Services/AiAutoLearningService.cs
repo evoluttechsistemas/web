@@ -42,6 +42,13 @@ public sealed class AiAutoLearningService
 
         var insights = await _openAi.GenerateInsightsAsync(ticket.Texto, ticket.Imagens);
 
+        // A IA não achou assunto de suporte na conversa: mantém o que já existia (não apaga nada)
+        if (insights.Count == 0)
+        {
+            LogHelper.Log($"[INSIGHT] Ticket #{CodTicketChamadoC}: nenhum assunto de suporte na conversa; insights mantidos como estavam.");
+            return await _insightRepo.ListByCodTicketChamadoCAsync(CodTicketChamadoC);
+        }
+
         await _insightRepo.ReplaceAllForTicketAsync(CodTicketChamadoC, insights);
 
         // Já entra no índice da IA: não precisa esperar o reindexar

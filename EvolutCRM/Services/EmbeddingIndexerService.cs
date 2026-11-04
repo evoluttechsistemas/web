@@ -16,11 +16,7 @@ public sealed class EmbeddingIndexerService
     private readonly string _cs;
     private readonly OpenAiClient _openAi;
 
-    // Mesmo critério do EmbeddingIndex: só gera embedding do que vai ser usado
-    private const string FiltroInsights = @"
-              ISNULL(LTRIM(RTRIM(Resumo)), '')  <> ''
-              AND ISNULL(LTRIM(RTRIM(Solucao)), '') <> ''
-              AND (SolucaoConfirmada = 1 OR ISNULL(Confianca, 0) >= 70)";
+    // Mesmo critério do EmbeddingIndex (IaCuradoriaSchema.FiltroUsavel): só gera embedding do que vai ser usado
 
     // Documentação que serve para responder cliente (os tutoriais internos do HELP ficam de fora)
     private const string FiltroDocs = @"
@@ -85,13 +81,15 @@ public sealed class EmbeddingIndexerService
         await using var conn = new SqlConnection(_cs);
         await conn.OpenAsync();
 
+        var colunas = await IaCuradoriaSchema.GarantirAsync(conn);
+
         var rows = new List<(int Cod, string Texto)>();
         await using (var cmd = new SqlCommand($@"
-            SELECT Codigo, PerguntaCliente, Resumo, Solucao, Tags
-            FROM dbo.AiTicketInsights
-            WHERE Embedding IS NULL
-              AND {FiltroInsights}
-              AND (@Ticket IS NULL OR CodTicketChamadoC = @Ticket);", conn))
+            SELECT I.Codigo, I.PerguntaCliente, I.Resumo, I.Solucao, I.Tags
+            FROM dbo.AiTicketInsights I
+            WHERE I.Embedding IS NULL
+              AND {IaCuradoriaSchema.Filtro(colunas)}
+              AND (@Ticket IS NULL OR I.CodTicketChamadoC = @Ticket);", conn))
         {
             cmd.Parameters.Add("@Ticket", System.Data.SqlDbType.Int).Value = (object?)codTicket ?? DBNull.Value;
             await using var rd = await cmd.ExecuteReaderAsync();

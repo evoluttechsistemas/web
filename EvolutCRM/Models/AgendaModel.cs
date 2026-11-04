@@ -28,5 +28,12 @@
         public string DiasRepeticao { get; set; }
         public bool EhOcorrenciaGerada { get; set; }
         public int? AgendaPaiCodigo { get; set; }
+
+        // Mesma agenda criada para vários usuários de uma vez (para excluir de todos)
+        public Guid? GrupoAgenda { get; set; }
+
+        // Quem finalizou e quando
+        public string? ResolvidoPor { get; set; }
+        public DateTime? ResolvidoEm { get; set; }
     }
 }

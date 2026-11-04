@@ -202,6 +202,22 @@ namespace EvolutCRM.Mobile
                 return Results.Ok();
             });
 
+            // Equipe para a faixa do topo do app: mesma lista da barra da equipe do HELP
+            api.MapGet("/equipe", async (UsuarioStatusService status) =>
+            {
+                var membros = await status.ObterEquipeAsync();
+                return Results.Ok(membros.Select(m => new MobileEquipeMembroDto
+                {
+                    Usuario = m.Usuario,
+                    Online = m.Online,
+                    Disponivel = m.Disponivel,
+                    Status = m.StatusTexto,
+                    Cor = m.StatusCorFinal,
+                    Tempo = m.TempoTexto,
+                    Atendimentos = m.Atendimentos
+                }).ToList());
+            });
+
             // Atendentes para transferir o ticket (mesma lista do campo Responsável do HELP)
             api.MapGet("/usuarios", async (TicketService ts) =>
                 Results.Ok(await ListarAtendentesAsync(ts)));
@@ -349,9 +365,10 @@ namespace EvolutCRM.Mobile
                 return Results.Ok(new MobileNovoTicketResponse { Sucesso = true, Codigo = id, Mensagem = $"Ticket #{id} criado." });
             });
 
-            // Finalizar: mesmo caminho do F3 "Finalizar sem insight" da tela Ticket do HELP
+            // Finalizar: mesmo caminho do F3 da tela Ticket do HELP. ?insight=true/false = escolha do atendente
+            // (sem o parâmetro, app antigo: o insight fica para a rotina automática, como antes)
             api.MapPost("/tickets/{id:int}/finalizar", async (
-                int id, HttpContext http, TicketService ts, AdminService admin) =>
+                int id, bool? insight, HttpContext http, TicketService ts, AdminService admin, InsightAutomaticoService insightAuto) =>
             {
                 var u = Contexto(http);
                 var (podeResponder, podeStatus) = await PermissoesAsync(admin, u.Usuario);
@@ -377,9 +394,14 @@ namespace EvolutCRM.Mobile
                 if (!result.Sucesso) return Falha(result.Mensagem);
 
                 await ts.SalvarCabecalhoTicketAsync(t, u.Usuario);
-                await ts.ResolverAgendasDoTicketAsync(t.Codigo);
+                // Finalizar o ticket não resolve a agenda: ela só é resolvida na tela de Agendas
 
-                Console.WriteLine($"[MOBILE] Ticket #{id} finalizado por {u.Usuario}");
+                if (insight == true)
+                    insightAuto.Enfileirar(id, u.CodEmp);
+                else if (insight == false)
+                    await insightAuto.MarcarPuladoAsync(id);
+
+                Console.WriteLine($"[MOBILE] Ticket #{id} finalizado por {u.Usuario} ({(insight == true ? "com" : insight == false ? "sem" : "sem escolha de")} insight)");
                 return Results.Ok(new MobileEnviarResponse { Sucesso = true, Mensagem = "Ticket finalizado." });
             });
 

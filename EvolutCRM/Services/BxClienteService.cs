@@ -352,6 +352,224 @@ WHERE CodEmp = @CodEmp
             }
         }
 
+        // ───────────── Lançamento rápido de parcelas (igual ao ERP) ─────────────
+
+        /// <summary>Tipos de conta já usados no contas a receber da empresa (VENDA sempre aparece).</summary>
+        public async Task<List<TipoContaReceberDto>> ListarTiposContaReceberAsync()
+        {
+            var lista = new List<TipoContaReceberDto>();
+
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new SqlCommand(@"
+SELECT CodTipoConta, MAX(LTRIM(RTRIM(NomeTipoConta))) AS NomeTipoConta
+FROM ContaReceber
+WHERE CodEmp = @CodEmp
+  AND CodTipoConta IS NOT NULL
+  AND ISNULL(LTRIM(RTRIM(NomeTipoConta)), '') <> ''
+GROUP BY CodTipoConta
+ORDER BY CodTipoConta;", conn);
+            AddCodEmp(cmd);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                lista.Add(new TipoContaReceberDto
+                {
+                    Codigo = Convert.ToInt32(reader["CodTipoConta"]),
+                    Nome = reader["NomeTipoConta"]?.ToString() ?? ""
+                });
+            }
+
+            if (!lista.Any(t => t.Codigo == 1))
+                lista.Insert(0, new TipoContaReceberDto { Codigo = 1, Nome = "VENDA" });
+
+            return lista;
+        }
+
+        /// <summary>
+        /// Grava as parcelas no ContaReceber do mesmo jeito que o Lançamento Rápido Receber do ERP
+        /// (TipoPagamento CRD, Parcela/TotalParcela, sem pagamento). Tudo numa transação: ou grava todas ou nenhuma.
+        /// </summary>
+        public async Task<(bool Ok, string Mensagem, List<int> Codigos)> LancarParcelasAsync(
+            int codCliente,
+            string nomeCliente,
+            int codTipoConta,
+            string nomeTipoConta,
+            DateTime dataMovimento,
+            IReadOnlyList<ParcelaLancamentoDto> parcelas,
+            string? observacao,
+            string usuario)
+        {
+            var codigos = new List<int>();
+
+            if (codCliente <= 0) return (false, "Selecione o cliente.", codigos);
+            if (parcelas == null || parcelas.Count == 0) return (false, "Gere as parcelas antes de salvar.", codigos);
+            if (parcelas.Count > 120) return (false, "No máximo 120 parcelas por lançamento.", codigos);
+            if (parcelas.Any(p => p.Valor <= 0)) return (false, "Todas as parcelas precisam ter valor maior que zero.", codigos);
+            if (string.IsNullOrWhiteSpace(nomeTipoConta)) return (false, "Selecione o tipo de conta.", codigos);
+
+            var obs = (observacao ?? "").Trim();
+            if (obs.Length > 250) obs = obs[..250];
+            var usu = (usuario ?? "").Trim().ToUpperInvariant();
+            if (usu.Length > 50) usu = usu[..50];
+
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+            using var tran = conn.BeginTransaction();
+
+            try
+            {
+                // O Codigo é identity? (se não for, calcula o próximo com trava, para dois lançamentos não pegarem o mesmo)
+                bool identity;
+                using (var cmdId = new SqlCommand(
+                    "SELECT ISNULL(COLUMNPROPERTY(OBJECT_ID('dbo.ContaReceber'), 'Codigo', 'IsIdentity'), 0);", conn, tran))
+                    identity = Convert.ToInt32(await cmdId.ExecuteScalarAsync()) == 1;
+
+                // Nome do cliente como está no cadastro (o ERP grava o Nome)
+                string nome = nomeCliente ?? "";
+                using (var cmdNome = new SqlCommand(
+                    "SELECT TOP 1 Nome FROM Cliente WHERE Codigo = @CodCliente AND CodEmp = @CodEmp;", conn, tran))
+                {
+                    AddCodEmp(cmdNome);
+                    cmdNome.Parameters.AddWithValue("@CodCliente", codCliente);
+                    var r = await cmdNome.ExecuteScalarAsync();
+                    if (r != null && r != DBNull.Value && !string.IsNullOrWhiteSpace(r.ToString()))
+                        nome = r.ToString()!.Trim();
+                }
+
+                const string colunas = @"
+    CodTipoConta, NomeTipoConta, DataMovimento, DataVencimento, CodCliente, NomeCliente,
+    Valor, Parcela, TotalParcela, Observacao, TipoPagamento, CodEmp,
+    DataHoraUltimaGravacao, UsuarioUltimaGravacao";
+                const string valores = @"
+    @CodTipoConta, @NomeTipoConta, @DataMovimento, @DataVencimento, @CodCliente, @NomeCliente,
+    @Valor, @Parcela, @TotalParcela, @Observacao, 'CRD', @CodEmp,
+    GETDATE(), @Usuario";
+
+                var sql = identity
+                    ? $"INSERT INTO ContaReceber ({colunas}) VALUES ({valores}); SELECT CAST(SCOPE_IDENTITY() AS int);"
+                    : $@"DECLARE @Novo int = (SELECT ISNULL(MAX(Codigo), 0) + 1 FROM ContaReceber WITH (UPDLOCK, HOLDLOCK));
+INSERT INTO ContaReceber (Codigo, {colunas}) VALUES (@Novo, {valores});
+SELECT @Novo;";
+
+                var total = parcelas.Count;
+                foreach (var p in parcelas.OrderBy(p => p.Numero))
+                {
+                    using var cmd = new SqlCommand(sql, conn, tran);
+                    AddCodEmp(cmd);
+                    cmd.Parameters.AddWithValue("@CodTipoConta", codTipoConta);
+                    cmd.Parameters.AddWithValue("@NomeTipoConta", nomeTipoConta.Trim());
+                    cmd.Parameters.AddWithValue("@DataMovimento", dataMovimento.Date);
+                    cmd.Parameters.AddWithValue("@DataVencimento", p.Vencimento.Date);
+                    cmd.Parameters.AddWithValue("@CodCliente", codCliente);
+                    cmd.Parameters.AddWithValue("@NomeCliente", nome);
+                    cmd.Parameters.AddWithValue("@Valor", Math.Round(p.Valor, 2));
+                    cmd.Parameters.AddWithValue("@Parcela", p.Numero);
+                    cmd.Parameters.AddWithValue("@TotalParcela", total);
+                    cmd.Parameters.AddWithValue("@Observacao", obs);
+                    cmd.Parameters.AddWithValue("@Usuario", usu);
+
+                    codigos.Add(Convert.ToInt32(await cmd.ExecuteScalarAsync()));
+                }
+
+                tran.Commit();
+                return (true, $"{codigos.Count} parcela(s) lançada(s).", codigos);
+            }
+            catch (Exception ex)
+            {
+                try { tran.Rollback(); } catch { }
+                codigos.Clear();
+                return (false, "Erro ao lançar: " + ex.Message, codigos);
+            }
+        }
+
+        /// <summary>
+        /// Cancela (exclui) títulos em aberto. Não exclui nada se algum título estiver pago, tiver vindo de
+        /// venda/OS/faturamento do ERP ou tiver boleto/PIX gerado — devolve quais são e o motivo.
+        /// </summary>
+        public async Task<(bool Ok, string Mensagem)> CancelarTitulosAsync(IReadOnlyList<int> codigos)
+        {
+            if (codigos == null || codigos.Count == 0) return (false, "Selecione os títulos.");
+
+            var lista = codigos.Distinct().ToList();
+            var nomes = string.Join(", ", lista.Select((_, i) => "@c" + i));
+
+            using var conn = new SqlConnection(ConnectionString);
+            await conn.OpenAsync();
+            using var tran = conn.BeginTransaction();
+
+            try
+            {
+                var bloqueados = new List<string>();
+                var encontrados = 0;
+
+                using (var cmd = new SqlCommand($@"
+SELECT Codigo,
+       CASE
+         WHEN DataPagamento IS NOT NULL OR ValorPago IS NOT NULL THEN 'já está pago'
+         WHEN ISNULL(CAST(CodVendaC AS varchar(50)), '0') NOT IN ('', '0')
+           OR ISNULL(CAST(CodOrdemServicoC AS varchar(50)), '0') NOT IN ('', '0')
+           OR ISNULL(CAST(CodFaturamentoC AS varchar(50)), '0') NOT IN ('', '0')
+           OR ISNULL(CAST(CodDevolucaoC AS varchar(50)), '0') NOT IN ('', '0')
+           OR ISNULL(CAST(CodTrocaC AS varchar(50)), '0') NOT IN ('', '0')
+              THEN 'veio de venda/OS/faturamento do ERP'
+         WHEN ISNULL(CAST(CodBoletoBancario AS varchar(50)), '0') NOT IN ('', '0')
+           OR ISNULL(LTRIM(RTRIM(CAST(NossoNumero AS varchar(100)))), '') <> ''
+           OR ISNULL(LTRIM(RTRIM(CAST(IDTransacaoPIX AS varchar(200)))), '') <> ''
+           OR ISNULL(CAST(PixCopiaECola AS varchar(10)), '') <> ''
+              THEN 'tem boleto ou PIX gerado'
+         ELSE ''
+       END AS Motivo
+FROM ContaReceber WITH (UPDLOCK)
+WHERE CodEmp = @CodEmp AND Codigo IN ({nomes});", conn, tran))
+                {
+                    AddCodEmp(cmd);
+                    for (var i = 0; i < lista.Count; i++) cmd.Parameters.AddWithValue("@c" + i, lista[i]);
+
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        encontrados++;
+                        var motivo = reader["Motivo"]?.ToString() ?? "";
+                        if (motivo.Length > 0) bloqueados.Add($"#{reader["Codigo"]} ({motivo})");
+                    }
+                }
+
+                if (encontrados != lista.Count)
+                {
+                    tran.Rollback();
+                    return (false, "Algum título não foi encontrado (pode ter sido alterado no ERP). Atualize a lista.");
+                }
+
+                if (bloqueados.Count > 0)
+                {
+                    tran.Rollback();
+                    return (false, "Nada foi cancelado. Não dá para cancelar: " + string.Join("; ", bloqueados) +
+                                   ". Esses precisam ser tratados no ERP.");
+                }
+
+                using (var del = new SqlCommand($@"
+DELETE FROM ContaReceber
+WHERE CodEmp = @CodEmp AND Codigo IN ({nomes})
+  AND DataPagamento IS NULL AND ValorPago IS NULL;", conn, tran))
+                {
+                    AddCodEmp(del);
+                    for (var i = 0; i < lista.Count; i++) del.Parameters.AddWithValue("@c" + i, lista[i]);
+                    await del.ExecuteNonQueryAsync();
+                }
+
+                tran.Commit();
+                return (true, $"{lista.Count} título(s) cancelado(s).");
+            }
+            catch (Exception ex)
+            {
+                try { tran.Rollback(); } catch { }
+                return (false, "Erro ao cancelar: " + ex.Message);
+            }
+        }
+
         public async Task<List<CobrancaClienteDto>> ListarClientesCobrancaAsync()
         {
             var lista = new List<CobrancaClienteDto>();

@@ -2,6 +2,7 @@
 @page "/ticket/{id:int}"
 @inject EvolutCRM.Services.TicketService TicketService
 @inject EvolutCRM.Services.UserState UserState
+@inject EvolutCRM.Services.DocumentacaoService DocumentacaoSvc
 @inject NavigationManager Nav
 @inject TicketNotificationState TicketNotify
 @inject IJSRuntime JS
@@ -17,6 +18,9 @@
 @inject EvolutCRM.Services.CardService CardService
 @inject EvolutCRM.Services.AiAutoLearningService AiAuto
 @inject EvolutCRM.Services.AiService AiSvc
+@inject EvolutCRM.Services.TreinamentoClienteService Treinos
+@inject EvolutCRM.Services.InsightAutomaticoService InsightAuto
+@inject EvolutCRM.Services.DocumentacaoAutomaticaService DocAuto
 @inject EvolutCRM.Services.AdminService AdminService
 @using Microsoft.AspNetCore.WebUtilities
 @inject EvolutCRM.Services.KHelpDeskApiService KHelpDeskApi
@@ -26,6 +30,7 @@
 @inject ParametroDinamicoService ParametroService
 @inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
 @inject AdminService AdminService
+@inject RespostaRapidaService RespostasRapidas
 
 
 <style>
@@ -1593,7 +1598,44 @@ input, select, textarea {
 .acesso-remoto-toolbar {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     margin-bottom: 12px;
+}
+
+.btn-atualizar-acesso {
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 900;
+    padding: 9px 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+    .btn-atualizar-acesso:hover:not(:disabled) {
+        background: #e2e8f0;
+    }
+
+    .btn-atualizar-acesso:disabled {
+        opacity: .6;
+        cursor: not-allowed;
+    }
+
+    .btn-atualizar-acesso .ico {
+        display: inline-block;
+        font-size: 15px;
+        line-height: 1;
+    }
+
+    .btn-atualizar-acesso.girando .ico {
+        animation: acesso-girar .8s linear infinite;
+    }
+
+@@keyframes acesso-girar {
+    to { transform: rotate(360deg); }
 }
 
 .btn-novo-acesso {
@@ -2904,7 +2946,7 @@ else
                   style="display:flex; flex-direction:column; overflow:hidden; padding:0;">
 
                 <!-- Histórico -->
-                <div class="historico-wrap">
+                <div class="historico-wrap" id="historico-@id">
                     @foreach (var h in Historico)
                     {
                         var souEu = MesmoUsuario(h.Usuario, UserState.CurrentUser);
@@ -3114,6 +3156,19 @@ else
                                                style="display:block; text-align:center; text-decoration:none;">
                                                 Baixar imagem
                                             </a>
+                                            @if (id > 0 && AssistenteAtendenteService.EhImagemDoTicket(h))
+                                            {
+                                                var codImgIA = h.Codigo;
+                                                var urlImgIA = h.CaminhoImagem;
+                                                <button type="button"
+                                                        title="Mandar esta imagem para o Assistente IA analisar"
+                                                        style="display:block; width:100%; margin-top:6px; padding:6px 8px; border-radius:8px;
+                                                               border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8;
+                                                               font-weight:700; font-size:12px; cursor:pointer;"
+                                                        @onclick="() => AbrirAssistenteComImagem(codImgIA, urlImgIA)">
+                                                    ✨ Analisar com IA
+                                                </button>
+                                            }
                                         </div>
                                     }
                                     else if (ehPdf)
@@ -3233,7 +3288,27 @@ else
                 </div>
 
                 <!-- COMPOSITOR — fixo na parte inferior -->
-                <div style="flex:0 0 auto; background:#f0f2f5; border-top:1px solid #d1d5db; padding:10px 12px;">
+                <div style="flex:0 0 auto; background:#f0f2f5; border-top:1px solid #d1d5db; padding:10px 12px; position:relative;">
+
+                    <!-- Assistente IA do atendente (chat com a IA sobre este ticket): botão redondo solto sobre a conversa, canto direito -->
+                    @if (id > 0 && PodeResponderTickets)
+                    {
+                        <button type="button"
+                                title="Assistente IA: converse com a IA sobre este ticket (só você vê)"
+                                aria-label="Assistente IA"
+                                aria-pressed="@(_aiaAberto ? "true" : "false")"
+                                style="position:absolute; right:16px; bottom:calc(100% + 10px); z-index:5;
+                                       width:40px; height:40px; border-radius:50%; padding:0;
+                                       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+                                       border:1px solid @(_aiaAberto ? "#1d4ed8" : "#d1d5db");
+                                       background:@(_aiaAberto ? "#1d4ed8" : "#fff"); color:@(_aiaAberto ? "#fff" : "#1e3a8a");
+                                       font-size:9px; font-weight:800; line-height:1; cursor:pointer;
+                                       box-shadow:0 2px 8px rgba(15,23,42,.18);"
+                                @onclick="AlternarAssistenteIA">
+                            <span style="font-size:13px; line-height:1;">✨</span>
+                            <span>IA</span>
+                        </button>
+                    }
 
                     @if (!PodeResponderTickets)
                     {
@@ -3288,22 +3363,44 @@ else
                                         Baseado em:
                                         @foreach (var f in ResultadoIA.Fontes)
                                         {
-                                            if (f.Tipo == "doc" && f.CodDoc > 0)
-                                            {
-                                                <a href="@($"/documentacoes/{f.CodDoc}")" target="_blank"
-                                                   style="margin-right:8px; color:#1d4ed8;">📄 @f.Titulo</a>
-                                            }
-                                            else if (f.CodTicket > 0)
-                                            {
-                                                <a href="@($"/ticket/{f.CodTicket}")" target="_blank" title="@f.Titulo"
-                                                   style="margin-right:8px; color:#1d4ed8;">🎫 Ticket #@f.CodTicket</a>
-                                            }
+                                            var fonte = f;
+                                            <a href="javascript:void(0)" title="Ver o que a IA usou"
+                                               style="margin-right:8px; color:#1d4ed8; cursor:pointer;"
+                                               @onclick="() => FonteIAAberta = fonte"
+                                               @onclick:preventDefault="true">
+                                                @(fonte.Tipo == "doc" ? $"📄 {fonte.Titulo}" : $"🎫 Ticket #{fonte.CodTicket}")
+                                            </a>
                                         }
                                     </div>
                                 }
                                 else
                                 {
                                     <div style="margin-top:4px; color:#374151;">Sem documentação ou caso parecido na base.</div>
+                                }
+                                @if (FonteIAAberta != null)
+                                {
+                                    var fa = FonteIAAberta;
+                                    <div style="margin-top:6px; padding:8px 10px; background:#fff; border:1px solid #d1d5db;
+                                                border-radius:8px; color:#111827; font-size:11px;">
+                                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                                            <strong>@(fa.Tipo == "doc" ? "📄 " + fa.Titulo : $"🎫 Ticket #{fa.CodTicket}")</strong>
+                                            <span style="margin-left:auto; display:flex; gap:6px;">
+                                                @if (fa.Tipo == "doc" && fa.CodDoc > 0)
+                                                {
+                                                    <button type="button" style="border:1px solid #d1d5db; background:#f9fafb; border-radius:6px; padding:1px 8px; cursor:pointer;"
+                                                            @onclick="@(async () => await JS.InvokeVoidAsync("open", DocumentacaoSvc.UrlParaEquipe(fa.CodDoc, UserState.CurrentCompanyId, fa.Slug), "_blank"))">Abrir documentação</button>
+                                                }
+                                                else if (fa.CodTicket > 0)
+                                                {
+                                                    <button type="button" style="border:1px solid #d1d5db; background:#f9fafb; border-radius:6px; padding:1px 8px; cursor:pointer;"
+                                                            @onclick="@(() => Nav.NavigateTo($"/ticket/{fa.CodTicket}"))">Abrir ticket</button>
+                                                }
+                                                <button type="button" style="border:1px solid #d1d5db; background:#fff; border-radius:6px; padding:1px 8px; cursor:pointer;"
+                                                        @onclick="() => FonteIAAberta = null">✕</button>
+                                            </span>
+                                        </div>
+                                        <div style="white-space:pre-wrap; max-height:220px; overflow:auto; line-height:1.4;">@fa.Texto</div>
+                                    </div>
                                 }
                             </div>
                         }
@@ -3545,6 +3642,18 @@ else
                                 }
 
                             </button>
+
+                            <!-- Treinamentos do cliente (o que já foi ensinado / registrar / enviar resumo) -->
+                            @if (id > 0 && TicketAtual?.CodCliente > 0)
+                            {
+                                <button type="button"
+                                        class="ticket-tool-btn"
+                                        title="Treinamentos do cliente: ver o que já foi ensinado, registrar e enviar o resumo"
+                                        aria-label="Treinamentos do cliente"
+                                        @onclick="() => _mostrarTreinamentos = true">
+                                    🎓
+                                </button>
+                            }
 
                         </div>
 
@@ -4105,15 +4214,23 @@ else
             </div>
 
 
+            @* tudo dentro do corpo com rolagem: com muitos computadores a lista não fica cortada *@
             <div class="modal-acesso-remoto-body">
                 <div class="acesso-remoto-toolbar">
+                    <button type="button"
+                            class="btn-atualizar-acesso @(AtualizandoAcessosRemotos ? "girando" : "")"
+                            title="Atualizar status dos computadores"
+                            disabled="@(CarregandoAcessosRemotos || AtualizandoAcessosRemotos)"
+                            @onclick="AtualizarAcessosRemotos">
+                        <span class="ico">⟳</span> Atualizar
+                    </button>
+
                     <button type="button"
                             class="btn-novo-acesso"
                             @onclick="NovoAcessoRemoto">
                         Novo acesso
                     </button>
                 </div>
-            </div>
 
             @if (EditandoAcessoRemoto)
             {
@@ -4208,6 +4325,7 @@ else
                     }
                 </div>
             }
+            </div>
         </div>
     </div>
 }
@@ -4511,6 +4629,42 @@ else
     </div>
 }
 
+@if (id > 0 && TicketAtual != null)
+{
+    <AssistenteIAPainel @ref="_assistenteIA"
+                        CodTicket="id"
+                        CodEmp="UserState.CurrentCompanyId"
+                        Usuario="@UserState.CurrentUser"
+                        Ticket="TicketAtual"
+                        Historico="Historico"
+                        Aberto="_aiaAberto"
+                        OnFechar="FecharAssistenteIA"
+                        OnUsarNaResposta="UsarRespostaDoAssistente" />
+}
+
+@if (_mostrarTreinamentos && TicketAtual != null && TicketAtual.CodCliente > 0)
+{
+    <div style="position:fixed; inset:0; z-index:1060; background:rgba(15,23,42,.45); display:flex; align-items:flex-start; justify-content:center; padding:40px 16px; overflow-y:auto;"
+         @onclick="() => _mostrarTreinamentos = false">
+        <div role="dialog" aria-modal="true" aria-label="Treinamentos do cliente"
+             style="width:min(820px, 100%); background:#fff; border-radius:16px; box-shadow:0 20px 50px rgba(15,23,42,.25); overflow:hidden;"
+             @onclick:stopPropagation="true">
+            <div style="display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid #e2e8f0; background:#f8fbff;">
+                <strong style="font-size:15px; color:#0f172a;">🎓 Treinamentos · @NomeCliente</strong>
+                <button type="button" aria-label="Fechar" @onclick="() => _mostrarTreinamentos = false"
+                        style="margin-left:auto; width:34px; height:34px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; cursor:pointer;">✕</button>
+            </div>
+            <div style="padding:16px;">
+                <TreinamentosCliente CodCliente="TicketAtual.CodCliente"
+                                     CodEmp="UserState.CurrentCompanyId"
+                                     Usuario="@UserState.CurrentUser"
+                                     NomeCliente="@NomeCliente"
+                                     OnUsarMensagem="UsarMensagemTreinamento" />
+            </div>
+        </div>
+    </div>
+}
+
 <script>
     window.enablePasteImage = (textareaId, dotnetRef) => {
         console.log("[PasteImage] Inicializando para:", textareaId);
@@ -4677,6 +4831,45 @@ else
 
         el.addEventListener('keydown', el._ticketKeyHandler);
     };
+
+    // Resposta da IA: aumenta a caixa de mensagem para revisar melhor.
+    // Volta ao tamanho normal sozinha quando a caixa fica vazia (enviou ou apagou).
+    window.expandirMsgIA = (textareaId) => {
+        const el = document.getElementById(textareaId);
+        if (!el) return;
+
+        if (!el._iaOrig) {
+            el._iaOrig = ['height', 'min-height', 'max-height'].map(p => ({
+                p, v: el.style.getPropertyValue(p), pri: el.style.getPropertyPriority(p)
+            }));
+        }
+
+        const maximo = Math.round(window.innerHeight * 0.45);
+        el.style.setProperty('max-height', maximo + 'px', 'important');
+        el.style.setProperty('min-height', '160px', 'important');
+        el.style.setProperty('height', 'auto', 'important');
+        const alvo = Math.min(Math.max(el.scrollHeight + 8, 160), maximo);
+        el.style.setProperty('height', alvo + 'px', 'important');
+        el.scrollTop = 0;
+
+        clearInterval(el._iaTimer);
+        el._iaTimer = setInterval(() => {
+            if (!document.body.contains(el) || el.value.trim() === '') window.restaurarMsgIA(textareaId, el);
+        }, 400);
+    };
+
+    window.restaurarMsgIA = (textareaId, elemento) => {
+        const el = elemento || document.getElementById(textareaId);
+        if (!el) return;
+        clearInterval(el._iaTimer);
+        el._iaTimer = null;
+        if (!el._iaOrig) return;
+        el._iaOrig.forEach(o => {
+            if (o.v) el.style.setProperty(o.p, o.v, o.pri);
+            else el.style.removeProperty(o.p);
+        });
+        el._iaOrig = null;
+    };
 </script>
 
 @code {
@@ -4711,6 +4904,9 @@ private bool _finalizandoViaF2ComInsight = false;
     private string _versaoF1 = "";
     private bool _mostrarModalConfirmarF3 = false;
     private bool _finalizandoViaAtalho = false;
+    private bool _pularInsightAutomatico;   // "Finalizar sem insight": não gera o insight automático
+    // Status mudado para Finalizado e salvo pelo botão/Enter: o salvar que abriu a pergunta do insight
+    private Func<Task>? _salvarAoConfirmarFinalizacao;
     private bool _detalhesExpandidos = false;
     private DotNetObjectReference<Ticket>? _visibilityRef;
     private bool _paginaVisivel = true;
@@ -4749,6 +4945,7 @@ private bool _finalizandoViaF2ComInsight = false;
 
     private bool MostrarModalAcessoRemoto = false;
     private bool CarregandoAcessosRemotos = false;
+    private bool AtualizandoAcessosRemotos = false;
     private bool EditandoAcessoRemoto = false;
 
     private List<AcessoRemotoModel> AcessosRemotosCliente = new();
@@ -4826,6 +5023,31 @@ private bool _finalizandoViaF2ComInsight = false;
         finally
         {
             CarregandoAcessosRemotos = false;
+        }
+    }
+
+    // Botão ⟳ do modal: busca de novo os computadores e o status, sem limpar a lista
+    private async Task AtualizarAcessosRemotos()
+    {
+        if (TicketAtual == null || TicketAtual.CodCliente <= 0 || AtualizandoAcessosRemotos)
+            return;
+
+        try
+        {
+            AtualizandoAcessosRemotos = true;
+
+            var lista = await TicketService.ListarAcessosRemotosClienteAsync(TicketAtual.CodCliente);
+            await AtualizarStatusOnlineAcessosAsync(lista);
+            AcessosRemotosCliente = lista;
+        }
+        catch (Exception ex)
+        {
+            Mensagem = "Erro ao atualizar acessos remotos: " + ex.Message;
+            Sucesso = false;
+        }
+        finally
+        {
+            AtualizandoAcessosRemotos = false;
         }
     }
 
@@ -5297,7 +5519,109 @@ private bool _finalizandoViaF2ComInsight = false;
     bool CarregandoIA;
     string SugestaoIA = "";
     AiSugestaoResultado? ResultadoIA;   // fontes, confiança e código do log da última sugestão
+    AiFonte? FonteIAAberta;               // fonte que o atendente clicou para ver
+    bool _expandirMsgIA;                  // aumentar a caixa de mensagem no próximo render
     int FeedbackIA;                       // 1 = 👍, -1 = 👎
+
+    // ── Assistente IA do atendente (painel lateral: AssistenteIAPainel.razor)
+    AssistenteIAPainel? _assistenteIA;
+    bool _aiaAberto;
+
+    // ── Treinamentos do cliente (TreinamentosCliente.razor)
+    bool _mostrarTreinamentos;
+
+    /// <summary>
+    /// Ticket finalizado: manda a IA ler a conversa e registrar no histórico do cliente o que foi ensinado.
+    /// Roda em segundo plano (não atrasa a finalização). Não repete se o ticket não teve mensagem nova.
+    /// Parâmetro TREINAMENTO_REGISTRAR_AUTOMATICO (S/N, padrão S) liga/desliga.
+    /// </summary>
+    private async Task RegistrarTreinamentoDoTicketAsync()
+    {
+        if (TicketAtual == null || id <= 0 || TicketAtual.CodSituacao != 3 || TicketAtual.CodCliente <= 0)
+            return;
+        try
+        {
+            var ligado = await ParametroService.BuscarBoolAsync(
+                "TREINAMENTO_REGISTRAR_AUTOMATICO",
+                "TICKET",
+                "Ao finalizar o ticket, a IA registra no histórico de treinamento do cliente o que foi ensinado. S=SIM N=NAO. PADRAO=S",
+                true);
+            if (ligado)
+                Treinos.ProcessarTicketFinalizadoEmSegundoPlano(id, UserState.CurrentCompanyId, UserState.CurrentUser);
+        }
+        catch (Exception ex)
+        {
+            HealthMonitor.LogException(LogCategory.Tickets, ex, $"Ticket.RegistrarTreinamento #{id}");
+        }
+    }
+
+    /// <summary>
+    /// Ticket finalizado: gera o insight (caso aprendido) em segundo plano, sem perguntar ao atendente.
+    /// Parâmetro TICKET_INSIGHT_AUTOMATICO (S/N, padrão S). Devolve true quando colocou na fila
+    /// (aí o modal "Gerar insight deste ticket?" não aparece).
+    /// </summary>
+    private async Task<bool> GerarInsightAutomaticoAsync()
+    {
+        if (TicketAtual == null || id <= 0 || TicketAtual.CodSituacao != 3)
+            return false;
+
+        // O atendente escolheu "Finalizar sem insight": não chama a IA (nem agora nem na rotina da noite)
+        if (_pularInsightAutomatico)
+        {
+            _pularInsightAutomatico = false;
+            await InsightAuto.MarcarPuladoAsync(id);
+            return true;   // já decidido: sem insight e sem perguntar
+        }
+
+        try
+        {
+            var ligado = await ParametroService.BuscarBoolAsync(
+                InsightAutomaticoService.Parametro,
+                "TICKET",
+                InsightAutomaticoService.ParametroDescricao,
+                true);
+            if (!ligado) return false;
+
+            InsightAuto.Enfileirar(id, UserState.CurrentCompanyId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            HealthMonitor.LogException(LogCategory.Tickets, ex, $"Ticket.GerarInsightAutomatico #{id}");
+            return false;
+        }
+    }
+
+    // "Usar na resposta do ticket" no envio do link de treinamentos
+    private async Task UsarMensagemTreinamento(string texto)
+    {
+        _mostrarTreinamentos = false;
+        await UsarRespostaDoAssistente(texto);
+    }
+
+    private void AlternarAssistenteIA() => _aiaAberto = !_aiaAberto;
+
+    private void FecharAssistenteIA() => _aiaAberto = false;
+
+    // Botão "Analisar com IA" em uma imagem do ticket: abre o painel com a imagem pronta para perguntar
+    private async Task AbrirAssistenteComImagem(int codMensagem, string? url)
+    {
+        _aiaAberto = true;
+        StateHasChanged();
+        await Task.Yield();
+        if (_assistenteIA != null)
+            await _assistenteIA.AnalisarImagemDoTicketAsync(codMensagem, url);
+    }
+
+    // "Usar na resposta" no painel: o texto vai para a caixa de mensagem para o atendente revisar e enviar
+    private async Task UsarRespostaDoAssistente(string texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return;
+        NovaAnotacao = texto;
+        _expandirMsgIA = true;
+        StateHasChanged();
+        await FocarCampoMensagem();
+    }
 
     private async Task DarFeedbackIA(int valor)
     {
@@ -5814,12 +6138,17 @@ private bool _finalizandoViaF2ComInsight = false;
 
             var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
 
+            // Ticket sem responsável: quem responde assume o ticket (só olhar não muda nada)
             if (string.IsNullOrWhiteSpace(TicketAtual.Usuario) || EqUser(TicketAtual.Usuario, "NOVO"))
             {
-                ResponsavelInvalido = true;
-                Sucesso = false;
-                Mensagem = "Selecione um responsável antes de salvar o ticket.";
-                return;
+                if (string.IsNullOrWhiteSpace(usuarioLogado))
+                {
+                    ResponsavelInvalido = true;
+                    Sucesso = false;
+                    Mensagem = "Selecione um responsável antes de salvar o ticket.";
+                    return;
+                }
+                AssumirResponsavel(usuarioLogado);
             }
 
             if (TicketAtual.CodSituacao != _codSituacaoOriginal && !PodeAlterarStatusTicket)
@@ -5848,6 +6177,10 @@ private bool _finalizandoViaF2ComInsight = false;
             }
 
             ResponsavelInvalido = false;
+
+            // Finalizando pelo status + salvar: pergunta do insight igual ao F3
+            if (await PerguntarInsightAntesDeFinalizarAsync(SalvarAlteracoes))
+                return;
 
             var result = await TicketService.SalvarAlteracoesAsync(
                 TicketAtual,
@@ -5885,10 +6218,8 @@ private bool _finalizandoViaF2ComInsight = false;
                 RemoverAudio();
             }
 
-            if (TicketAtual.CodSituacao == 3)
-            {
-                await TicketService.ResolverAgendasDoTicketAsync(TicketAtual.Codigo);
-            }
+            // Finalizar o ticket NÃO resolve a agenda: ela só é resolvida na tela de Agendas
+            // (ou no botão da própria agenda no histórico)
 
             // Mede o aproveitamento: compara o que foi enviado com a sugestão da IA
             if (ResultadoIA?.CodLog > 0 && !MensagemInterna && !string.IsNullOrWhiteSpace(textoEnviando))
@@ -5903,6 +6234,7 @@ private bool _finalizandoViaF2ComInsight = false;
             MensagemInterna = false;
             SugestaoIA = "";
             ResultadoIA = null;
+            FonteIAAberta = null;
             FeedbackIA = 0;
 
             ArquivoAnotacao = null;
@@ -5924,6 +6256,7 @@ private bool _finalizandoViaF2ComInsight = false;
 
             Historico = await TicketService.BuscarHistoricoAsync(id);
             _ultimoCodigoHistorico = Historico.Count > 0 ? Historico.Max(h => h.Codigo) : 0;
+            _rolarHistoricoTopo = true;   // enviou: mostra a mensagem enviada (topo do histórico)
 
             CriarAgenda = false;
             NotificarAgenda = true;
@@ -5939,9 +6272,13 @@ private bool _finalizandoViaF2ComInsight = false;
                 "Define se o sistema pergunta ou gera resumo por IA no final do atendimento. S=SIM N=NAO. PADRAO=N",
                 false);
 
+            // Ticket finalizado: a IA registra no histórico do cliente o que foi ensinado (em segundo plano)
+            await RegistrarTreinamentoDoTicketAsync();
+        var insightAutomatico = await GerarInsightAutomaticoAsync();   // insight em segundo plano (sem modal)
+
             if (TicketAtual.CodSituacao == 3)
             {
-                if (gerarIaFinal == true)
+                if (gerarIaFinal == true && !insightAutomatico)
                 {
                     if (_finalizandoViaAtalho)
                     {
@@ -6219,10 +6556,12 @@ private bool _finalizandoViaF2ComInsight = false;
                 Assunto = TicketAtual?.Assunto,
                 Versao = TicketAtual?.Versao,
                 Usuario = UserState.CurrentUser,
+                IgnorarTicketNaBusca = id,   // não usar o próprio ticket como "caso parecido"
                 CodigosImagens = codigosImagens
             });
 
             ResultadoIA = resultado.Ok ? resultado : null;
+            FonteIAAberta = null;
             FeedbackIA = 0;
             SugestaoIA = (resultado.Resposta ?? "").Trim();
 
@@ -6249,6 +6588,7 @@ private bool _finalizandoViaF2ComInsight = false;
 
             // Joga a sugestão direto no campo de mensagem
             NovaAnotacao = SugestaoIA;
+            _expandirMsgIA = true;   // a caixa cresce depois de desenhar o texto
 
             Sucesso = true;
             // Mensagem = "Sugestão da IA inserida no campo de mensagem. Revise antes de enviar.";
@@ -6299,6 +6639,7 @@ private bool _finalizandoViaF2ComInsight = false;
 
             // Atualiza histórico na tela
             Historico = await TicketService.BuscarHistoricoAsync(TicketAtual.Codigo);
+            _rolarHistoricoTopo = true;
 
             Sucesso = true;
             Mensagem = "✅ Resposta enviada no chat do ticket.";
@@ -6338,6 +6679,8 @@ private bool _finalizandoViaF2ComInsight = false;
         try
         {
             _insights = await AiAuto.GenerateAndSaveManyAsync(CodTicketChamadoC: id, force: true, codEmp: UserState.CurrentCompanyId);
+            if (_insights?.Count > 0)
+                DocAuto.Enfileirar(id, UserState.CurrentCompanyId);   // vira documentação interna detalhada
         }
         catch (Exception ex)
         {
@@ -6887,6 +7230,25 @@ CodTipo == 5 ? NomeWhatsApp : null
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Resposta da IA acabou de ir para a caixa: aumenta para revisar
+        if (_expandirMsgIA)
+        {
+            _expandirMsgIA = false;
+            try { await JS.InvokeVoidAsync("expandirMsgIA", $"obsAnotacao_{id}"); } catch { }
+        }
+
+        // Mensagem enviada: volta o histórico para o topo, onde ela aparece
+        if (_rolarHistoricoTopo)
+        {
+            _rolarHistoricoTopo = false;
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    $"document.getElementById('historico-{id}')?.scrollTo({{top:0,behavior:'smooth'}})");
+            }
+            catch { }
+        }
+
         if (firstRender)
         {
             VelocidadeAudioGlobal = await JS.InvokeAsync<double>(
@@ -6902,8 +7264,17 @@ CodTipo == 5 ? NomeWhatsApp : null
 
             // Visibility: usa ref tipada e armazenada
             _visibilityRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("registerVisibilityChange", _visibilityRef);
-            _paginaVisivel = await JS.InvokeAsync<bool>("isPageVisible");
+            // Protegido: se o script não estiver carregado, a tela abre mesmo assim (antes derrubava a página)
+            try
+            {
+                await JS.InvokeVoidAsync("registerVisibilityChange", _visibilityRef);
+                _paginaVisivel = await JS.InvokeAsync<bool>("isPageVisible");
+            }
+            catch (Exception exVis)
+            {
+                _paginaVisivel = true;
+                Console.WriteLine($"[Ticket] Visibilidade indisponível: {exVis.Message}");
+            }
 
             if (!EhNovo)
                 await JS.InvokeVoidAsync("registrarAtalhoF3", _visibilityRef);
@@ -6943,6 +7314,7 @@ CodTipo == 5 ? NomeWhatsApp : null
         _dotnetRef = _pasteRef;
         await JS.InvokeVoidAsync("enablePasteImage", $"obsAnotacao_{id}", _pasteRef);
         await JS.InvokeVoidAsync("iniciarCompositorTicket", $"obsAnotacao_{id}", _pasteRef); // ← ADD
+        await IniciarRespostasRapidasAsync();
         _pasteJsInicializado = true;
         await JS.InvokeVoidAsync("eval", $"document.getElementById('obsAnotacao_{id}')?.focus()");
     }
@@ -7274,6 +7646,10 @@ CodTipo == 5 ? NomeWhatsApp : null
 
         ResponsavelInvalido = false;
 
+        // Finalizando pelo status + "Salvar ticket": pergunta do insight igual ao F3
+        if (await PerguntarInsightAntesDeFinalizarAsync(SalvarTicket))
+            return;
+
         if (TicketAtual.CodSetor != 1 && TicketAtual.CodSetor != 2)
         {
             TicketAtual.CodSetor = 1;
@@ -7311,11 +7687,27 @@ CodTipo == 5 ? NomeWhatsApp : null
     "Define se o sistema pergunta ou gera resumo por IA no final do atendimento. S=SIM N=NAO. PADRAO=N",
     false);
 
+        // Ticket finalizado: a IA registra no histórico do cliente o que foi ensinado (em segundo plano)
+        await RegistrarTreinamentoDoTicketAsync();
+        var insightAutomatico = await GerarInsightAutomaticoAsync();   // insight em segundo plano (sem modal)
+
         if (TicketAtual.CodSituacao == 3)
         {
-            if (gerarIaFinal == true)
+            if (gerarIaFinal == true && !insightAutomatico)
             {
+                if (_finalizandoViaAtalho)
+                {
+                    _finalizandoViaAtalho = false;
+                    await ConfirmarGerarInsight();
+                    return;
+                }
                 MostrarModalGerarInsight = true;
+            }
+            else if (_finalizandoViaAtalho)
+            {
+                _finalizandoViaAtalho = false;
+                Voltar();
+                return;
             }
         }
 
@@ -7502,6 +7894,29 @@ CodTipo == 5 ? NomeWhatsApp : null
         MensagemRespondida = null;
     }
 
+    // ── Respostas rápidas: "/" + atalho na caixa de mensagem ──
+    private async Task IniciarRespostasRapidasAsync()
+    {
+        try
+        {
+            var itens = (await RespostasRapidas.ListarAsync(somenteAtivas: true))
+                .Select(r => new { codigo = r.Codigo, atalho = r.Atalho, titulo = r.Titulo, texto = r.Texto })
+                .ToList();
+            var ctx = new { cliente = NomeCliente ?? "", atendente = (UserState.CurrentUser ?? "").Trim() };
+            await JS.InvokeVoidAsync("rrIniciar", $"obsAnotacao_{id}", itens, ctx, _pasteRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Ticket] Respostas rápidas indisponíveis: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public Task RegistrarUsoRespostaRapida(int codigo) => RespostasRapidas.RegistrarUsoAsync(codigo);
+
+    // Depois de enviar mensagem, rola o histórico até o topo (onde fica a mais nova)
+    private bool _rolarHistoricoTopo;
+
     private async Task RolarParaMensagem(int codigoDetalhe)
     {
         await JS.InvokeVoidAsync("eval",
@@ -7628,6 +8043,13 @@ CodTipo == 5 ? NomeWhatsApp : null
         if (EhNovo || TicketAtual == null || !PodeResponderTickets)
             return;
 
+        // Pergunta aberta pelo "Salvar" com status Finalizado: F3 = finalizar com insight
+        if (_mostrarModalConfirmarF3 && _salvarAoConfirmarFinalizacao != null)
+        {
+            await ConfirmarFinalizarViaF3ComInsight();
+            return;
+        }
+
         if (TicketAtual.CodSituacao == 3)
             return;
 
@@ -7654,6 +8076,7 @@ CodTipo == 5 ? NomeWhatsApp : null
     public async Task CancelarModalF3()
     {
         _mostrarModalConfirmarF3 = false;
+        _salvarAoConfirmarFinalizacao = null;   // cancelou: não salva (o status continua marcado na tela)
         await InvokeAsync(StateHasChanged);
     }
 
@@ -7662,7 +8085,8 @@ CodTipo == 5 ? NomeWhatsApp : null
         _mostrarModalConfirmarF3 = false;
         _finalizandoViaAtalho = true;   // gera insight automático
         TicketAtual!.CodSituacao = 3;
-        await SalvarAlteracoes();
+        await SalvarPendenteOuAlteracoesAsync();
+        _finalizandoViaAtalho = false;  // se o salvar falhou, não vale para a próxima vez
         StateHasChanged();
     }
 
@@ -7670,10 +8094,39 @@ CodTipo == 5 ? NomeWhatsApp : null
     {
         _mostrarModalConfirmarF3 = false;
         _finalizandoViaAtalho = false;  // não gera insight
+        _pularInsightAutomatico = true;
         TicketAtual!.CodSituacao = 3;
-        await SalvarAlteracoes();
+        await SalvarPendenteOuAlteracoesAsync();
+        _pularInsightAutomatico = false;   // se o salvar falhou, não vale para a próxima finalização
         Voltar();                        // fecha direto
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// Status mudado para Finalizado e salvo (botão "Salvar ticket" ou envio de mensagem):
+    /// abre a mesma pergunta do F3 (com ou sem insight) em vez de salvar direto.
+    /// Devolve true quando abriu a pergunta (quem chamou para e espera a resposta).
+    /// </summary>
+    private async Task<bool> PerguntarInsightAntesDeFinalizarAsync(Func<Task> salvar)
+    {
+        if (EhNovo || TicketAtual == null
+            || TicketAtual.CodSituacao != 3 || _codSituacaoOriginal == 3   // só quando está finalizando agora
+            || _finalizandoViaAtalho || _pularInsightAutomatico)           // F2/F3 já perguntaram
+            return false;
+
+        _salvarAoConfirmarFinalizacao = salvar;
+        _mostrarModalConfirmarF3 = true;
+        await InvokeAsync(StateHasChanged);
+        try { await JS.InvokeVoidAsync("eval", "document.activeElement?.blur()"); } catch { }
+        return true;
+    }
+
+    /// <summary>Executa o salvar que abriu a pergunta (ou SalvarAlteracoes, no caso do F3).</summary>
+    private Task SalvarPendenteOuAlteracoesAsync()
+    {
+        var salvar = _salvarAoConfirmarFinalizacao ?? SalvarAlteracoes;
+        _salvarAoConfirmarFinalizacao = null;
+        return salvar();
     }
 
     [JSInvokable]
@@ -7850,9 +8303,11 @@ CodTipo == 5 ? NomeWhatsApp : null
     {
         _mostrarModalConfirmarF2 = false;
         _finalizandoViaAtalho = false;
+        _pularInsightAutomatico = true;
         TicketAtual!.Versao = _versaoF2;
         TicketAtual.CodSituacao = 3;
         await SalvarAlteracoes();
+        _pularInsightAutomatico = false;   // se o salvar falhou, não vale para a próxima finalização
         Voltar();
         StateHasChanged();
     }
@@ -7916,6 +8371,14 @@ private async Task OnBlurMensagem()
     }
 }
 
+    /// <summary>Ticket sem responsável: o atendente que está respondendo vira o responsável.</summary>
+    private void AssumirResponsavel(string usuario)
+    {
+        if (TicketAtual == null) return;
+        TicketAtual.Usuario = usuario;
+        ResponsavelInvalido = false;
+    }
+
     [JSInvokable]
     public async Task<bool> EnviarMensagemViaJS(string texto)
     {
@@ -7929,14 +8392,22 @@ private async Task OnBlurMensagem()
 
         NovaAnotacao = texto;
 
-        if (TicketAtual == null || string.IsNullOrWhiteSpace(TicketAtual.Usuario)
-            || EqUser(TicketAtual.Usuario, "NOVO"))
-        {
-            ResponsavelInvalido = true;
-            Mensagem = "Selecione um responsável antes de salvar o ticket.";
-            Sucesso = false;
-            await InvokeAsync(StateHasChanged);
+        if (TicketAtual == null)
             return false;
+
+        // Ticket sem responsável: quem responde assume o ticket e a mensagem segue normalmente
+        if (string.IsNullOrWhiteSpace(TicketAtual.Usuario) || EqUser(TicketAtual.Usuario, "NOVO"))
+        {
+            var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(usuarioLogado))
+            {
+                ResponsavelInvalido = true;
+                Mensagem = "Selecione um responsável antes de salvar o ticket.";
+                Sucesso = false;
+                await InvokeAsync(StateHasChanged);
+                return false;
+            }
+            AssumirResponsavel(usuarioLogado);
         }
 
         var mensagemLocal = new TicketChamadoDModel
@@ -7954,6 +8425,7 @@ private async Task OnBlurMensagem()
         };
 
         Historico.Insert(0, mensagemLocal);
+        _rolarHistoricoTopo = true;   // mensagem nova fica no topo: rola até ela mesmo se estava lendo mais abaixo
         await InvokeAsync(StateHasChanged);
 
         await SalvarAlteracoes();

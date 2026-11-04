@@ -115,7 +115,7 @@
             }
         </label>
         <input class="mc-input" id="@_idInput"
-               placeholder="Digite uma mensagem e tecle Enter..."
+               placeholder="Digite uma mensagem ou cole um print (Ctrl+V)..."
                autocomplete="off"
                @bind="_texto" @bind:event="oninput"
                @onkeydown="OnTeclaAsync" />
@@ -457,6 +457,7 @@
 
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _cts;
+    private DotNetObjectReference<MiniChat>? _ref;
 
     private string Eu => (UserState.CurrentUser ?? "").Trim().ToUpper();
     private string CodEmp => UserState.CurrentCompanyId.ToString();
@@ -484,6 +485,18 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // Colar print (Ctrl+V) no campo: função em wwwroot/js/paste-image.js.
+        // Chamado a cada render porque o campo pode ser recriado; o JS liga o evento uma vez só.
+        try
+        {
+            _ref ??= DotNetObjectReference.Create(this);
+            await JS.InvokeAsync<bool>("ligarColarImagemChat", _idInput, _ref, nameof(ReceberImagemColada));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MiniChat] Não ligou o colar imagem: {ex.Message}");
+        }
+
         if (_rolarParaFim)
         {
             _rolarParaFim = false;
@@ -611,7 +624,47 @@
     private async Task EnviarArquivoAsync(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file == null || _codCarregado <= 0) return;
+        if (file == null) return;
+
+        var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
+        await EnviarStreamAsync(() => file.OpenReadStream(maxAllowedSize: 50_000_000), file.Name, contentType);
+    }
+
+    /// <summary>Print colado com Ctrl+V no campo (chamado por wwwroot/js/paste-image.js).</summary>
+    [JSInvokable]
+    public async Task ReceberImagemColada(string dataUrl, string nomeArquivo)
+    {
+        if (string.IsNullOrWhiteSpace(dataUrl) || !dataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var virgula = dataUrl.IndexOf(',');
+        if (virgula < 0) return;
+
+        var mime = dataUrl[5..virgula].Split(';')[0];          // "data:image/png;base64" -> "image/png"
+        byte[] bytes;
+        try { bytes = Convert.FromBase64String(dataUrl[(virgula + 1)..]); }
+        catch (FormatException) { return; }
+
+        var nome = string.IsNullOrWhiteSpace(nomeArquivo) ? "print" : nomeArquivo.Trim();
+        if (string.IsNullOrWhiteSpace(Path.GetExtension(nome)))
+        {
+            nome += mime.ToLowerInvariant() switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/gif" => ".gif",
+                "image/webp" => ".webp",
+                "image/bmp" => ".bmp",
+                _ => ".png"
+            };
+        }
+
+        await InvokeAsync(() => EnviarStreamAsync(() => new MemoryStream(bytes), nome, mime));
+    }
+
+    /// <summary>Envia um arquivo (do clipe ou colado) para a conversa aberta.</summary>
+    private async Task EnviarStreamAsync(Func<Stream> abrir, string nome, string contentType)
+    {
+        if (_codCarregado <= 0 || _enviandoArquivo) return;
 
         _enviandoArquivo = true;
         _erro = null;
@@ -619,9 +672,8 @@
 
         try
         {
-            var contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
-            var (url, nomeArq, mime, tamanho) = await ChatService.SalvarArquivoAsync(
-                file.OpenReadStream(maxAllowedSize: 50_000_000), file.Name, contentType);
+            await using var stream = abrir();
+            var (url, nomeArq, mime, tamanho) = await ChatService.SalvarArquivoAsync(stream, nome, contentType);
 
             var ehImagem = contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 
@@ -643,6 +695,7 @@
         }
 
         await CarregarAsync();
+        _focar = true;
     }
 
     private async Task Fechar()
@@ -696,6 +749,7 @@
         _cts?.Cancel();
         _timer?.Dispose();
         _cts?.Dispose();
+        _ref?.Dispose();
         await Task.CompletedTask;
     }
 }

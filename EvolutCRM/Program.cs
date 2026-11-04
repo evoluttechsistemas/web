@@ -42,15 +42,24 @@ builder.Services.AddScoped<UserState>();
 builder.Services.AddScoped<LoginService>();
 builder.Services.AddScoped<CardService>();
 builder.Services.AddScoped<MenuCRMService>();
+builder.Services.AddSingleton<ResumoTransferenciaService>();   // resumo da conversa ao transferir o ticket (gpt-4.1-mini)
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ResumoTransferenciaService>());
 builder.Services.AddScoped<TicketService>();
+builder.Services.AddScoped<RespostaRapidaService>();   // respostas rápidas ("/" + atalho no ticket)
 builder.Services.AddScoped<ProtectedSessionStorage>();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<TicketNotificationState>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<AiService>();
+builder.Services.AddScoped<AssistenteAtendenteService>();
+builder.Services.AddScoped<TreinamentoClienteService>();     // histórico de treinamento do cliente   // chat do atendente com a IA dentro do ticket
 builder.Services.AddScoped<AiTicketInsightsRepository>();
 builder.Services.AddScoped<DocService>();
 builder.Services.AddControllers();
+// Gasto da IA: toda resposta da OpenAI passa pelo UsoOpenAiHandler, que registra os tokens e o custo estimado
+builder.Services.AddSingleton<IaUsoService>();
+builder.Services.AddTransient<UsoOpenAiHandler>();
+builder.Services.ConfigureHttpClientDefaults(b => b.AddHttpMessageHandler<UsoOpenAiHandler>());
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("local", client =>
 {
@@ -66,6 +75,15 @@ builder.Services.AddScoped<TicketQueryRepository>();
 builder.Services.AddScoped<AiAutoLearningService>();
 builder.Services.AddScoped<OpenAiClient>();
 builder.Services.AddScoped<EmbeddingIndexerService>();
+builder.Services.AddScoped<IaCuradoriaService>();          // curadoria da IA: revisão dos casos, 👎 e lacunas
+builder.Services.AddSingleton<DocumentacaoAutomaticaService>(); // documentação interna a partir do insight (gpt-4.1)
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DocumentacaoAutomaticaService>());
+builder.Services.AddSingleton<InsightAutomaticoService>();  // insight de todo ticket finalizado (fila + varredura às 02:30)
+builder.Services.AddHostedService(sp => sp.GetRequiredService<InsightAutomaticoService>());
+builder.Services.AddHostedService<FinalizacaoAutomaticaService>(); // finaliza sozinho o ticket parado (TICKET_FINALIZAR_AUTOMATICO)
+builder.Services.AddScoped<FinalizacaoConfirmacaoService>();       // aviso "cliente aguardando resposta" (modal no MainLayout)
+builder.Services.AddScoped<IaGabaritoService>();            // gabarito fixo de perguntas reais (Curadoria da IA)
+builder.Services.AddSingleton<IaGabaritoJob>();             // roda o gabarito em segundo plano
 builder.Services.AddSingleton<EmbeddingIndex>();
 builder.Services.AddHostedService<IndiceIaManutencaoService>(); // completa o índice da IA todo dia às 03:00
 builder.Services.AddSingleton<AvaliacaoIaJob>();                 // prova automática da IA (/api/ia/avaliar)
@@ -78,6 +96,9 @@ builder.Services.AddScoped<AgendaService>();
 builder.Services.AddScoped<ComercialFluxoService>();
 builder.Services.AddHttpClient<KHelpDeskApiService>();
 builder.Services.AddScoped<DocumentacaoService>();
+// Imagens de documentações e blog em arquivo (/uploads); no banco só o caminho
+builder.Services.AddSingleton<ImagemArmazenamentoService>();
+builder.Services.AddHostedService<MigracaoImagensService>(); // converte o que ainda está no banco (só em produção)
 builder.Services.AddHostedService<OfflineTicketReassignService>();
 builder.Services.AddHostedService<EnvioWhatsAppBackgroundService>();
 builder.Services.AddScoped<CurriculoOnlineService>();
@@ -85,6 +106,9 @@ builder.Services.AddScoped<AbaService>();
 builder.Services.AddScoped<LogAcessoService>();
 builder.Services.AddScoped<MonitorBackupService>();
 builder.Services.AddHostedService<BackupMonitorBackgroundService>();
+// Servidor de backup (FTP) ligado? Verifica a cada minuto, avisa no HELP e por WhatsApp
+builder.Services.AddSingleton<MonitorServidorService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitorServidorService>());
 builder.Services.AddSingleton<HealthMonitorService>();
 builder.Services.AddScoped<BxClienteService>();
 builder.Services.AddScoped<LogFinanceiroService>();
@@ -94,6 +118,7 @@ builder.Services.AddScoped<ClienteCadastroService>();
 builder.Services.AddScoped<ParametroDinamicoService>();
 builder.Services.AddScoped<TicketClassificacaoService>();
 builder.Services.AddSingleton<UsuarioStatusNotifier>();   // avisa todas as telas quando alguém troca de status
+builder.Services.AddSingleton<NotificacaoVistaNotifier>(); // ticket/card aberto por alguém some do painel de notificações de todos
 builder.Services.AddScoped<UsuarioStatusService>();
 builder.Services.AddScoped<EquipeStatusState>();
 builder.Services.AddScoped<MiniChatState>();          // conversa aberta na janelinha de chat da faixa da equipe
@@ -156,7 +181,7 @@ builder.Services.AddCors(options =>
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AcessoRemoto), "Acesso Remoto", "fas fa-desktop", "admin/acesso-remoto");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AdminLogs), "Admin Logs", "fas fa-file-shield", "admin/logs");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Agendas), "Agendas", "fas fa-calendar-days", "agendas");
-AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BaixaReceber), "Baixa a Receber", "fas fa-money-bill", "admin/bx-pagar");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BaixaReceber), "Financeiro", "fas fa-money-bill", "admin/bx-pagar");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BancoTalentos), "Banco de Talentos", "fas fa-users", "banco-talentos");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Card), "Card", "fas fa-id-card", "card");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Cards), "CRM", "fas fa-table-columns", "cards");
@@ -179,6 +204,7 @@ AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Whatsappconexoes), "W
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.LogRemoto), "Log Remoto", "fas fa-desktop-arrow-down", "admin/log-remoto");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.LogAcesso), "Log de Acesso", "fas fa-right-to-bracket", "admin/log-acesso");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.LogFinanceiro), "Log Financeiro", "fas fa-money-bill-transfer", "admin/log-financeiro");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CuradoriaIA), "Curadoria da IA", "fas fa-wand-magic-sparkles", "admin/ia-curadoria");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorBackups), "Monitor de Backups", "fas fa-database", "admin/monitor-backups");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorHealth), "Monitor HELP", "fas fa-heart-pulse", "admin/monitor");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CadastroUsuario), "Cadastro de Usuário", "fas fa-user-plus", "cadastro-usuario");
@@ -208,10 +234,24 @@ AbaService.RegistrarMeta(
 );
 
 AbaService.RegistrarMeta(
+    typeof(EvolutCRM.Components.Pages.RespostasRapidas),
+    "Respostas rápidas",
+    "fas fa-bolt",
+    "respostas-rapidas"
+);
+
+AbaService.RegistrarMeta(
     typeof(EvolutCRM.Components.Pages.CadastroTicketTipo),
     "Tipos do Ticket",
     "fas fa-tags",
     "cadastro-ticket-tipo"
+);
+
+AbaService.RegistrarMeta(
+    typeof(EvolutCRM.Components.Pages.CadastroTreinamentoTipo),
+    "Treinamentos",
+    "fas fa-graduation-cap",
+    "cadastro-treinamentos"
 );
 
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Reunioes), "Reuniões", "fas fa-video", "reunioes");
@@ -359,7 +399,13 @@ app.UseStaticFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsPath),
-    RequestPath = "/uploads"
+    RequestPath = "/uploads",
+    OnPrepareResponse = ctx =>
+    {
+        // Imagens das documentações têm o hash do conteúdo no nome: nunca mudam, cache de 1 ano
+        if (ctx.Context.Request.Path.StartsWithSegments("/uploads/documentacoes"))
+            ctx.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    }
 });
 
 
@@ -373,8 +419,10 @@ app.MapGet("/api/test-mysql-docs", async (DocService docs) =>
     return Results.Ok(result);
 });
 
-app.MapGet("/api/test-busca", async (string q, EmbeddingIndex idx, OpenAiClient ai) =>
+app.MapGet("/api/test-busca", async (string q, string? key, EmbeddingIndex idx, OpenAiClient ai) =>
 {
+    // Exige a chave de admin: aberto, gastava IA e mostrava insights/documentações para qualquer um
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
     var v = await ai.GetEmbeddingAsync(q);
     var ins = idx.SearchInsights(v, q, 5);
     var docs = idx.SearchDocs(v, q, 5);
@@ -448,6 +496,13 @@ app.MapGet("/api/ia/avaliar/status", (string? key, AvaliacaoIaJob job) =>
 
 // Uso real no dia a dia: quanto os atendentes aproveitam a sugestão
 // /api/ia/relatorio?key=...&dias=30&emp=0
+// Uso de hoje das travas de gasto da IA: /api/ia/limites?key=...
+app.MapGet("/api/ia/limites", (string? key) =>
+{
+    if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
+    return Results.Text(LimiteDiarioIa.Resumo());
+});
+
 app.MapGet("/api/ia/relatorio", async (string? key, int? dias, int? emp, AiService ai) =>
 {
     if (string.IsNullOrWhiteSpace(key) || key != builder.Configuration["AdminKey"]) return Results.Unauthorized();
