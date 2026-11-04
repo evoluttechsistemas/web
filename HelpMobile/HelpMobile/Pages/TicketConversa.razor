@@ -1,0 +1,1225 @@
+@page "/ticket/{Id:int}"
+@implements IAsyncDisposable
+@inject ApiClient Api
+@inject AuthState Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>@(ticket?.Nome ?? "Ticket") · HELP</PageTitle>
+
+<div class="mb-conversa">
+    <header class="mb-topo mb-topo-conversa">
+        <button class="mb-icone-botao" aria-label="Voltar" @onclick="Voltar"><Icone Nome="voltar" /></button>
+        <Avatar Nome="@NomeTopo" Foto="@FotoTopo" Classe="mb-avatar-p" />
+        <div class="mb-topo-info">
+            <strong>@NomeTopo</strong>
+            <span>
+                #@Id
+                @if (ticket != null)
+                {
+                    @if (!string.IsNullOrWhiteSpace(ticket.Situacao)) { <text> · @ticket.Situacao</text> }
+                    @if (Formato.UsuarioAutomatico(ticket.Responsavel)) { <text> · Fila</text> }
+                    else { <text> · @Formato.Primeiro(ticket.Responsavel)</text> }
+                }
+            </span>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(ticket?.SentimentoEmoji))
+        {
+            <span class="mb-sentimento" title="Humor do cliente">@ticket!.SentimentoEmoji</span>
+        }
+        @if (TemAcoes)
+        {
+            <button class="mb-icone-botao" aria-label="Ações do ticket" @onclick="AbrirAcoes"><Icone Nome="mais" /></button>
+        }
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(ticket?.Assunto))
+    {
+        <div class="mb-assunto">@ticket!.Assunto</div>
+    }
+
+    <div class="mb-mensagens" @ref="_areaMensagens">
+        @if (carregando)
+        {
+            <div class="mb-carregando"><span></span><span></span><span></span></div>
+        }
+        else if (!string.IsNullOrEmpty(erro) && mensagens.Count == 0)
+        {
+            <div class="mb-vazio">
+                <p>@erro</p>
+                <button class="mb-botao mb-botao-sec" @onclick="CarregarAsync">Tentar de novo</button>
+            </div>
+        }
+        else
+        {
+            <ListaMensagens Mensagens="mensagens"
+                            Versao="VersaoLista()"
+                            UsuarioAtual="@Auth.Usuario"
+                            Selecionada="selecionada"
+                            PodeResponder="PodeEscrever"
+                            TemMais="temMais"
+                            CarregandoAnteriores="carregandoAnteriores"
+                            OnSelecionar="Selecionar"
+                            OnResponder="Responder"
+                            OnReenviar="ReenviarAsync"
+                            OnDescartar="Descartar"
+                            OnIrPara="IrPara"
+                            OnAbrirImagem="AbrirImagem" />
+        }
+    </div>
+
+    @if (temNovasAbaixo)
+    {
+        <button class="mb-novas" @onclick="IrParaFimAsync" aria-label="Ir para as mensagens novas">
+            <Icone Nome="abaixo" />
+        </button>
+    }
+
+    <footer class="mb-rodape">
+        @if (!string.IsNullOrEmpty(avisoAcao))
+        {
+            <div class="mb-dica mb-dica-ok" role="status">@avisoAcao</div>
+        }
+
+        @if (ticket != null && !PodeEscrever)
+        {
+            <div class="mb-bloqueio">@MotivoBloqueio()</div>
+            @if (ticket.SemCliente && ticket.PodeResponder && !ticket.Finalizado)
+            {
+                <button class="mb-botao" @onclick="AbrirClienteAsync">Vincular cliente</button>
+            }
+        }
+        else
+        {
+            @if (ticket != null && Formato.UsuarioAutomatico(ticket.Responsavel))
+            {
+                <div class="mb-dica">Este ticket está na fila. Ao responder, ele passa a ser seu.</div>
+            }
+
+            @if (respondendo != null)
+            {
+                <div class="mb-respondendo">
+                    <div>
+                        <strong>Respondendo @(respondendo.DoCliente ? Formato.Primeiro(ticket?.Nome) : Formato.Primeiro(respondendo.Usuario))</strong>
+                        <span>@Resumo(respondendo)</span>
+                    </div>
+                    <button class="mb-icone-botao" aria-label="Cancelar resposta" @onclick="() => respondendo = null"><Icone Nome="fechar" /></button>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(erroEnvio))
+            {
+                <div class="mb-erro mb-erro-envio" role="alert">@erroEnvio</div>
+            }
+
+            @if (gravando)
+            {
+                <div class="mb-escrever mb-gravando @(interna ? "interna" : "")">
+                    <button class="mb-icone-botao mb-gravando-descartar" aria-label="Descartar áudio" disabled="@enviandoAudio" @onclick="CancelarGravacaoAsync">
+                        <Icone Nome="lixeira" />
+                    </button>
+                    <span class="mb-gravando-ponto"></span>
+                    <span class="mb-gravando-tempo">@tempoGravacao</span>
+                    <span class="mb-gravando-texto">@(interna ? "Nota interna em áudio" : "Gravando áudio")</span>
+                    <button class="mb-enviar" aria-label="Enviar áudio" disabled="@enviandoAudio" @onclick="EnviarAudioAsync">
+                        @if (enviandoAudio) { <span class="mb-girando"></span> } else { <Icone Nome="enviar" /> }
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="mb-escrever @(interna ? "interna" : "")">
+                    <label class="mb-icone-botao mb-anexar" aria-label="Enviar imagem ou arquivo">
+                        <Icone Nome="anexo" />
+                        <InputFile OnChange="EscolheuArquivoAsync" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+                    </label>
+                    <textarea @ref="_caixaTexto" rows="1" data-auto-altura autocapitalize="sentences" autocorrect="on" spellcheck="true"
+                              placeholder="@(interna ? "Nota interna (cliente não vê)" : "Mensagem")"
+                              @bind="texto" @bind:event="oninput"></textarea>
+                    <button class="mb-icone-botao mb-interna @(interna ? "ativa" : "")" aria-label="Nota interna"
+                            title="Nota interna (não vai para o cliente)" @onclick="() => interna = !interna">
+                        <Icone Nome="cadeado" />
+                    </button>
+                    @if (string.IsNullOrWhiteSpace(texto))
+                    {
+                        <button class="mb-enviar" aria-label="Gravar áudio" disabled="@enviandoAudio" @onclick="IniciarGravacaoAsync">
+                            <Icone Nome="mic" />
+                        </button>
+                    }
+                    else
+                    {
+                        @* Não trava: dá para mandar outra mensagem enquanto a anterior ainda está indo (fila) *@
+                        <button class="mb-enviar" aria-label="Enviar" @onclick="EnviarAsync">
+                            <Icone Nome="enviar" />
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </footer>
+
+    @* Prévia do arquivo antes de enviar *@
+    @if (arquivo != null)
+    {
+        <div class="mb-folha-fundo">
+            <div class="mb-folha">
+                <div class="mb-folha-topo">
+                    <button class="mb-icone-botao" aria-label="Cancelar" @onclick="CancelarArquivo"><Icone Nome="fechar" /></button>
+                    <strong>Enviar para @Formato.Primeiro(ticket?.Nome)</strong>
+                </div>
+                <div class="mb-folha-previa">
+                    @if (!string.IsNullOrEmpty(arquivoPrevia))
+                    {
+                        <img src="@arquivoPrevia" alt="Prévia" />
+                    }
+                    else
+                    {
+                        <div class="mb-arquivo grande"><Icone Nome="arquivo" /><span>@arquivoNome</span></div>
+                    }
+                </div>
+                <div class="mb-escrever">
+                    <input class="mb-legenda" autocapitalize="sentences" autocorrect="on" spellcheck="true" placeholder="Adicionar legenda" @bind="legenda" @bind:event="oninput" />
+                    <button class="mb-enviar" aria-label="Enviar arquivo" disabled="@enviandoArquivo" @onclick="EnviarArquivoAsync">
+                        @if (enviandoArquivo) { <span class="mb-girando"></span> } else { <Icone Nome="enviar" /> }
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Ações do ticket: assumir, transferir, finalizar (igual ao HELP) *@
+    @if (acoesAbertas && ticket != null)
+    {
+        <div class="mb-folha-fundo" @onclick="FecharAcoes">
+            <div class="mb-folha mb-acoes" @onclick:stopPropagation="true">
+                <div class="mb-folha-topo">
+                    @if (etapaAcoes != "menu")
+                    {
+                        <button class="mb-icone-botao" aria-label="Voltar" disabled="@executandoAcao" @onclick="@(() => IrEtapa("menu"))"><Icone Nome="voltar" /></button>
+                    }
+                    <strong>@TituloAcoes()</strong>
+                    <button class="mb-icone-botao mb-acoes-fechar" aria-label="Fechar" disabled="@executandoAcao" @onclick="FecharAcoes"><Icone Nome="fechar" /></button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(erroAcao))
+                {
+                    <div class="mb-erro" role="alert">@erroAcao</div>
+                }
+
+                @switch (etapaAcoes)
+                {
+                    case "menu":
+                        <div class="mb-acoes-lista">
+                            @if (!EhMeu)
+                            {
+                                <button class="mb-acao" disabled="@executandoAcao" @onclick="@(() => TransferirAsync(Auth.Usuario))">
+                                    <Icone Nome="pessoa" />
+                                    <span><strong>Assumir ticket</strong><small>Passa a ser seu (hoje: @ResponsavelTexto)</small></span>
+                                </button>
+                            }
+                            <button class="mb-acao" disabled="@executandoAcao" @onclick="AbrirClienteAsync">
+                                <Icone Nome="pessoa" />
+                                <span><strong>@(ticket.SemCliente ? "Vincular cliente" : "Trocar cliente")</strong><small>@(ticket.SemCliente ? "Necessário para responder" : "Hoje: " + ticket.Nome)</small></span>
+                            </button>
+                            <button class="mb-acao" disabled="@executandoAcao" @onclick="AbrirTransferirAsync">
+                                <Icone Nome="seta" />
+                                <span><strong>Transferir para outro atendente</strong><small>O ticket aparece como novo para quem receber</small></span>
+                            </button>
+                            @if (ticket.PodeAlterarStatus)
+                            {
+                                <button class="mb-acao mb-acao-finalizar" disabled="@executandoAcao" @onclick="@(() => IrEtapa("finalizar"))">
+                                    <Icone Nome="check" />
+                                    <span><strong>Finalizar ticket</strong><small>Encerra o atendimento</small></span>
+                                </button>
+                            }
+                        </div>
+                        break;
+
+                    case "transferir":
+                        @if (atendentes == null)
+                        {
+                            <div class="mb-carregando"><span></span><span></span><span></span></div>
+                        }
+                        else
+                        {
+                            <div class="mb-acoes-lista mb-acoes-rolavel">
+                                @foreach (var a in atendentes)
+                                {
+                                    var atual = string.Equals(a, ticket.Responsavel, StringComparison.OrdinalIgnoreCase);
+                                    <button class="mb-acao" disabled="@(executandoAcao || atual)" @onclick="@(() => TransferirAsync(a))">
+                                        <Avatar Nome="@a" Classe="mb-avatar-p" />
+                                        <span>
+                                            <strong>@a</strong>
+                                            @if (atual) { <small>Responsável atual</small> }
+                                            else if (a.Equals(Auth.Usuario, StringComparison.OrdinalIgnoreCase)) { <small>Você</small> }
+                                        </span>
+                                        @if (executandoAcao && destinoEmAndamento == a) { <span class="mb-girando"></span> }
+                                    </button>
+                                }
+                            </div>
+                        }
+                        break;
+
+                    case "cliente":
+                        <div class="mb-busca">
+                            <Icone Nome="buscar" />
+                            <input type="search" placeholder="Nome, apelido ou código do cliente"
+                                   @bind="buscaCliente" @bind:event="oninput" @bind:after="BuscarClienteAsync" />
+                        </div>
+                        @if (buscandoCliente)
+                        {
+                            <div class="mb-carregando"><span></span><span></span><span></span></div>
+                        }
+                        else if (buscaCliente.Trim().Length >= 2 && clientesEncontrados.Count == 0)
+                        {
+                            <p class="mb-acoes-obs">Nenhum cliente encontrado.</p>
+                        }
+                        <div class="mb-acoes-lista mb-acoes-rolavel">
+                            @foreach (var c in clientesEncontrados)
+                            {
+                                var atual = ticket.CodCliente == c.Codigo;
+                                <button class="mb-acao" disabled="@(executandoAcao || atual)" @onclick="@(() => VincularClienteAsync(c))">
+                                    <Avatar Nome="@c.Nome" Classe="mb-avatar-p" />
+                                    <span><strong>@c.Nome</strong><small>@(atual ? "Cliente atual" : "Cód. " + c.Codigo)</small></span>
+                                    @if (executandoAcao && clienteEmAndamento == c.Codigo)
+                                    {
+                                        <span class="mb-girando"></span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                        break;
+
+                    case "finalizar":
+                        <div class="mb-acoes-confirmar">
+                            <p>Finalizar o ticket <strong>#@Id</strong> de <strong>@ticket.Nome</strong>?</p>
+                            @if (Formato.UsuarioAutomatico(ticket.Responsavel))
+                            {
+                                <p class="mb-acoes-obs">O ticket está na fila: ele fica no seu nome ao finalizar.</p>
+                            }
+                            <p class="mb-acoes-obs">Gerar o insight faz a IA aprender com este atendimento.</p>
+                            <div class="mb-acoes-botoes mb-acoes-botoes-col">
+                                <button class="mb-botao mb-botao-finalizar" disabled="@executandoAcao" @onclick="() => FinalizarAsync(true)">
+                                    @if (executandoAcao) { <span class="mb-girando"></span> } else { <text>Finalizar e gerar insight</text> }
+                                </button>
+                                <button class="mb-botao" disabled="@executandoAcao" @onclick="() => FinalizarAsync(false)">Finalizar sem insight</button>
+                                <button class="mb-botao mb-botao-sec" disabled="@executandoAcao" @onclick="@(() => IrEtapa("menu"))">Cancelar</button>
+                            </div>
+                        </div>
+                        break;
+                }
+            </div>
+        </div>
+    }
+
+    @* Imagem em tela cheia *@
+    @if (imagemAberta != null)
+    {
+        <div class="mb-visualizador" @onclick="() => imagemAberta = null">
+            <button class="mb-icone-botao" aria-label="Fechar"><Icone Nome="fechar" /></button>
+            <img src="@imagemAberta" alt="Imagem" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    /// <summary>Quantas mensagens a conversa abre; as anteriores vêm ao rolar para cima.</summary>
+    private const int PorPagina = 50;
+
+    private MobileTicketDto? ticket;
+    private MobileTicketItemDto? itemLista;
+    private List<MobileMensagemDto> mensagens = new();
+    private bool carregando = true;
+    private string erro = "";
+    private bool temMais;
+    private bool carregandoAnteriores;
+
+    private string texto = "";
+    private bool interna;
+
+    // Fila de envio de texto: a mensagem aparece na hora e vai para o servidor em ordem
+    private readonly Queue<int> _filaEnvio = new();
+    private readonly Dictionary<int, MobileEnviarRequest> _pedidos = new();
+    private readonly HashSet<int> _aceitas = new();   // provisórias que o servidor já gravou
+    private bool _processandoFila;
+
+    // Gravação de áudio
+    private bool gravando;
+    private bool enviandoAudio;
+    private DateTime inicioGravacao;
+    private string tempoGravacao = "0:00";
+    private CancellationTokenSource? _ctsGravacao;
+    private const int MaxSegundosAudio = 300; // 5 minutos
+    private string erroEnvio = "";
+    private MobileMensagemDto? respondendo;
+    private int? selecionada;
+
+    private IBrowserFile? arquivo;
+    private byte[]? arquivoBytes;
+    private string arquivoNome = "";
+    private string arquivoTipo = "";
+    private string? arquivoPrevia;
+    private string legenda = "";
+    private bool enviandoArquivo;
+
+    private string? imagemAberta;
+    private bool temNovasAbaixo;
+
+    // Ações (assumir / transferir / finalizar)
+    private bool acoesAbertas;
+    private string etapaAcoes = "menu";
+    private List<string>? atendentes;
+    private bool executandoAcao;
+    private string? destinoEmAndamento;
+    private string erroAcao = "";
+    private string avisoAcao = "";
+
+    private ElementReference _areaMensagens;
+    private ElementReference _caixaTexto;
+    private DotNetObjectReference<TicketConversa>? _ref;
+    private CancellationTokenSource _cts = new();
+    private bool _visivel = true;
+    private bool _atualizando;
+    private bool _atualizarDeNovo;
+    private bool _pertoDoFim = true;
+    private bool _rolarFim;
+    private bool _verificarTopo;
+    private double? _alturaAntes;
+    private int? _irPara;
+    private int _idCarregado;
+    private int _tempId = -1;
+    private string ChavePagina => $"ticket-{Id}";
+
+    private int UltimoCodigo => mensagens.Where(m => m.Codigo > 0).Select(m => m.Codigo).DefaultIfEmpty(0).Max();
+    private int PrimeiroCodigo => mensagens.Where(m => m.Codigo > 0).Select(m => m.Codigo).DefaultIfEmpty(0).Min();
+
+    private string NomeTopo => ticket?.Nome ?? itemLista?.Nome ?? "Carregando...";
+    private string? FotoTopo => ticket?.FotoUrl ?? itemLista?.FotoUrl;
+
+    private bool PodeEscrever => ticket != null && ticket.PodeResponder && !ticket.Finalizado && !ticket.SemCliente;
+    private bool TemAcoes => ticket != null && ticket.PodeResponder && !ticket.Finalizado;
+    private bool EhMeu => ticket != null && string.Equals(ticket.Responsavel, Auth.Usuario, StringComparison.OrdinalIgnoreCase);
+    private string ResponsavelTexto => ticket == null || Formato.UsuarioAutomatico(ticket.Responsavel) ? "na fila" : Formato.Primeiro(ticket.Responsavel);
+    private string buscaCliente = "";
+    private bool buscandoCliente;
+    private List<MobileClienteDto> clientesEncontrados = new();
+    private int? clienteEmAndamento;
+    private CancellationTokenSource? _ctsBuscaCliente;
+
+    private void AbrirClienteAsync()
+    {
+        acoesAbertas = true;
+        buscaCliente = "";
+        clientesEncontrados.Clear();
+        IrEtapa("cliente");
+    }
+
+    private async Task BuscarClienteAsync()
+    {
+        _ctsBuscaCliente?.Cancel();
+        var cts = _ctsBuscaCliente = new CancellationTokenSource();
+        var termo = buscaCliente.Trim();
+        if (termo.Length < 2) { clientesEncontrados.Clear(); buscandoCliente = false; return; }
+
+        try
+        {
+            await Task.Delay(350, cts.Token);           // espera parar de digitar
+            buscandoCliente = true;
+            StateHasChanged();
+            var lista = await Api.BuscarClientesAsync(termo);
+            if (!cts.IsCancellationRequested) clientesEncontrados = lista;
+        }
+        catch (TaskCanceledException) { }
+        catch (ApiException ex) { erroAcao = ex.Message; }
+        finally
+        {
+            if (!cts.IsCancellationRequested) buscandoCliente = false;
+        }
+    }
+
+    private async Task VincularClienteAsync(MobileClienteDto c)
+    {
+        if (executandoAcao || ticket == null) return;
+        executandoAcao = true;
+        clienteEmAndamento = c.Codigo;
+        erroAcao = "";
+        try
+        {
+            var msg = await Api.VincularClienteAsync(Id, c.Codigo);
+            var atualizado = await Api.TicketAsync(Id);   // traz SemCliente = false, nome e responsável novos
+            if (atualizado != null) ticket = atualizado;
+            acoesAbertas = false;
+            avisoAcao = string.IsNullOrWhiteSpace(msg) ? "Cliente vinculado." : msg;
+            Api.UltimasConversas = null;                  // a lista recarrega com o nome do cliente
+            _ = LimparAvisoAsync(avisoAcao);
+        }
+        catch (ApiException ex) { erroAcao = ex.Message; }
+        finally
+        {
+            executandoAcao = false;
+            clienteEmAndamento = null;
+        }
+    }
+
+    private string MotivoBloqueio()
+    {
+        if (ticket == null) return "";
+        if (!ticket.PodeResponder) return "Você não tem permissão para responder tickets.";
+        if (ticket.Finalizado) return "Ticket finalizado. Para responder, reabra pelo HELP.";
+        if (ticket.SemCliente) return "Este ticket ainda não tem cliente vinculado. Vincule o cliente para responder.";
+        return "";
+    }
+
+    /// <summary>
+    /// "Impressão digital" do que aparece na lista. A lista só é redesenhada quando ela muda,
+    /// então digitar, gravar áudio ou abrir menus não mexe nos balões.
+    /// </summary>
+    private int VersaoLista()
+    {
+        var h = new HashCode();
+        h.Add(mensagens.Count);
+        h.Add(selecionada);
+        h.Add(PodeEscrever);
+        h.Add(temMais);
+        h.Add(carregandoAnteriores);
+        h.Add(Auth.Usuario);
+        foreach (var m in mensagens)
+        {
+            h.Add(m.Codigo);
+            h.Add(m.Status);
+            h.Add(m.Excluida);
+            h.Add(m.Alterada);
+            h.Add(m.Texto);
+            h.Add(m.Transcricao);
+        }
+        return h.ToHashCode();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Abriu outro ticket (ex.: tocou numa notificação com este aberto)
+        if (_idCarregado == Id) return;
+        _idCarregado = Id;
+
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+
+        if (gravando) await CancelarGravacaoAsync();
+
+        ticket = null;
+        mensagens = new();
+        _filaEnvio.Clear();
+        _pedidos.Clear();
+        _aceitas.Clear();
+        temMais = false;
+        respondendo = null;
+        selecionada = null;
+        texto = "";
+        interna = false;
+        erro = "";
+        erroEnvio = "";
+        avisoAcao = "";
+        acoesAbertas = false;
+        carregando = true;
+        itemLista = Api.UltimasConversas?.FirstOrDefault(c => c.Codigo == Id);
+
+        await CarregarAsync();
+        _ = LoopAtualizacaoAsync(_cts.Token);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("helpMobile.observarRolagem", _areaMensagens, _ref);
+        }
+        if (_ref != null)
+            await JS.InvokeVoidAsync("helpMobile.registrarPagina", ChavePagina, _ref);
+
+        if (_alturaAntes.HasValue)
+        {
+            var antes = _alturaAntes.Value;
+            _alturaAntes = null;
+            await JS.InvokeVoidAsync("helpMobile.manterPosicao", _areaMensagens, antes);
+        }
+
+        if (_rolarFim)
+        {
+            _rolarFim = false;
+            await JS.InvokeVoidAsync("helpMobile.rolarFim", _areaMensagens, false);
+        }
+
+        if (_irPara.HasValue)
+        {
+            var cod = _irPara.Value;
+            _irPara = null;
+            await JS.InvokeVoidAsync("helpMobile.rolarAte", $"m-{cod}");
+        }
+
+        if (_verificarTopo)
+        {
+            // Conversa curta (não enche a tela): já busca as anteriores sem precisar rolar
+            _verificarTopo = false;
+            if (temMais && await JS.InvokeAsync<bool>("helpMobile.pertoDoFim", _areaMensagens)
+                        && await JS.InvokeAsync<double>("helpMobile.alturaRolagem", _areaMensagens) < 1200)
+                await CarregarAnterioresAsync();
+        }
+    }
+
+    private async Task CarregarAsync()
+    {
+        carregando = mensagens.Count == 0;
+        erro = "";
+        try
+        {
+            // Uma chamada só: cabeçalho + últimas mensagens + marca como lido
+            var r = await Api.AbrirAsync(Id, PorPagina);
+            if (r == null)
+            {
+                erro = "Ticket não encontrado.";
+                return;
+            }
+
+            ticket = r.Ticket;
+            mensagens = r.Mensagens;
+            temMais = r.TemMais;
+            _rolarFim = true;
+            _verificarTopo = true;
+        }
+        catch (ApiException ex) { erro = ex.Message; }
+        catch (Exception) { erro = "Não foi possível abrir o ticket."; }
+        finally
+        {
+            carregando = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Rolou até o topo: traz as mensagens anteriores, mantendo a posição na tela.</summary>
+    private async Task CarregarAnterioresAsync()
+    {
+        if (!temMais || carregandoAnteriores || carregando) return;
+        var antes = PrimeiroCodigo;
+        if (antes <= 0) { temMais = false; return; }
+
+        carregandoAnteriores = true;
+        StateHasChanged();
+        try
+        {
+            var anteriores = await Api.MensagensAnterioresAsync(Id, antes, PorPagina);
+            var existentes = mensagens.Where(m => m.Codigo > 0).Select(m => m.Codigo).ToHashSet();
+            var novas = anteriores.Where(a => !existentes.Contains(a.Codigo)).ToList();
+
+            temMais = anteriores.Count >= PorPagina;
+            if (novas.Count > 0)
+            {
+                _alturaAntes = await JS.InvokeAsync<double>("helpMobile.alturaRolagem", _areaMensagens);
+                mensagens.InsertRange(0, novas);
+            }
+        }
+        catch (Exception) { /* sem conexão: tenta de novo ao rolar */ }
+        finally
+        {
+            carregandoAnteriores = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Mensagens novas chegam a cada 3s com a conversa aberta.</summary>
+    private async Task LoopAtualizacaoAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(3));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_visivel && ticket != null)
+                    await AtualizarAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task AtualizarAsync()
+    {
+        if (ticket == null) return;
+        if (_atualizando)
+        {
+            // Já tem uma atualização em andamento: roda de novo assim que ela terminar
+            _atualizarDeNovo = true;
+            return;
+        }
+
+        _atualizando = true;
+        try
+        {
+            do
+            {
+                _atualizarDeNovo = false;
+                await AtualizarUmaVezAsync();
+            }
+            while (_atualizarDeNovo);
+        }
+        finally { _atualizando = false; }
+    }
+
+    private async Task AtualizarUmaVezAsync()
+    {
+        try
+        {
+            var r = await Api.AtualizacoesAsync(Id, UltimoCodigo, PrimeiroCodigo);
+            if (r == null) return;
+
+            var mudou = false;
+
+            if (r.Novas.Count > 0)
+            {
+                var existentes = mensagens.Where(m => m.Codigo > 0).Select(m => m.Codigo).ToHashSet();
+                var novas = r.Novas.Where(n => !existentes.Contains(n.Codigo)).ToList();
+
+                if (novas.Count > 0)
+                {
+                    // Mensagem que eu enviei chegou do servidor: tira a provisória correspondente
+                    foreach (var n in novas.Where(n => !n.DoCliente))
+                        RemoverProvisoria(n);
+
+                    var pertoDoFim = _pertoDoFim;
+                    mensagens.AddRange(novas);
+
+                    if (pertoDoFim || novas.All(n => !n.DoCliente)) _rolarFim = true;
+                    else temNovasAbaixo = true;
+
+                    if (novas.Any(n => n.DoCliente))
+                    {
+                        _ = Api.MarcarLidoAsync(Id);
+                        if (!pertoDoFim) await JS.InvokeVoidAsync("helpMobile.vibrar");
+                    }
+                    mudou = true;
+                }
+            }
+
+            if (r.Ticket != null)
+            {
+                ticket = r.Ticket;
+                mudou = true;
+            }
+
+            foreach (var m in mensagens)
+            {
+                if (m.Codigo > 0 && r.Status.TryGetValue(m.Codigo, out var st) && st != m.Status)
+                {
+                    m.Status = st;
+                    mudou = true;
+                }
+            }
+
+            if (mudou) StateHasChanged();
+        }
+        catch (ApiException) { /* sem conexão: tenta de novo no próximo ciclo */ }
+        catch (Exception) { }
+    }
+
+    /// <summary>
+    /// Tira a provisória (com relógio) que corresponde à mensagem que chegou do servidor.
+    /// Com a fila podem existir várias provisórias: tira só a da mesma mensagem.
+    /// </summary>
+    private void RemoverProvisoria(MobileMensagemDto chegou)
+    {
+        MobileMensagemDto? prov;
+        if (!string.IsNullOrWhiteSpace(chegou.AudioUrl))
+            prov = mensagens.FirstOrDefault(m => m.Codigo < 0 && m.Status != "error" && (m.AudioUrl ?? "").StartsWith("data:"));
+        else
+            prov = mensagens.FirstOrDefault(m => m.Codigo < 0 && m.Status != "error"
+                                                 && m.Interna == chegou.Interna
+                                                 && string.Equals(m.Texto.Trim(), chegou.Texto.Trim(), StringComparison.Ordinal));
+
+        // Segurança: se o texto vier diferente (ex.: espaços), tira a provisória mais antiga já aceita pelo servidor
+        prov ??= mensagens.FirstOrDefault(m => m.Codigo < 0 && _aceitas.Contains(m.Codigo) && string.IsNullOrEmpty(m.AudioUrl));
+
+        if (prov == null) return;
+        mensagens.Remove(prov);
+        _aceitas.Remove(prov.Codigo);
+        _pedidos.Remove(prov.Codigo);
+    }
+
+    [JSInvokable]
+    public async Task MudouVisibilidade(bool visivel)
+    {
+        _visivel = visivel;
+        if (visivel)
+        {
+            await AtualizarAsync();
+            _ = Api.MarcarLidoAsync(Id);
+        }
+    }
+
+    [JSInvokable]
+    public Task ChegouPush(int codTicket) => codTicket == Id ? AtualizarAsync() : Task.CompletedTask;
+
+    /// <summary>Avisado pelo navegador só quando entra/sai da região perto do fim da conversa.</summary>
+    [JSInvokable]
+    public void RolagemPertoDoFim(bool perto)
+    {
+        _pertoDoFim = perto;
+        if (perto && temNovasAbaixo)
+        {
+            temNovasAbaixo = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public Task RolagemNoTopo() => CarregarAnterioresAsync();
+
+    // ───────────── Envio ─────────────
+
+    private async Task EnviarAsync()
+    {
+        var conteudo = texto.Trim();
+        if (string.IsNullOrEmpty(conteudo) || ticket == null) return;
+
+        erroEnvio = "";
+        var resp = respondendo;
+
+        // Mostra na hora (provisória com relógio), igual ao WhatsApp
+        var provisoria = new MobileMensagemDto
+        {
+            Codigo = _tempId--,
+            Texto = conteudo,
+            DataHora = DateTime.Now,
+            Usuario = Auth.Usuario,
+            Interna = interna,
+            Status = interna ? "interno" : "sending",
+            CodRespondida = resp?.Codigo,
+            TextoRespondida = resp == null ? null : Resumo(resp),
+            UsuarioRespondida = resp == null ? null : (resp.DoCliente ? ticket.Nome : resp.Usuario)
+        };
+        mensagens.Add(provisoria);
+        _pedidos[provisoria.Codigo] = new MobileEnviarRequest
+        {
+            Texto = conteudo,
+            Interna = provisoria.Interna,
+            CodRespondida = resp?.Codigo,
+            TextoRespondida = resp?.Texto,
+            UsuarioRespondida = resp?.Usuario
+        };
+
+        texto = "";
+        respondendo = null;
+        selecionada = null;
+        _rolarFim = true;
+        await JS.InvokeVoidAsync("helpMobile.limpar", _caixaTexto);
+        StateHasChanged();
+
+        _filaEnvio.Enqueue(provisoria.Codigo);
+        if (!_processandoFila) _ = ProcessarFilaAsync();
+    }
+
+    /// <summary>Envia as mensagens da fila uma por vez, na ordem em que foram digitadas.</summary>
+    private async Task ProcessarFilaAsync()
+    {
+        _processandoFila = true;
+        try
+        {
+            while (_filaEnvio.Count > 0)
+            {
+                var cod = _filaEnvio.Dequeue();
+                var prov = mensagens.FirstOrDefault(m => m.Codigo == cod);
+                if (prov == null || !_pedidos.TryGetValue(cod, out var pedido)) continue;
+
+                try
+                {
+                    await Api.EnviarAsync(Id, pedido);
+                    _aceitas.Add(cod);
+                    _ = AtualizarAsync();
+                }
+                catch (ApiException ex)
+                {
+                    // Fica na conversa com aviso e opção de tentar de novo / descartar
+                    prov.Status = "error";
+                    erroEnvio = ex.Message;
+                    StateHasChanged();
+                }
+            }
+        }
+        finally { _processandoFila = false; }
+    }
+
+    private Task ReenviarAsync(MobileMensagemDto m)
+    {
+        if (!_pedidos.ContainsKey(m.Codigo)) return Task.CompletedTask;
+        erroEnvio = "";
+        m.Status = m.Interna ? "interno" : "sending";
+        _filaEnvio.Enqueue(m.Codigo);
+        if (!_processandoFila) _ = ProcessarFilaAsync();
+        return Task.CompletedTask;
+    }
+
+    private void Descartar(MobileMensagemDto m)
+    {
+        // Devolve o texto para a caixa (se estiver vazia) para não perder o que foi digitado
+        if (string.IsNullOrWhiteSpace(texto) && !string.IsNullOrWhiteSpace(m.Texto)) texto = m.Texto;
+        mensagens.Remove(m);
+        _pedidos.Remove(m.Codigo);
+        _aceitas.Remove(m.Codigo);
+        if (!mensagens.Any(x => x.Codigo < 0 && x.Status == "error")) erroEnvio = "";
+    }
+
+    private async Task EscolheuArquivoAsync(InputFileChangeEventArgs e)
+    {
+        erroEnvio = "";
+        var f = e.File;
+        const long limite = 10 * 1024 * 1024;
+
+        try
+        {
+            // Foto do celular: reduz antes de enviar (fica rápido no 4G)
+            if (f.ContentType.StartsWith("image/") && f.ContentType != "image/gif")
+            {
+                f = await f.RequestImageFileAsync("image/jpeg", 1600, 1600);
+                arquivoNome = Path.ChangeExtension(e.File.Name, ".jpg");
+                arquivoTipo = "image/jpeg";
+            }
+            else
+            {
+                arquivoNome = f.Name;
+                arquivoTipo = f.ContentType;
+            }
+
+            if (f.Size > limite)
+            {
+                erroEnvio = "Arquivo maior que 10 MB.";
+                return;
+            }
+
+            using var ms = new MemoryStream();
+            await f.OpenReadStream(limite).CopyToAsync(ms);
+            arquivoBytes = ms.ToArray();
+            arquivoPrevia = arquivoTipo.StartsWith("image/")
+                ? $"data:{arquivoTipo};base64,{Convert.ToBase64String(arquivoBytes)}"
+                : null;
+            arquivo = f;
+            legenda = texto.Trim();
+        }
+        catch (Exception)
+        {
+            erroEnvio = "Não foi possível abrir o arquivo.";
+            CancelarArquivo();
+        }
+    }
+
+    private async Task EnviarArquivoAsync()
+    {
+        if (arquivoBytes == null || enviandoArquivo) return;
+        enviandoArquivo = true;
+        erroEnvio = "";
+        try
+        {
+            using var ms = new MemoryStream(arquivoBytes);
+            await Api.EnviarArquivoAsync(Id, ms, arquivoNome, arquivoTipo, legenda);
+            if (legenda.Trim() == texto.Trim()) texto = "";
+            CancelarArquivo();
+            _rolarFim = true;
+            await AtualizarAsync();
+        }
+        catch (ApiException ex)
+        {
+            erroEnvio = ex.Message;
+            CancelarArquivo();
+        }
+        finally
+        {
+            enviandoArquivo = false;
+        }
+    }
+
+    // ───────────── Áudio ─────────────
+
+    private async Task IniciarGravacaoAsync()
+    {
+        erroEnvio = "";
+        string r;
+        try { r = await JS.InvokeAsync<string>("helpMobile.audioIniciar"); }
+        catch (JSException) { r = "falha"; }
+        if (r != "ok")
+        {
+            erroEnvio = r switch
+            {
+                "inseguro" => "Gravar áudio só funciona com o app em HTTPS (pelo IP o navegador bloqueia o microfone).",
+                "negado" => "Permita o uso do microfone para este site nas configurações do navegador.",
+                "sem-microfone" => "Nenhum microfone encontrado.",
+                _ => "Não foi possível iniciar a gravação."
+            };
+            return;
+        }
+
+        gravando = true;
+        inicioGravacao = DateTime.Now;
+        tempoGravacao = "0:00";
+        _ctsGravacao = new CancellationTokenSource();
+        _ = CronometroAsync(_ctsGravacao.Token);
+    }
+
+    private async Task CronometroAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(500));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var t = DateTime.Now - inicioGravacao;
+                var novo = $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+                if (t.TotalSeconds >= MaxSegundosAudio)
+                {
+                    await EnviarAudioAsync(); // chegou no limite: envia o que gravou
+                    return;
+                }
+                if (novo != tempoGravacao)
+                {
+                    tempoGravacao = novo;
+                    StateHasChanged();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task CancelarGravacaoAsync()
+    {
+        _ctsGravacao?.Cancel();
+        gravando = false;
+        await JS.InvokeVoidAsync("helpMobile.audioCancelar");
+    }
+
+    private async Task EnviarAudioAsync()
+    {
+        if (!gravando || enviandoAudio || ticket == null) return;
+
+        _ctsGravacao?.Cancel();
+        var duracao = DateTime.Now - inicioGravacao;
+        if (duracao.TotalSeconds < 1)
+        {
+            await CancelarGravacaoAsync();
+            erroEnvio = "Áudio muito curto.";
+            return;
+        }
+
+        enviandoAudio = true;
+        StateHasChanged();
+
+        MobileMensagemDto? provisoria = null;
+        try
+        {
+            var r = await JS.InvokeAsync<AudioGravado?>("helpMobile.audioParar");
+            gravando = false;
+            if (r == null || string.IsNullOrEmpty(r.Base64)) return;
+
+            var bytes = Convert.FromBase64String(r.Base64);
+            var tipo = string.IsNullOrWhiteSpace(r.MimeType) ? "audio/webm" : r.MimeType!;
+
+            // Aparece na hora com o relógio, igual ao WhatsApp
+            provisoria = new MobileMensagemDto
+            {
+                Codigo = _tempId--,
+                DataHora = DateTime.Now,
+                Usuario = Auth.Usuario,
+                Interna = interna,
+                Status = interna ? "interno" : "sending",
+                AudioUrl = $"data:{tipo.Split(';')[0]};base64,{r.Base64}"
+            };
+            mensagens.Add(provisoria);
+            _rolarFim = true;
+            StateHasChanged();
+
+            await Api.EnviarAudioAsync(Id, bytes, tipo, interna);
+            await AtualizarAsync();
+        }
+        catch (ApiException ex)
+        {
+            if (provisoria != null) mensagens.Remove(provisoria);
+            erroEnvio = ex.Message;
+        }
+        catch (Exception)
+        {
+            if (provisoria != null) mensagens.Remove(provisoria);
+            erroEnvio = "Não foi possível enviar o áudio.";
+        }
+        finally
+        {
+            gravando = false;
+            enviandoAudio = false;
+            StateHasChanged();
+        }
+    }
+
+    private class AudioGravado
+    {
+        public string? Base64 { get; set; }
+        public string? MimeType { get; set; }
+    }
+
+    private void CancelarArquivo()
+    {
+        arquivo = null;
+        arquivoBytes = null;
+        arquivoPrevia = null;
+        legenda = "";
+    }
+
+    // ───────────── Ações do ticket ─────────────
+
+    private void AbrirAcoes()
+    {
+        erroAcao = "";
+        avisoAcao = "";
+        etapaAcoes = "menu";
+        acoesAbertas = true;
+    }
+
+    private void FecharAcoes()
+    {
+        if (executandoAcao) return;
+        acoesAbertas = false;
+    }
+
+    private void IrEtapa(string etapa)
+    {
+        erroAcao = "";
+        etapaAcoes = etapa;
+    }
+
+    private string TituloAcoes() => etapaAcoes switch
+    {
+        "transferir" => "Transferir para",
+        "finalizar" => "Finalizar ticket",
+        "cliente" => "Vincular cliente",
+        _ => $"Ticket #{Id}"
+    };
+
+    private async Task AbrirTransferirAsync()
+    {
+        IrEtapa("transferir");
+        if (atendentes != null) return;
+        try { atendentes = await Api.AtendentesAsync(); }
+        catch (ApiException ex)
+        {
+            erroAcao = ex.Message;
+            etapaAcoes = "menu";
+        }
+    }
+
+    private async Task TransferirAsync(string usuario)
+    {
+        if (executandoAcao || ticket == null) return;
+        executandoAcao = true;
+        destinoEmAndamento = usuario;
+        erroAcao = "";
+        try
+        {
+            var msg = await Api.TransferirAsync(Id, usuario);
+            ticket.Responsavel = usuario.Trim().ToUpperInvariant();
+            acoesAbertas = false;
+            avisoAcao = string.IsNullOrWhiteSpace(msg) ? "Responsável alterado." : msg;
+            Api.UltimasConversas = null; // a lista recarrega com o novo responsável
+            _ = LimparAvisoAsync(avisoAcao);
+        }
+        catch (ApiException ex) { erroAcao = ex.Message; }
+        finally
+        {
+            executandoAcao = false;
+            destinoEmAndamento = null;
+        }
+    }
+
+    private async Task FinalizarAsync(bool gerarInsight)
+    {
+        if (executandoAcao || ticket == null) return;
+        executandoAcao = true;
+        erroAcao = "";
+        try
+        {
+            await Api.FinalizarAsync(Id, gerarInsight);
+            // Igual ao HELP: finalizou, volta para a lista (que já não mostra este ticket)
+            Api.UltimasConversas?.RemoveAll(c => c.Codigo == Id);
+            acoesAbertas = false;
+            Nav.NavigateTo("");
+        }
+        catch (ApiException ex) { erroAcao = ex.Message; }
+        finally { executandoAcao = false; }
+    }
+
+    private async Task LimparAvisoAsync(string aviso)
+    {
+        await Task.Delay(4000);
+        if (avisoAcao == aviso)
+        {
+            avisoAcao = "";
+            StateHasChanged();
+        }
+    }
+
+    // ───────────── Interação ─────────────
+
+    private void Selecionar(MobileMensagemDto m)
+    {
+        if (m.Codigo <= 0) return;
+        selecionada = selecionada == m.Codigo ? null : m.Codigo;
+    }
+
+    private async Task Responder(MobileMensagemDto m)
+    {
+        respondendo = m;
+        selecionada = null;
+        await JS.InvokeVoidAsync("helpMobile.focar", _caixaTexto);
+    }
+
+    private void AbrirImagem(string? url) => imagemAberta = url;
+
+    private static string Resumo(MobileMensagemDto m)
+    {
+        if (!string.IsNullOrWhiteSpace(m.Texto)) return m.Texto.Length > 120 ? m.Texto[..120] + "…" : m.Texto;
+        if (!string.IsNullOrWhiteSpace(m.AudioUrl)) return "🎤 Áudio";
+        if (!string.IsNullOrWhiteSpace(m.VideoUrl)) return "🎥 Vídeo";
+        if (!string.IsNullOrWhiteSpace(m.ImagemUrl)) return m.ArquivoEhImagem ? "📷 Imagem" : "📎 " + (m.NomeArquivo ?? "Arquivo");
+        return "";
+    }
+
+    /// <summary>Tocou na citação: vai até a mensagem original (busca as anteriores se ainda não carregou).</summary>
+    private async Task IrPara(int codigo)
+    {
+        if (await JS.InvokeAsync<bool>("helpMobile.rolarAte", $"m-{codigo}")) return;
+
+        for (var i = 0; i < 10 && temMais && !mensagens.Any(m => m.Codigo == codigo); i++)
+            await CarregarAnterioresAsync();
+
+        if (mensagens.Any(m => m.Codigo == codigo))
+        {
+            _irPara = codigo;
+            StateHasChanged();
+        }
+    }
+
+    private async Task IrParaFimAsync()
+    {
+        temNovasAbaixo = false;
+        await JS.InvokeVoidAsync("helpMobile.rolarFim", _areaMensagens, true);
+    }
+
+    private void Voltar() => Nav.NavigateTo("");
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        _ctsGravacao?.Cancel();
+        if (gravando)
+        {
+            try { await JS.InvokeVoidAsync("helpMobile.audioCancelar"); } catch { }
+        }
+        try { await JS.InvokeVoidAsync("helpMobile.pararRolagem", _areaMensagens); } catch { }
+        try { await JS.InvokeVoidAsync("helpMobile.liberarPagina", ChavePagina); } catch { }
+        _ref?.Dispose();
+    }
+}

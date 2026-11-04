@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <title>HELP</title>
+    <base href="/" />
+
+    <meta name="theme-color" content="#0f2a5c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="HELP" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonte carregada sem bloquear a tela: se a internet oscilar, o app abre com a fonte do sistema -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+          rel="stylesheet" media="print" onload="this.media='all'" />
+
+    <!-- Ao alterar app.css ou help.js, aumente o ?v= para o celular não usar a versão antiga em cache -->
+    <link rel="stylesheet" href="css/app.css?v=6" />
+    <!-- .json (e não .webmanifest): o IIS já entrega .json sem configurar tipo MIME -->
+    <link href="manifest.json" rel="manifest" />
+    <link rel="icon" type="image/png" href="icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icon-180.png" />
+</head>
+
+<body>
+    <div id="app">
+        <div class="mb-abertura"><div><strong>HELP</strong><span></span></div></div>
+    </div>
+
+    <div id="blazor-error-ui">
+        Algo deu errado.
+        <a href="" class="reload">Recarregar</a>
+        <a class="dismiss">✕</a>
+    </div>
+
+    <script src="js/help.js?v=5"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js', { updateViaCache: 'none' });
+        }
+    </script>
+</body>
+
+</html>

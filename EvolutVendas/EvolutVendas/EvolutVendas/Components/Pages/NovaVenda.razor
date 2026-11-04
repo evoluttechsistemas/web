@@ -1,0 +1,597 @@
+﻿@page "/novavenda"
+@using EvolutVendas.Models
+@using EvolutVendas.Services
+@inject VendaService vendaService
+@inject NavigationManager Navigation
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@using System.Globalization
+@implements IDisposable
+
+<style>
+    :root {
+        --primary: #2563eb;
+        --primary-dark: #1e40af;
+        --success: #10b981;
+        --danger: #ef4444;
+        --gray: #6b7280;
+        --radius: 12px;
+        --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        --shadow-lg: 0 10px 25px rgba(0,0,0,0.15);
+        --transition: all 0.25s ease;
+    }
+
+    .page {
+        background: #f8fafc;
+        min-height: 100vh;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        padding-bottom: 100px;
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        display: flex;
+        align-items: center;
+        background: var(--primary);
+        color: white;
+        padding: 12px 16px;
+        box-shadow: var(--shadow);
+    }
+
+    .btn-voltar {
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+    }
+
+    .top-bar h2 {
+        flex: 1;
+        text-align: center;
+        font-size: 1.2rem;
+        margin: 0;
+        font-weight: 600;
+    }
+
+    /* 🔹 Campos principais */
+    .section {
+        padding: 16px;
+    }
+
+    label {
+        font-weight: 600;
+        color: #374151;
+        display: block;
+        margin-bottom: 5px;
+    }
+
+    input {
+        flex: 1;
+        border: 1px solid #d1d5db;
+        border-radius: var(--radius);
+        padding: 0.8rem;
+        font-size: 1rem;
+        background: white;
+        box-shadow: var(--shadow);
+    }
+
+    .input-group {
+        display: flex;
+        gap: 10px;
+    }
+
+    button {
+        border: none;
+        border-radius: var(--radius);
+        padding: 0.8rem 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .btn-blue {
+        background: var(--primary);
+        color: white;
+    }
+
+        .btn-blue:hover {
+            background: var(--primary-dark);
+        }
+
+    /* 🔹 Lista de produtos */
+    .produtos-lista {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .card-produto {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: var(--transition);
+    }
+
+        .card-produto:hover {
+            transform: scale(1.01);
+        }
+
+    .info-prod {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .nome-prod {
+        font-weight: 600;
+        font-size: 1rem;
+        color: #1e293b;
+    }
+
+    .detalhes-prod {
+        font-size: 0.9rem;
+        color: var(--gray);
+    }
+
+    .valor-prod {
+        text-align: right;
+        font-weight: 700;
+        color: var(--primary-dark);
+    }
+
+    .remove-prod {
+        color: var(--danger);
+        font-size: 0.85rem;
+        cursor: pointer;
+        text-align: right;
+        margin-top: 3px;
+    }
+
+    /* 🔹 Total + botão fixo */
+    .finalizar-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        padding: 12px 16px;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+    }
+
+    .total-info {
+        display: flex;
+        justify-content: space-between;
+        font-weight: 600;
+        color: #374151;
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .total-valor {
+        color: var(--primary-dark);
+        font-size: 1.2rem;
+    }
+
+    .btn-finalizar {
+        width: 100%;
+        background: var(--success);
+        color: white;
+        font-size: 1.1rem;
+        padding: 1rem;
+        border-radius: var(--radius);
+        font-weight: 600;
+    }
+
+        .btn-finalizar:disabled {
+            background: #cbd5e1;
+            color: #475569;
+        }
+
+    /* 🔹 Modal estilo app */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.45);
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-content {
+        background: white;
+        width: 100%;
+        max-height: 85%;
+        border-radius: 20px 20px 0 0;
+        box-shadow: var(--shadow-lg);
+        padding: 16px;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease;
+    }
+
+    @@keyframes slideUp {
+        from
+
+    {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    }
+
+    .produto-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border-bottom: 1px solid #e5e7eb;
+        cursor: pointer;
+    }
+
+        .produto-item img {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            object-fit: cover;
+            border: 1px solid #ddd;
+        }
+
+        .produto-item:hover {
+            background: #f1f5f9;
+        }
+
+    .btn-cancelar {
+        background: #e5e7eb;
+        color: #374151;
+        width: 100%;
+        padding: 12px;
+        border-radius: var(--radius);
+        font-weight: 600;
+        margin-top: 10px;
+    }
+</style>
+
+<div class="page">
+
+    <!-- 🔹 Barra superior -->
+    <div class="top-bar">
+        <button class="btn-voltar" @onclick="Voltar">←</button>
+        <h2>Nova Venda</h2>
+    </div>
+
+    <!-- 🔹 Cliente -->
+    <div class="section">
+        <label>Cliente</label>
+        <div class="input-group">
+            <input readonly placeholder="Selecione um cliente" value="@clienteSelecionado?.Nome" />
+            <button class="btn-blue" @onclick="AbrirModalCliente">Selecionar</button>
+        </div>
+    </div>
+
+    <!-- 🔹 Produtos -->
+    <div class="section">
+        <label>Produtos</label>
+        <div class="input-group">
+            <input readonly placeholder="Adicionar produto" />
+            <button class="btn-blue" @onclick="AbrirModalProduto">Adicionar</button>
+        </div>
+
+        @if (produtosSelecionados.Count == 0)
+        {
+            <p style="margin-top:10px;color:#6b7280;">Nenhum produto adicionado.</p>
+        }
+        else
+        {
+            <div class="produtos-lista">
+                @foreach (var p in produtosSelecionados)
+                {
+                    <div class="card-produto">
+                        <div class="info-prod">
+                            <div class="nome-prod">@p.Descricao</div>
+                            <div class="detalhes-prod">Qtd: @p.Quantidade | Unit: @p.PrecoUnitario.ToString("C")</div>
+                            <span class="remove-prod" @onclick="@(() => RemoverProduto(p))">Remover</span>
+                        </div>
+                        <div class="valor-prod">@((p.PrecoUnitario * p.Quantidade).ToString("C"))</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- 🔹 Total + Finalizar -->
+    <div class="finalizar-bar">
+        <div class="total-info">
+            <span>Total da Venda:</span>
+            <span class="total-valor">@TotalVenda.ToString("C")</span>
+        </div>
+        <button class="btn-finalizar" @onclick="AbrirModalPagamento" disabled="@(!PodeFinalizar)">
+            Finalizar Venda
+        </button>
+    </div>
+
+    <!-- 🔹 MODAIS -->
+    @if (mostrarModalCliente)
+    {
+        <div class="modal" @onclick="FecharModalCliente">
+            <div class="modal-content" @onclick:stopPropagation>
+                <h3>Selecionar Cliente</h3>
+                <InputText placeholder="Buscar cliente..." @bind-Value="clienteBusca" @oninput="BuscarClientes"
+                           class="w-full border rounded-lg px-3 py-2 mb-2" />
+                @foreach (var cli in clientesFiltrados)
+                {
+                    <div class="produto-item" @onclick="@(() => SelecionarCliente(cli))">
+                        <div>
+                            <b>@cli.Nome</b><br />
+                            <small style="color:gray;">@cli.Endereco</small>
+                        </div>
+                    </div>
+                }
+                <button class="btn-cancelar" @onclick="FecharModalCliente">Fechar</button>
+            </div>
+        </div>
+    }
+
+    @if (mostrarModalProduto)
+    {
+        <div class="modal" @onclick="FecharModalProduto">
+            <div class="modal-content" @onclick:stopPropagation>
+                <h3>Selecionar Produto</h3>
+                <InputText placeholder="Buscar produto..." @bind-Value="produtoBusca" @oninput="BuscarProdutos"
+                           class="w-full border rounded-lg px-3 py-2 mb-2" />
+                @foreach (var prod in produtosFiltrados)
+                {
+                    <div class="produto-item" @onclick="@(() => AbrirModalQuantidade(prod))">
+                        <img src="@(string.IsNullOrEmpty(prod.ImagemBase64) ? "images/sem-imagem.png" : prod.ImagemBase64)" />
+                        <div>
+                            <b>@prod.Descricao</b><br />
+                            <small style="color:gray;">@prod.PrecoUnitario.ToString("C", new CultureInfo("pt-BR"))</small>
+                        </div>
+                    </div>
+                }
+                <button class="btn-cancelar" @onclick="FecharModalProduto">Fechar</button>
+            </div>
+        </div>
+    }
+
+    @if (mostrarModalPagamento)
+    {
+        <div class="modal" @onclick="FecharModalPagamento">
+            <div class="modal-content" @onclick:stopPropagation>
+                <h3>💳 Escolha a Forma de Pagamento</h3>
+
+                @if (formasPagamento?.Any() == true)
+                {
+                    @foreach (var forma in formasPagamento)
+                    {
+                        <div class="produto-item" @onclick="@(() => ConfirmarPagamento(forma))">
+                            <div style="display:flex;flex-direction:column;">
+                                <b style="font-size:1rem;color:#1e293b;">@forma.Descricao</b>
+                                <small style="color:gray;">
+                                    @(forma.Parcelas == 0 ? "À vista" : $"Parcelas: {forma.Parcelas} X")
+                                </small>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <p style="color:gray;text-align:center;">Nenhuma forma de pagamento encontrada.</p>
+                }
+
+                <button class="btn-cancelar" @onclick="FecharModalPagamento">Cancelar</button>
+            </div>
+        </div>
+    }
+
+
+
+    @if (mostrarModalQuantidade)
+    {
+        <div class="modal" @onclick="CancelarQuantidade">
+            <div class="modal-content" @onclick:stopPropagation>
+                <h3>Quantidade</h3>
+                <p>Produto: <b>@produtoSelecionadoTemp?.Descricao</b></p>
+                <InputNumber @bind-Value="quantidadeTemp" class="w-full border rounded px-3 py-2 mb-2" />
+                <div class="flex" style="justify-content: flex-end; gap: 10px;">
+                    <button class="btn-cancelar" @onclick="CancelarQuantidade">Cancelar</button>
+                    <button class="btn-blue" @onclick="ConfirmarQuantidade">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string clienteBusca = "";
+    private string produtoBusca = "";
+    private ClienteModel? clienteSelecionado;
+    private List<ClienteModel> clientesFiltrados = new();
+    private List<ProdutoModel> produtosFiltrados = new();
+    private List<ProdutoSelecionado> produtosSelecionados = new();
+    private ProdutoModel? produtoSelecionadoTemp;
+    private List<FormaPagamentoModel> formasPagamento = new(); // agora vem do banco
+    private int quantidadeTemp = 1;
+    private bool mostrarModalCliente, mostrarModalProduto, mostrarModalQuantidade, mostrarModalPagamento;
+    private string? formaSelecionada;
+    private string usuario = "";
+    private string cnpj = "";
+    private int codVendedor = 0;
+    private bool _initialized = false;
+    private CancellationTokenSource? clienteBuscaCts;
+    private CancellationTokenSource? produtoBuscaCts;
+    private bool salvandoVenda;
+   
+    private bool PodeFinalizar => clienteSelecionado != null && produtosSelecionados.Count > 0;
+    private decimal TotalVenda => produtosSelecionados.Sum(p => p.PrecoUnitario * p.Quantidade);
+
+    private void Voltar() => Navigation.NavigateTo("/");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            usuario = await localStorage.GetItemAsync<string>("Usuario");
+            cnpj = await localStorage.GetItemAsync<string>("CNPJ");
+            codVendedor = await localStorage.GetItemAsync<int>("CodVendedor");
+
+            // ✅ busca formas de pagamento do banco
+            formasPagamento = await vendaService.BuscarFormasPagamentoAsync(cnpj);    
+            produtosFiltrados = await vendaService.BuscarProdutosAsync("%", cnpj);
+            clientesFiltrados = await vendaService.BuscarClientesAsync("%", cnpj);
+
+            _initialized = true;
+            StateHasChanged();
+        }       
+    }
+
+    private void AbrirModalCliente() => mostrarModalCliente = true;
+    private void FecharModalCliente() => mostrarModalCliente = false;
+
+    private void AbrirModalProduto() => mostrarModalProduto = true;
+    private void FecharModalProduto() => mostrarModalProduto = false;
+
+    private void AbrirModalPagamento() { if (PodeFinalizar) mostrarModalPagamento = true; }
+    private void FecharModalPagamento() => mostrarModalPagamento = false;
+
+    private async Task BuscarClientes(ChangeEventArgs e)
+    {
+        var termo = e.Value?.ToString() ?? "";
+        clienteBusca = termo;
+
+        clienteBuscaCts?.Cancel();
+        clienteBuscaCts?.Dispose();
+        clienteBuscaCts = new CancellationTokenSource();
+        var token = clienteBuscaCts.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+            clientesFiltrados = await vendaService.BuscarClientesAsync(termo, cnpj);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+    }
+
+    private void SelecionarCliente(ClienteModel cli)
+    {
+        clienteSelecionado = cli;
+        mostrarModalCliente = false;
+    }
+
+    private async Task BuscarProdutos(ChangeEventArgs e)
+    {
+        var termo = e.Value?.ToString() ?? "";
+        produtoBusca = termo;
+
+        produtoBuscaCts?.Cancel();
+        produtoBuscaCts?.Dispose();
+        produtoBuscaCts = new CancellationTokenSource();
+        var token = produtoBuscaCts.Token;
+
+        try
+        {
+            await Task.Delay(300, token);
+            produtosFiltrados = await vendaService.BuscarProdutosAsync(termo, cnpj);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+    }
+
+    private void AbrirModalQuantidade(ProdutoModel prod)
+    {
+        produtoSelecionadoTemp = prod;
+        quantidadeTemp = 1;
+        mostrarModalProduto = false;
+        mostrarModalQuantidade = true;
+    }
+
+    private void CancelarQuantidade()
+    {
+        produtoSelecionadoTemp = null;
+        quantidadeTemp = 1;
+        mostrarModalQuantidade = false;
+    }
+
+    private void ConfirmarQuantidade()
+    {
+        if (produtoSelecionadoTemp != null)
+        {
+            var existente = produtosSelecionados.FirstOrDefault(p => p.Codigo == produtoSelecionadoTemp.Codigo);
+            if (existente != null)
+                existente.Quantidade += quantidadeTemp;
+            else
+                produtosSelecionados.Add(new ProdutoSelecionado
+                    {
+                        Codigo = produtoSelecionadoTemp.Codigo,
+                        Descricao = produtoSelecionadoTemp.Descricao,
+                        Quantidade = quantidadeTemp,
+                        PrecoUnitario = produtoSelecionadoTemp.PrecoUnitario
+                    });
+        }
+        produtoSelecionadoTemp = null;
+        mostrarModalQuantidade = false;
+    }
+
+    private void RemoverProduto(ProdutoSelecionado prod) => produtosSelecionados.Remove(prod);
+
+    private async Task ConfirmarPagamento(FormaPagamentoModel formapagamento)
+    {
+        if (salvandoVenda)
+            return;
+
+        var formaSelecionada = formapagamento;
+        mostrarModalPagamento = false;
+        salvandoVenda = true;
+
+        var vendaSalva = await vendaService.InserirVendaAsync(clienteSelecionado!, cnpj, codVendedor, produtosSelecionados, usuario, formaSelecionada);
+
+        salvandoVenda = false;
+
+        if (!vendaSalva)
+            return;
+
+        produtosSelecionados.Clear();
+        clienteSelecionado = null;
+        Navigation.NavigateTo("/");
+    }
+
+    public void Dispose()
+    {
+        clienteBuscaCts?.Cancel();
+        clienteBuscaCts?.Dispose();
+        produtoBuscaCts?.Cancel();
+        produtoBuscaCts?.Dispose();
+    }
+
+    public class ProdutoSelecionado
+    {
+        public int Codigo { get; set; }
+        public string Descricao { get; set; } = "";
+        public int Quantidade { get; set; } = 1;
+        public decimal PrecoUnitario { get; set; }
+    }
+}

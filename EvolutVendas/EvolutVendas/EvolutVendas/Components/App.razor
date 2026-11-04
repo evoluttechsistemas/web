@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="EvolutVendas.styles.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+
+    <link rel="icon" type="image/x-icon" href="image/icone.ico" />
+
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+</head>
+
+<body>
+    <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+    <script src="_framework/blazor.web.js"></script>  
+
+    <!-- Bootstrap JS (necessário para modals) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/estatisticas.js"></script>
+
+    <script>
+        function maskCNPJ(element) {
+            element.addEventListener('input', function (e) {
+                let v = e.target.value.replace(/\D/g, '');
+                if (v.length > 14) v = v.slice(0, 14);
+                v = v.replace(/^(\d{2})(\d)/, "$1.$2");
+                v = v.replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3");
+                v = v.replace(/\.(\d{3})(\d)/, ".$1/$2");
+                v = v.replace(/(\d{4})(\d)/, "$1-$2");
+                e.target.value = v;
+            });
+        }
+    </script>
+</body>
+
+</html>
+
+

@@ -1,0 +1,462 @@
+@page "/financeiro/baixa"
+@implements IDisposable
+@inject ApiClient Api
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Baixa a Receber · HELP</PageTitle>
+
+<TopoPagina Titulo="Baixa a Receber" Subtitulo="@(cliente == null ? "Financeiro" : NomeCliente)" />
+
+@if (semPermissao)
+{
+    <div class="mb-vazio"><p>Você não tem permissão para o financeiro.</p></div>
+}
+else if (cliente == null)
+{
+    @* ───── Buscar cliente ───── *@
+    <div class="mb-busca">
+        <Icone Nome="buscar" />
+        <input type="search" placeholder="Código, nome ou apelido do cliente" @bind="busca" @bind:event="oninput" @bind:after="BuscarComAtrasoAsync" />
+        @if (!string.IsNullOrEmpty(busca))
+        {
+            <button class="mb-icone-botao" aria-label="Limpar busca" @onclick="LimparBusca"><Icone Nome="fechar" /></button>
+        }
+    </div>
+
+    <main class="mb-fin-lista">
+        @if (buscando)
+        {
+            <div class="mb-carregando"><span></span><span></span><span></span></div>
+        }
+        else if (!string.IsNullOrEmpty(erro))
+        {
+            <div class="mb-vazio"><p>@erro</p></div>
+        }
+        else if (busca.Trim().Length < 2)
+        {
+            <div class="mb-vazio"><p>Digite pelo menos 2 letras para buscar o cliente.</p></div>
+        }
+        else if (resultados.Count == 0)
+        {
+            <div class="mb-vazio"><p>Nenhum cliente com contas a receber encontrado.</p></div>
+        }
+        else
+        {
+            @foreach (var c in resultados)
+            {
+                <button class="mb-fin-cliente" @onclick="() => SelecionarClienteAsync(c)" @key="c.Codigo">
+                    <Avatar Nome="@Nome(c)" />
+                    <div>
+                        <strong>@Nome(c)</strong>
+                        <span>#@c.Codigo @(string.IsNullOrWhiteSpace(c.Apelido) ? "" : "· " + c.Nome)</span>
+                    </div>
+                    <Icone Nome="seta" Classe="mb-fin-seta" />
+                </button>
+            }
+        }
+    </main>
+}
+else
+{
+    @* ───── Títulos do cliente ───── *@
+    <div class="mb-fin-cab">
+        <Avatar Nome="@NomeCliente" />
+        <div class="mb-fin-cab-info">
+            <strong>@NomeCliente</strong>
+            <span>Cliente #@cliente.Codigo</span>
+        </div>
+        <button class="mb-botao-link" @onclick="TrocarCliente">Trocar</button>
+    </div>
+
+    <nav class="mb-filtros">
+        <button class="mb-chip @(situacao == "abertos" ? "ativo" : "")" @onclick="@(() => MudarSituacaoAsync("abertos"))">Em aberto</button>
+        <button class="mb-chip @(situacao == "pagos" ? "ativo" : "")" @onclick="@(() => MudarSituacaoAsync("pagos"))">Pagos</button>
+        <button class="mb-chip @(situacao == "todos" ? "ativo" : "")" @onclick="@(() => MudarSituacaoAsync("todos"))">Todos</button>
+    </nav>
+
+    @if (!string.IsNullOrEmpty(sucesso))
+    {
+        <div class="mb-ok" role="status">@sucesso</div>
+    }
+
+    <main class="mb-fin-lista @(Selecionados.Any() ? "com-barra" : "")">
+        @if (carregando)
+        {
+            <div class="mb-carregando"><span></span><span></span><span></span></div>
+        }
+        else if (!string.IsNullOrEmpty(erro))
+        {
+            <div class="mb-vazio">
+                <p>@erro</p>
+                <button class="mb-botao mb-botao-sec" @onclick="CarregarContasAsync">Tentar de novo</button>
+            </div>
+        }
+        else if (contas.Count == 0)
+        {
+            <div class="mb-vazio"><p>@(situacao == "pagos" ? "Nenhum título pago." : situacao == "abertos" ? "Nenhum título em aberto. 👏" : "Nenhum título.")</p></div>
+        }
+        else
+        {
+            var abertos = contas.Where(c => c.Aberto).ToList();
+            @if (abertos.Any())
+            {
+                <div class="mb-fin-resumo">
+                    <div><span>Em aberto</span><strong>@Formato.Moeda(abertos.Sum(c => c.Valor))</strong></div>
+                    <div><span>Com juros</span><strong class="mb-fin-juros">@Formato.Moeda(abertos.Sum(c => c.ValorComJuros))</strong></div>
+                    <button class="mb-botao-link" @onclick="AlternarTodos">@(abertos.All(c => selecionados.Contains(c.Codigo)) ? "Desmarcar todos" : "Selecionar todos")</button>
+                </div>
+            }
+
+            @foreach (var c in contas)
+            {
+                var marcado = selecionados.Contains(c.Codigo);
+                <div class="mb-fin-titulo @(c.Aberto ? "aberto" : "pago") @(marcado ? "marcado" : "") @(c.DiasAtraso > 0 && c.Aberto ? "atrasado" : "")"
+                     @onclick="() => Alternar(c)" @key="c.Codigo">
+                    @if (c.Aberto)
+                    {
+                        <span class="mb-check @(marcado ? "on" : "")" aria-hidden="true">@if (marcado) { <Icone Nome="check" /> }</span>
+                    }
+                    <div class="mb-fin-titulo-corpo">
+                        <div class="mb-fin-linha">
+                            <strong>Venc. @Formato.Data(c.DataVencimento)</strong>
+                            <strong class="mb-fin-valor">@Formato.Moeda(c.Valor)</strong>
+                        </div>
+                        <div class="mb-fin-linha mb-fin-sub">
+                            <span>
+                                #@c.Codigo
+                                @if (!string.IsNullOrWhiteSpace(c.Parcela)) { <text> · Parc. @(c.Parcela + (string.IsNullOrWhiteSpace(c.TotalParcela) ? "" : "/" + c.TotalParcela))</text> }
+                                @if (!string.IsNullOrWhiteSpace(c.TipoConta)) { <text> · @c.TipoConta</text> }
+                            </span>
+                            @if (c.Aberto && c.ValorComJuros > c.Valor)
+                            {
+                                <span class="mb-fin-juros">c/ juros @Formato.Moeda(c.ValorComJuros)</span>
+                            }
+                        </div>
+                        @if (c.Aberto)
+                        {
+                            @if (c.DiasAtraso > 0)
+                            {
+                                <span class="mb-tag mb-tag-atraso">@c.DiasAtraso dia(s) em atraso</span>
+                            }
+                            else
+                            {
+                                <span class="mb-tag mb-tag-ok">Em dia</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="mb-tag mb-tag-pago">Pago em @Formato.Data(c.DataPagamento) · @Formato.Moeda(c.ValorPago ?? 0)</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(c.Observacao))
+                        {
+                            <div class="mb-fin-obs">@c.Observacao</div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </main>
+
+    @if (Selecionados.Any())
+    {
+        <div class="mb-fin-barra">
+            <div>
+                <strong>@Selecionados.Count título(s)</strong>
+                <span>@Formato.Moeda(Selecionados.Sum(c => c.Valor)) · c/ juros @Formato.Moeda(Selecionados.Sum(c => c.ValorComJuros))</span>
+            </div>
+            <button class="mb-botao" @onclick="AbrirFormAsync">Dar baixa</button>
+        </div>
+    }
+}
+
+@* ───── Formulário da baixa ───── *@
+@if (mostrarForm)
+{
+    <div class="mb-folha-fundo" @onclick="FecharForm">
+        <div class="mb-folha mb-fin-form" @onclick:stopPropagation="true">
+            <div class="mb-folha-topo">
+                <button class="mb-icone-botao" aria-label="Cancelar" @onclick="FecharForm"><Icone Nome="fechar" /></button>
+                <strong>Baixa de @Selecionados.Count título(s)</strong>
+            </div>
+
+            <div class="mb-fin-totais">
+                <div><span>Títulos</span><strong>@Formato.Moeda(ValorTitulos)</strong></div>
+                <div><span>Acréscimo</span><strong>@Formato.Moeda(Acrescimo)</strong></div>
+                <div class="total"><span>Total a receber</span><strong>@Formato.Moeda(ValorTitulos + Acrescimo)</strong></div>
+            </div>
+
+            <label class="mb-rotulo">Forma de pagamento</label>
+            <div class="mb-fin-formas">
+                @foreach (var f in Formas)
+                {
+                    <button class="mb-chip @(forma == f ? "ativo" : "")" @onclick="() => forma = f">@f</button>
+                }
+            </div>
+
+            @if (forma.StartsWith("Cheque"))
+            {
+                <label class="mb-rotulo" for="cheque">Número do cheque</label>
+                <input id="cheque" class="mb-campo" inputmode="numeric" placeholder="Nº do cheque" @bind="cheque" />
+            }
+
+            <label class="mb-rotulo" for="acrescimo">Acréscimo / juros (R$)</label>
+            <input id="acrescimo" class="mb-campo" inputmode="decimal" placeholder="0,00" @bind="acrescimoTexto" @bind:event="oninput" />
+
+            <div class="mb-fin-datas">
+                <div>
+                    <label class="mb-rotulo" for="dtpag">Data do pagamento</label>
+                    <input id="dtpag" class="mb-campo" type="date" @bind="dataPagamento" />
+                </div>
+                <div>
+                    <label class="mb-rotulo" for="dtcomp">Data de compensação</label>
+                    <input id="dtcomp" class="mb-campo" type="date" @bind="dataCompensacao" />
+                </div>
+            </div>
+
+            <label class="mb-rotulo" for="conta">Conta bancária</label>
+            <select id="conta" class="mb-campo" @bind="contaBancaria">
+                <option value="">— Sem conta bancária —</option>
+                @foreach (var cb in contasBancarias)
+                {
+                    <option value="@cb.Codigo">@cb.Descricao</option>
+                }
+            </select>
+
+            @if (!string.IsNullOrEmpty(erroForm))
+            {
+                <div class="mb-erro" role="alert">@erroForm</div>
+            }
+
+            <button class="mb-botao mb-botao-largo" disabled="@executando" @onclick="ConfirmarAsync">
+                @(executando ? "Dando baixa..." : $"Confirmar baixa · {Formato.Moeda(ValorTitulos + Acrescimo)}")
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly string[] Formas = { "Dinheiro", "Cheque à Vista", "Cheque a Prazo", "Cartão", "PIX", "Ticket" };
+
+    private string busca = "";
+    private List<FinClienteDto> resultados = new();
+    private bool buscando;
+    private CancellationTokenSource? _ctsBusca;
+
+    private FinClienteDto? cliente;
+    private string situacao = "abertos";
+    private List<FinContaDto> contas = new();
+    private HashSet<int> selecionados = new();
+    private bool carregando;
+    private string erro = "";
+    private string sucesso = "";
+    private bool semPermissao;
+
+    // formulário
+    private bool mostrarForm;
+    private string forma = "Dinheiro";
+    private string cheque = "";
+    private string acrescimoTexto = "0,00";
+    private DateTime dataPagamento = DateTime.Today;
+    private DateTime dataCompensacao = DateTime.Today;
+    private int? contaBancaria;
+    private List<FinContaBancariaDto> contasBancarias = new();
+    private bool executando;
+    private string erroForm = "";
+
+    private string NomeCliente => cliente == null ? "" : Nome(cliente);
+    private static string Nome(FinClienteDto c) => string.IsNullOrWhiteSpace(c.Apelido) ? c.Nome : c.Apelido;
+
+    private List<FinContaDto> Selecionados => contas.Where(c => c.Aberto && selecionados.Contains(c.Codigo)).ToList();
+    private decimal ValorTitulos => Selecionados.Sum(c => c.Valor);
+
+    private decimal Acrescimo
+    {
+        get
+        {
+            var t = (acrescimoTexto ?? "").Trim().Replace("R$", "").Replace(" ", "");
+            if (t.Contains(',')) t = t.Replace(".", "").Replace(",", ".");
+            return decimal.TryParse(t, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var v) && v > 0
+                ? Math.Round(v, 2) : 0m;
+        }
+    }
+
+    // Vindo da Cobrança: ?cliente=123&nome=Fulano já abre o cliente
+    [SupplyParameterFromQuery(Name = "cliente")] public int? ClienteQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "nome")] public string? NomeQuery { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (ClienteQuery is > 0)
+            await SelecionarClienteAsync(new FinClienteDto { Codigo = ClienteQuery.Value, Nome = NomeQuery ?? $"Cliente {ClienteQuery}" });
+    }
+
+    // ───── Busca ─────
+
+    private async Task BuscarComAtrasoAsync()
+    {
+        _ctsBusca?.Cancel();
+        _ctsBusca = new CancellationTokenSource();
+        var ct = _ctsBusca.Token;
+        erro = "";
+
+        if (busca.Trim().Length < 2) { resultados = new(); buscando = false; return; }
+
+        buscando = true;
+        try
+        {
+            await Task.Delay(350, ct); // espera parar de digitar
+            var r = await Api.FinBuscarClientesAsync(busca.Trim());
+            if (ct.IsCancellationRequested) return;
+            resultados = r;
+        }
+        catch (TaskCanceledException) { return; }
+        catch (ApiException ex) { TratarErro(ex); }
+        finally
+        {
+            if (!ct.IsCancellationRequested) buscando = false;
+        }
+    }
+
+    private void LimparBusca()
+    {
+        busca = "";
+        resultados = new();
+        erro = "";
+    }
+
+    private async Task SelecionarClienteAsync(FinClienteDto c)
+    {
+        cliente = c;
+        situacao = "abertos";
+        sucesso = "";
+        await CarregarContasAsync();
+    }
+
+    private void TrocarCliente()
+    {
+        cliente = null;
+        contas = new();
+        selecionados.Clear();
+        sucesso = "";
+        erro = "";
+        Nav.NavigateTo("financeiro/baixa", replace: true);
+    }
+
+    // ───── Títulos ─────
+
+    private async Task MudarSituacaoAsync(string s)
+    {
+        situacao = s;
+        await CarregarContasAsync();
+    }
+
+    private async Task CarregarContasAsync()
+    {
+        if (cliente == null) return;
+        carregando = true;
+        erro = "";
+        try
+        {
+            contas = await Api.FinContasAsync(cliente.Codigo, situacao);
+            selecionados.IntersectWith(contas.Where(c => c.Aberto).Select(c => c.Codigo));
+        }
+        catch (ApiException ex) { TratarErro(ex); }
+        finally { carregando = false; }
+    }
+
+    private void Alternar(FinContaDto c)
+    {
+        if (!c.Aberto) return;
+        if (!selecionados.Remove(c.Codigo)) selecionados.Add(c.Codigo);
+        sucesso = "";
+    }
+
+    private void AlternarTodos()
+    {
+        var abertos = contas.Where(c => c.Aberto).Select(c => c.Codigo).ToList();
+        if (abertos.All(selecionados.Contains)) selecionados.ExceptWith(abertos);
+        else selecionados.UnionWith(abertos);
+    }
+
+    // ───── Formulário ─────
+
+    private async Task AbrirFormAsync()
+    {
+        erroForm = "";
+        forma = "Dinheiro";
+        cheque = "";
+        dataPagamento = DateTime.Today;
+        dataCompensacao = DateTime.Today;
+        contaBancaria = null;
+
+        // Igual ao HELP: o acréscimo já vem com os juros dos títulos selecionados
+        var juros = Math.Round(Selecionados.Sum(c => c.ValorComJuros - c.Valor), 2);
+        acrescimoTexto = juros.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture).Replace(".", ",");
+
+        mostrarForm = true;
+
+        if (contasBancarias.Count == 0)
+        {
+            try { contasBancarias = await Api.FinContasBancariasAsync(); }
+            catch (ApiException ex) { erroForm = ex.Message; }
+        }
+    }
+
+    private void FecharForm()
+    {
+        if (executando) return;
+        mostrarForm = false;
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        if (cliente == null || !Selecionados.Any()) return;
+        if (forma.StartsWith("Cheque") && string.IsNullOrWhiteSpace(cheque))
+        {
+            erroForm = "Informe o número do cheque.";
+            return;
+        }
+
+        executando = true;
+        erroForm = "";
+        try
+        {
+            var qtd = Selecionados.Count;
+            var total = ValorTitulos + Acrescimo;
+            var r = await Api.FinBaixaAsync(new FinBaixaRequest
+            {
+                CodCliente = cliente.Codigo,
+                NomeCliente = cliente.Nome,
+                Codigos = Selecionados.Select(c => c.Codigo).ToList(),
+                FormaPagamento = forma,
+                Acrescimo = Acrescimo,
+                DataPagamento = dataPagamento,
+                DataCompensacao = dataCompensacao,
+                CodContaBancaria = contaBancaria,
+                NumeroCheque = cheque
+            });
+
+            if (!r.Sucesso)
+            {
+                erroForm = string.IsNullOrWhiteSpace(r.Mensagem) ? "Não foi possível dar a baixa." : r.Mensagem;
+                return;
+            }
+
+            mostrarForm = false;
+            selecionados.Clear();
+            sucesso = $"✅ Baixa de {qtd} título(s) realizada · {Formato.Moeda(total)}";
+            await CarregarContasAsync();
+        }
+        catch (ApiException ex) { erroForm = ex.Message; }
+        finally { executando = false; }
+    }
+
+    private void TratarErro(ApiException ex)
+    {
+        if (ex.Message.Contains("permissão")) semPermissao = true;
+        erro = ex.Message;
+    }
+
+    public void Dispose() => _ctsBusca?.Cancel();
+}

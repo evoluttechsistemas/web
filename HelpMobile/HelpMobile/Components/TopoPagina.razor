@@ -1,0 +1,30 @@
+@* Cabeçalho das telas: botão do menu (ou voltar), título e ações à direita *@
+@inject MenuState Menu
+@inject NavigationManager Nav
+
+<header class="mb-topo">
+    @if (string.IsNullOrEmpty(Voltar))
+    {
+        <button class="mb-icone-botao mb-topo-menu" aria-label="Abrir menu" @onclick="Menu.Abrir"><Icone Nome="menu" /></button>
+    }
+    else
+    {
+        <button class="mb-icone-botao mb-topo-menu" aria-label="Voltar" @onclick="() => Nav.NavigateTo(Voltar!)"><Icone Nome="voltar" /></button>
+    }
+    <div class="mb-topo-titulo">
+        <h1>@Titulo</h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitulo))
+        {
+            <span>@Subtitulo</span>
+        }
+    </div>
+    @ChildContent
+</header>
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public string? Subtitulo { get; set; }
+    /// <summary>Endereço para voltar. Vazio = mostra o botão do menu.</summary>
+    [Parameter] public string? Voltar { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

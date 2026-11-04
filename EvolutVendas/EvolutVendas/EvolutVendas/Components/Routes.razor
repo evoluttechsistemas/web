@@ -1,0 +1,31 @@
+﻿@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager Navigation
+
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <p>Página não encontrada.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var uri = Navigation.Uri;
+
+            // 🔹 Se a URL for apenas "/", manda para /login
+            if (uri.EndsWith("/"))
+            {
+                Navigation.NavigateTo("/login");
+            }
+        }
+    }
+}

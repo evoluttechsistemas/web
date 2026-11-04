@@ -1,0 +1,29 @@
+﻿<input @ref="inputRef"
+       value="@Value"
+       @oninput="OnInput"
+       class="@Class"
+       placeholder="00.000.000/0000-00" />
+
+@code {
+    [Parameter] public string Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Class { get; set; }
+
+    private ElementReference inputRef;
+
+    [Inject] private IJSRuntime JS { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("maskCNPJ", inputRef);
+        }
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        Value = e.Value?.ToString();
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

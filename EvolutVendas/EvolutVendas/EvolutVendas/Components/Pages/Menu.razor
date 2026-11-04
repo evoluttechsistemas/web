@@ -1,0 +1,195 @@
+﻿@page "/menu"
+@inject NavigationManager NavManager
+
+<div class="menu-page">
+
+    <!-- 🔹 Top Bar estilo aplicativo -->
+    <div class="top-bar">
+        <h3>📱 Menu Principal</h3>
+    </div>
+
+    <!-- 🔹 Conteúdo principal -->
+    <div class="menu-grid">
+
+        <div class="menu-card" @onclick="@(() => NavegarPara("/"))">
+            <div class="icone">🛒</div>
+            <div class="texto">Nova Venda</div>
+        </div>
+
+        <div class="menu-card" @onclick="@(() => NavegarPara("/vendas"))">
+            <div class="icone">📑</div>
+            <div class="texto">Vendas</div>
+        </div>
+
+        <div class="menu-card" @onclick="@(() => NavegarPara("/estatisticas"))">
+            <div class="icone">📊</div>
+            <div class="texto">Estatísticas</div>
+        </div>
+
+        <div class="menu-card" @onclick="@(() => NavegarPara("/produtos"))">
+            <div class="icone">📦</div>
+            <div class="texto">Produtos</div>
+        </div>
+
+        <div class="menu-card" @onclick="@(() => NavegarPara("/clientes"))">
+            <div class="icone">👥</div>
+            <div class="texto">Clientes</div>
+        </div>
+
+    </div>
+
+    <!-- 🔹 Bottom Bar estilo aplicativo -->
+    <div class="bottom-bar">
+        <a href="/menu" class="nav-item">
+            <i>🏠</i>
+            <span>Início</span>
+        </a>
+        <a href="/novavenda" class="nav-item">
+            <i>🛒</i>
+            <span>Vender</span>
+        </a>
+        <a href="/estatisticas" class="nav-item">
+            <i>📈</i>
+            <span>Estatísticas</span>
+        </a>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --primary-dark: #005a9e;
+        --text-dark: #1e293b;
+        --bg-app: #f0f4fa;
+        --radius: 16px;
+        --shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+        --transition: all 0.25s ease-in-out;
+    }
+
+    .menu-page {
+        background: var(--bg-app);
+        min-height: 100vh;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding-bottom: 70px; /* espaço pro bottom bar */
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--primary);
+        color: white;
+        text-align: center;
+        width: 100%;
+        padding: 14px 0;
+        font-size: 1.2rem;
+        font-weight: bold;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+    }
+
+    /* 🔹 Grade de cards */
+    .menu-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 16px;
+        width: 90%;
+        max-width: 600px;
+        margin-top: 30px;
+    }
+
+    .menu-card {
+        background: white;
+        border-radius: var(--radius);
+        padding: 28px 12px;
+        box-shadow: var(--shadow);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: var(--transition);
+        text-align: center;
+    }
+
+        .menu-card:hover {
+            transform: translateY(-3px);
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .menu-card:hover .icone,
+        .menu-card:hover .texto {
+            color: white;
+        }
+
+    .icone {
+        font-size: 2.3rem;
+        color: var(--primary);
+        margin-bottom: 10px;
+        transition: color 0.2s ease;
+    }
+
+    .texto {
+        font-weight: bold;
+        font-size: 1rem;
+        color: var(--text-dark);
+    }
+
+    /* 🔹 Bottom Navigation estilo app */
+    .bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px 0;
+        box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.1);
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        z-index: 50;
+    }
+
+    .nav-item {
+        text-align: center;
+        color: var(--primary-dark);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+        .nav-item i {
+            font-size: 1.4rem;
+            margin-bottom: 3px;
+        }
+
+        .nav-item:hover {
+            color: var(--primary);
+            transform: scale(1.08);
+        }
+
+    /* 🔹 Responsividade */
+    @@media (max-width: 480px) {
+        .icone { font-size: 2rem; }
+        .texto { font-size: 0.9rem; }
+    }
+</style>
+
+@code {
+    private void NavegarPara(string rota)
+    {
+        NavManager.NavigateTo(rota);
+    }
+}

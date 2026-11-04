@@ -1,0 +1,23 @@
+@* Tiques de entrega do WhatsApp: 🕓 enviando · ✓ enviado · ✓✓ entregue · ✓✓ azul lido · ⚠ erro *@
+@switch (Formato.Entrega(Status))
+{
+    case "enviando":
+        <span class="mb-entrega" title="Enviando"><Icone Nome="relogio" /></span>
+        break;
+    case "enviado":
+        <span class="mb-entrega" title="Enviado"><Icone Nome="check" /></span>
+        break;
+    case "entregue":
+        <span class="mb-entrega" title="Entregue"><Icone Nome="check2" /></span>
+        break;
+    case "lido":
+        <span class="mb-entrega lido" title="Lido"><Icone Nome="check2" /></span>
+        break;
+    case "erro":
+        <span class="mb-entrega erro" title="Erro ao enviar"><Icone Nome="erro" /></span>
+        break;
+}
+
+@code {
+    [Parameter] public string? Status { get; set; }
+}

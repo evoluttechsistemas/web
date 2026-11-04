@@ -1,0 +1,263 @@
+﻿@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using EvolutVendas.Models
+@using EvolutVendas.Services
+@inject NavigationManager Navigation
+@inject UsuarioService usuarioService
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+
+<div class="login-page">
+    <div class="login-card">
+        <h2 class="titulo">👋 Bem-vindo!</h2>
+        <p class="subtitulo">Acesse sua conta</p>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="erro">@errorMessage</div>
+        }
+
+        <EditForm Model="@loginModel" OnValidSubmit="HandleLogin">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="erro-resumo" />
+
+            <!-- CNPJ -->
+            <div class="campo">
+                <label>CNPJ</label>
+                <InputText id="cnpjInput"
+                           @bind-Value="loginModel.CNPJ"
+                           placeholder="00.000.000/0000-00"
+                           class="input"
+                           @oninput="MascaraCnpj" />
+            </div>
+
+            <!-- Usuário -->
+            <div class="campo">
+                <label>Usuário</label>
+                <InputText @bind-Value="loginModel.Usuario"
+                           placeholder="Digite seu usuário"
+                           class="input" />
+            </div>
+
+            <!-- Senha -->
+            <div class="campo senha-container">
+                <label>Senha</label>
+                <InputText @bind-Value="loginModel.Senha"
+                           Type="@(mostrarSenha ? "text" : "password")"
+                           placeholder="Digite sua senha"
+                           class="input" />
+                <span class="icone-senha" @onclick="AlternarSenha">
+                    <i class="@(mostrarSenha ? "fas fa-eye-slash" : "fas fa-eye")"></i>
+                </span>
+            </div>
+
+            <button type="submit" class="btn-login">Entrar</button>
+        </EditForm>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --accent: #00AEEF;
+        --light-bg: #f0f6ff;
+        --radius: 16px;
+        --shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+        --transition: all 0.25s ease;
+    }
+
+    .login-page {
+        background: linear-gradient(180deg, var(--primary) 0%, var(--accent) 100%);
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .login-card {
+        background: white;
+        border-radius: var(--radius);
+        padding: 24px 28px;
+        width: 100%;
+        max-width: 380px;
+        box-shadow: var(--shadow);
+        text-align: center;
+        animation: fadeIn 0.4s ease;
+    }
+
+    @@keyframes fadeIn {
+        from
+
+    {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    }
+
+    .titulo {
+        color: var(--primary);
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+    .subtitulo {
+        color: #666;
+        font-size: 0.95rem;
+        margin-bottom: 20px;
+    }
+
+    .campo {
+        text-align: left;
+        margin-bottom: 16px;
+        position: relative;
+    }
+
+    label {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: 6px;
+        display: block;
+    }
+
+    .input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: var(--radius);
+        font-size: 1rem;
+        outline: none;
+        transition: var(--transition);
+    }
+
+        .input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0, 120, 215, 0.2);
+        }
+
+    .senha-container {
+        position: relative;
+    }
+
+    .icone-senha {
+        position: absolute;
+        top: 36px;
+        right: 12px;
+        color: #888;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+        .icone-senha:hover {
+            color: var(--primary);
+        }
+
+    .btn-login {
+        width: 100%;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        color: white;
+        font-size: 1rem;
+        font-weight: 600;
+        padding: 12px;
+        border: none;
+        border-radius: var(--radius);
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 18px rgba(0, 120, 215, 0.3);
+        }
+
+    .erro {
+        background: #ffe6e6;
+        color: #c00;
+        padding: 10px;
+        border-radius: var(--radius);
+        margin-bottom: 12px;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    @@media (max-width: 480px) {
+        .login-card
+
+    {
+        padding: 20px;
+        border-radius: 14px;
+    }
+
+    .titulo {
+        font-size: 1.4rem;
+    }
+
+    .input {
+        font-size: 16px; /* evita zoom no iOS */
+    }
+
+    .btn-login {
+        font-size: 1rem;
+    }
+
+    }
+</style>
+
+@code {
+    private UsuarioLogin loginModel = new();
+    private string errorMessage = "";
+    private bool mostrarSenha = false;
+    private List<UsuarioLogin> usuarios = new();
+
+    private async Task HandleLogin()
+    {
+        errorMessage = "";
+
+        usuarios = await usuarioService.BuscarUsuarios(loginModel.CNPJ, loginModel.Usuario, loginModel.Senha);
+
+        if (usuarios.Count > 0)
+        {
+            await localStorage.SetItemAsync("Usuario", usuarios[0].Usuario);
+            await localStorage.SetItemAsync("CNPJ", usuarios[0].CNPJ);
+            await localStorage.SetItemAsync("CodVendedor", usuarios[0].CodVendedor);
+
+            Navigation.NavigateTo("/menu");
+        }
+        else
+        {
+            errorMessage = "CNPJ, usuário ou senha inválidos!";
+        }
+    }
+
+    private void AlternarSenha() => mostrarSenha = !mostrarSenha;
+
+    // ✅ Máscara automática de CNPJ
+    private void MascaraCnpj(ChangeEventArgs e)
+    {
+        var input = e.Value?.ToString() ?? "";
+        var apenasNumeros = new string(input.Where(char.IsDigit).ToArray());
+
+        if (apenasNumeros.Length > 14)
+            apenasNumeros = apenasNumeros[..14];
+
+        string formatado = apenasNumeros.Length switch
+        {
+            <= 2 => apenasNumeros,
+            <= 5 => $"{apenasNumeros[..2]}.{apenasNumeros[2..]}",
+            <= 8 => $"{apenasNumeros[..2]}.{apenasNumeros[2..5]}.{apenasNumeros[5..]}",
+            <= 12 => $"{apenasNumeros[..2]}.{apenasNumeros[2..5]}.{apenasNumeros[5..8]}/{apenasNumeros[8..]}",
+            _ => $"{apenasNumeros[..2]}.{apenasNumeros[2..5]}.{apenasNumeros[5..8]}/{apenasNumeros[8..12]}-{apenasNumeros[12..]}"
+        };
+
+        loginModel.CNPJ = formatado;
+    }
+}

@@ -1,0 +1,392 @@
+﻿@page "/"
+@using System.Globalization
+@using EvolutVendas.Models
+@using EvolutVendas.Services
+@inject NavigationManager NavManager
+@inject VendaService vendaService
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+
+<div class="page-container">
+
+    <!-- 🔹 Top Bar -->
+    <div class="top-bar">
+        <button class="btn-voltar" @onclick="Voltar">⬅️</button>
+        <h3>🧾 Vendas do Dia</h3>
+        <button class="btn-atualizar" @onclick="AtualizarVendas">🔄</button>
+    </div>
+
+    <!-- 🔹 Cabeçalho -->
+    <div class="header">
+        <h1>Minhas Vendas</h1>
+        <button class="nova-venda-btn" @onclick="NovaVenda">
+            <span>➕</span> Nova Venda
+        </button>
+    </div>
+
+    <!-- 🔹 Lista de Vendas -->
+    @if (vendas?.Any() != true)
+    {
+        <p class="sem-vendas">Nenhuma venda encontrada hoje.</p>
+    }
+    else
+    {
+        <div class="lista-vendas">
+            @foreach (var v in vendas)
+            {
+                <div class="card-venda" @onclick="() => ToggleVenda(v.Codigo)">
+                    <div class="card-header">
+                        <div class="left">
+                            <span class="codigo">🧾 <b>@v.Codigo</b></span>
+                            <span class="status @(v.Status == "I" ? "importada" : "nao-importada")">
+                                @(v.Status == "I" ? "Importada ✅" : "Pendente 🕐")
+                            </span>
+                        </div>
+                        <span class="data">@v.DataHoraMovimento</span>
+                    </div>
+
+                    <div class="card-body">
+                        👤 <b>@v.NomeCliente</b>
+                    </div>
+
+                    <div class="card-body valor">
+                        💰 @v.TotalVenda.ToString("C", new CultureInfo("pt-BR"))
+                    </div>
+
+                    @if (vendaSelecionada == v.Codigo)
+                    {
+                        <div class="produtos-lista">
+                            @if (produtosVenda?.Any() != true)
+                            {
+                                <p>Nenhum produto encontrado.</p>
+                            }
+                            else
+                            {
+                                @foreach (var p in produtosVenda)
+                                {
+                                    <div class="produto-item">
+                                        <div class="produto-nome">@p.NomeProduto</div>
+                                        <div class="produto-info">
+                                            <span>Qtd: <b>@p.Quantidade</b></span>
+                                            <span>Unit: <b>@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</b></span>
+                                            <span>Total: <b>@p.PrecoTotal.ToString("C", new CultureInfo("pt-BR"))</b></span>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+
+    <!-- 🔹 Bottom Navigation -->
+    <div class="bottom-bar">
+        <a href="/" class="nav-item active">
+            <i>🏠</i>
+            <span>Início</span>
+        </a>
+        <a href="/novavenda" class="nav-item">
+            <i>🛒</i>
+            <span>Nova</span>
+        </a>
+        <a href="/menu" class="nav-item">
+            <i>⚙️</i>
+            <span>Menu</span>
+        </a>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --primary-dark: #005a9e;
+        --bg: #f0f4fa;
+        --radius: 12px;
+        --shadow: 0 4px 10px rgba(0,0,0,0.08);
+        --transition: all 0.25s ease;
+    }
+
+    .page-container {
+        background: var(--bg);
+        min-height: 100vh;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        padding-bottom: 80px;
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--primary);
+        color: white;
+        padding: 12px 16px;
+        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+
+        .top-bar h3 {
+            flex: 1;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+
+    .btn-voltar,
+    .btn-atualizar {
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        font-weight: bold;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-voltar:hover,
+        .btn-atualizar:hover {
+            transform: scale(1.08);
+            background: #f0f0f0;
+        }
+
+    /* 🔹 Status */
+    .status {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 12px;
+        margin-left: 8px;
+    }
+
+        .status.importada {
+            background: rgba(16, 185, 129, 0.15);
+            color: #059669;
+        }
+
+        .status.nao-importada {
+            background: rgba(239, 68, 68, 0.15);
+            color: #dc2626;
+        }
+
+    /* 🔹 Header */
+    .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+    }
+
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin: 0;
+            color: #333;
+        }
+
+    .nova-venda-btn {
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: var(--radius);
+        padding: 10px 14px;
+        font-weight: 600;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+        .nova-venda-btn:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+    /* 🔹 Lista de vendas */
+    .lista-vendas {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 14px;
+    }
+
+    .card-venda {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 14px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+        .card-venda:hover {
+            transform: scale(1.01);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+        }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #333;
+        font-weight: 500;
+        margin-bottom: 6px;
+    }
+
+    .data {
+        font-size: 0.8rem;
+        color: #777;
+    }
+
+    .card-body {
+        font-size: 0.95rem;
+        color: #444;
+        margin-top: 5px;
+    }
+
+    .valor {
+        color: var(--primary-dark);
+        font-weight: bold;
+    }
+
+    /* 🔹 Lista de produtos */
+    .produtos-lista {
+        background: #eef6ff;
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-top: 8px;
+        font-size: 0.85rem;
+        box-shadow: inset 0 0 4px rgba(0,0,0,0.05);
+    }
+
+    .produto-item {
+        border-bottom: 1px solid #ddd;
+        padding: 6px 0;
+    }
+
+        .produto-item:last-child {
+            border: none;
+        }
+
+    .produto-nome {
+        font-weight: 600;
+        margin-bottom: 3px;
+        color: #333;
+    }
+
+    .produto-info {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: #555;
+    }
+
+    /* 🔹 Bottom bar */
+    .bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px 0;
+        box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.1);
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        z-index: 50;
+    }
+
+    .nav-item {
+        text-align: center;
+        color: var(--primary-dark);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+        .nav-item i {
+            font-size: 1.4rem;
+            margin-bottom: 3px;
+        }
+
+        .nav-item:hover {
+            color: var(--primary);
+            transform: scale(1.08);
+        }
+
+        .nav-item.active {
+            color: var(--primary);
+            font-weight: bold;
+        }
+</style>
+
+@code {
+    private List<VendaC> vendas = new();
+    private List<VendaDBusca> produtosVenda = new();
+    private int vendaSelecionada = 0;
+    private bool _initialized = false;
+    string usuario = "";
+    string cnpj = "";
+    int codVendedor = 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_initialized)
+        {
+            usuario = await localStorage.GetItemAsync<string>("Usuario");
+            cnpj = await localStorage.GetItemAsync<string>("CNPJ");
+            codVendedor = await localStorage.GetItemAsync<int>("CodVendedor");
+            await BuscarVendas();
+            _initialized = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task BuscarVendas()
+    {
+        vendas = await vendaService.BuscaVendasDia(cnpj, codVendedor);
+    }
+
+    private async Task AtualizarVendas()
+    {
+        vendaSelecionada = 0;
+        produtosVenda.Clear();
+        await BuscarVendas();
+        StateHasChanged();
+    }
+
+    private async Task ToggleVenda(int codVenda)
+    {
+        if (vendaSelecionada == codVenda)
+        {
+            vendaSelecionada = 0;
+            produtosVenda.Clear();
+        }
+        else
+        {
+            vendaSelecionada = codVenda;
+            produtosVenda = await vendaService.BuscaProdutosVendaD(codVenda, cnpj);
+        }
+    }
+
+    private void Voltar() => NavManager.NavigateTo("/menu");
+    private void NovaVenda() => NavManager.NavigateTo("/novavenda");
+}

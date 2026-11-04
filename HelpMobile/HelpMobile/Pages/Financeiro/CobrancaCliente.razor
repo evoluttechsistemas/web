@@ -1,0 +1,168 @@
+@page "/financeiro/cobranca/{Cod:int}"
+@inject ApiClient Api
+@inject IJSRuntime JS
+
+<PageTitle>Cobrança · HELP</PageTitle>
+
+<TopoPagina Titulo="@(detalhe?.Nome ?? "Cobrança")" Subtitulo="@($"Cliente #{Cod}")" Voltar="financeiro/cobranca" />
+
+<main class="mb-fin-lista">
+    @if (carregando)
+    {
+        <div class="mb-carregando"><span></span><span></span><span></span></div>
+    }
+    else if (!string.IsNullOrEmpty(erro))
+    {
+        <div class="mb-vazio">
+            <p>@erro</p>
+            <button class="mb-botao mb-botao-sec" @onclick="CarregarAsync">Tentar de novo</button>
+        </div>
+    }
+    else if (detalhe == null)
+    {
+        <div class="mb-vazio"><p>Este cliente não tem mais títulos vencidos.</p></div>
+    }
+    else
+    {
+        <div class="mb-fin-destaque">
+            <span>Total em atraso (com juros)</span>
+            <strong>@Formato.Moeda(detalhe.TotalComJuros)</strong>
+            <small>Original @Formato.Moeda(detalhe.Total) · @detalhe.Titulos.Count título(s)</small>
+        </div>
+
+        @if (string.IsNullOrWhiteSpace(detalhe.Celular))
+        {
+            <div class="mb-dica mb-dica-alerta">Cliente sem celular cadastrado: não dá para enviar pelo WhatsApp.</div>
+        }
+
+        <div class="mb-fin-acoes">
+            <a class="mb-botao mb-botao-whats @(Desabilitado(detalhe.UrlCobranca))" href="@Link(detalhe.UrlCobranca)" target="_blank" rel="noopener"
+               @onclick="@(() => RegistrarAsync("cobranca", detalhe.UrlCobranca))">
+                <Icone Nome="whatsapp" /> Cobrar no WhatsApp
+            </a>
+            <a class="mb-botao mb-botao-sec @(Desabilitado(detalhe.UrlLembrete))" href="@Link(detalhe.UrlLembrete)" target="_blank" rel="noopener"
+               @onclick="@(() => RegistrarAsync("lembrete", detalhe.UrlLembrete))">
+                <Icone Nome="whatsapp" /> Enviar lembrete
+            </a>
+            <button class="mb-botao mb-botao-sec" disabled="@gerandoPix" @onclick="GerarPixAsync">
+                <Icone Nome="pix" /> @(gerandoPix ? "Gerando PIX..." : "Gerar link PIX")
+            </button>
+            <a class="mb-botao mb-botao-sec" href="@($"financeiro/baixa?cliente={Cod}&nome={Uri.EscapeDataString(detalhe.Nome)}")">
+                <Icone Nome="dinheiro" /> Dar baixa
+            </a>
+        </div>
+
+        @if (!string.IsNullOrEmpty(erroPix))
+        {
+            <div class="mb-erro" role="alert">@erroPix</div>
+        }
+
+        @if (pix != null && pix.Sucesso)
+        {
+            <div class="mb-fin-pix">
+                <strong>Link PIX gerado (vale 24h)</strong>
+                <div class="mb-fin-pix-link">@pix.Link</div>
+                <div class="mb-fin-pix-acoes">
+                    <button class="mb-botao mb-botao-sec" @onclick="CopiarPixAsync"><Icone Nome="copiar" /> @(copiado ? "Copiado!" : "Copiar link")</button>
+                    <a class="mb-botao mb-botao-whats @(Desabilitado(pix.UrlWhatsApp))" href="@Link(pix.UrlWhatsApp)" target="_blank" rel="noopener"
+                       @onclick="@(() => RegistrarAsync("pix", pix.UrlWhatsApp))">
+                        <Icone Nome="whatsapp" /> Enviar com PIX
+                    </a>
+                </div>
+            </div>
+        }
+
+        <div class="mb-fin-secao">Títulos vencidos</div>
+
+        @foreach (var t in detalhe.Titulos)
+        {
+            <div class="mb-fin-titulo aberto atrasado" @key="t.Codigo">
+                <div class="mb-fin-titulo-corpo">
+                    <div class="mb-fin-linha">
+                        <strong>Venc. @Formato.Data(t.DataVencimento)</strong>
+                        <strong class="mb-fin-valor">@Formato.Moeda(t.ValorComJuros)</strong>
+                    </div>
+                    <div class="mb-fin-linha mb-fin-sub">
+                        <span>#@t.Codigo · emitido @Formato.Data(t.DataMovimento)</span>
+                        @if (t.ValorComJuros > t.Valor)
+                        {
+                            <span>original @Formato.Moeda(t.Valor)</span>
+                        }
+                    </div>
+                    <span class="mb-tag mb-tag-atraso">@t.DiasAtraso dia(s) em atraso</span>
+                    @if (t.EhBoleto)
+                    {
+                        <span class="mb-tag">Boleto</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <button class="mb-fin-mensagem-botao" @onclick="() => verMensagem = !verMensagem">
+            @(verMensagem ? "Esconder mensagem" : "Ver mensagem de cobrança")
+        </button>
+        @if (verMensagem)
+        {
+            <pre class="mb-fin-mensagem">@detalhe.MensagemCobranca</pre>
+        }
+    }
+</main>
+
+@code {
+    [Parameter] public int Cod { get; set; }
+
+    private FinCobrancaDetalheDto? detalhe;
+    private bool carregando = true;
+    private string erro = "";
+
+    private bool gerandoPix;
+    private FinPixDto? pix;
+    private string erroPix = "";
+    private bool copiado;
+    private bool verMensagem;
+
+    protected override Task OnParametersSetAsync() => CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        carregando = true;
+        erro = "";
+        pix = null;
+        erroPix = "";
+        try { detalhe = await Api.FinCobrancaDetalheAsync(Cod); }
+        catch (ApiException ex) { erro = ex.Message; }
+        finally { carregando = false; }
+    }
+
+    private static string Link(string url) => string.IsNullOrWhiteSpace(url) ? "javascript:void(0)" : url;
+    private static string Desabilitado(string url) => string.IsNullOrWhiteSpace(url) ? "desabilitado" : "";
+
+    /// <summary>O WhatsApp abre pelo próprio link; aqui só registra no Log Financeiro (igual ao HELP).</summary>
+    private async Task RegistrarAsync(string tipo, string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try { await Api.FinRegistrarWhatsAppAsync(Cod, tipo); } catch { }
+    }
+
+    private async Task GerarPixAsync()
+    {
+        gerandoPix = true;
+        erroPix = "";
+        pix = null;
+        copiado = false;
+        try
+        {
+            pix = await Api.FinGerarPixAsync(Cod);
+            if (!pix.Sucesso) erroPix = string.IsNullOrWhiteSpace(pix.Mensagem) ? "Não foi possível gerar o PIX." : pix.Mensagem;
+        }
+        catch (ApiException ex) { erroPix = ex.Message; }
+        finally { gerandoPix = false; }
+    }
+
+    private async Task CopiarPixAsync()
+    {
+        if (pix == null) return;
+        copiado = await JS.InvokeAsync<bool>("helpMobile.copiar", pix.Link);
+        if (!copiado) erroPix = "Não foi possível copiar. Segure o link para copiar.";
+    }
+}

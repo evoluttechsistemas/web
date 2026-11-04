@@ -1,0 +1,87 @@
+@page "/login"
+@inject ApiClient Api
+@inject AuthState Auth
+@inject NavigationManager Nav
+
+<PageTitle>HELP · Entrar</PageTitle>
+
+<div class="mb-login">
+    <div class="mb-login-topo">
+        <div class="mb-login-logo">
+            <Icone Nome="headset" />
+        </div>
+        <h1>HELP</h1>
+        <p>Atendimento EvolutTech</p>
+    </div>
+
+    <form class="mb-login-form" @onsubmit="EntrarAsync" @onsubmit:preventDefault>
+        <label for="usuario">Usuário</label>
+        <input id="usuario" @bind="usuario" autocomplete="username" autocapitalize="characters"
+               spellcheck="false" placeholder="Seu usuário do HELP" disabled="@entrando" />
+
+        <label for="senha">Senha</label>
+        <div class="mb-senha">
+            <input id="senha" type="@(mostrarSenha ? "text" : "password")" @bind="senha"
+                   autocomplete="current-password" placeholder="Sua senha" disabled="@entrando" />
+            <button type="button" class="mb-senha-ver" @onclick="() => mostrarSenha = !mostrarSenha"
+                    aria-label="@(mostrarSenha ? "Esconder senha" : "Mostrar senha")">
+                @(mostrarSenha ? "Ocultar" : "Ver")
+            </button>
+        </div>
+
+        @if (!string.IsNullOrEmpty(erro))
+        {
+            <div class="mb-erro" role="alert">@erro</div>
+        }
+
+        <button type="submit" class="mb-botao" disabled="@entrando">
+            @(entrando ? "Entrando..." : "Entrar")
+        </button>
+    </form>
+
+    <p class="mb-login-rodape">Você só precisa entrar uma vez neste aparelho.</p>
+</div>
+
+@code {
+    private string usuario = "";
+    private string senha = "";
+    private string erro = "";
+    private bool entrando;
+    private bool mostrarSenha;
+
+    protected override void OnInitialized()
+    {
+        if (Auth.Logado)
+            Nav.NavigateTo("", replace: true);
+    }
+
+    private async Task EntrarAsync()
+    {
+        erro = "";
+        if (string.IsNullOrWhiteSpace(usuario) || string.IsNullOrWhiteSpace(senha))
+        {
+            erro = "Informe usuário e senha.";
+            return;
+        }
+
+        entrando = true;
+        try
+        {
+            var r = await Api.LoginAsync(usuario.Trim(), senha);
+            await Auth.EntrarAsync(r.Token, r.Usuario, r.Empresa);
+            Nav.NavigateTo("", replace: true);
+        }
+        catch (ApiException ex)
+        {
+            erro = ex.Message;
+        }
+        catch (Exception)
+        {
+            erro = "Não foi possível entrar. Tente de novo.";
+        }
+        finally
+        {
+            entrando = false;
+        }
+    }
+}

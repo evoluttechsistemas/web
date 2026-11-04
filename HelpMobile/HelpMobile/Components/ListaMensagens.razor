@@ -1,0 +1,177 @@
+@* Balões da conversa. Fica separado da tela do ticket para não ser redesenhado a cada letra
+   digitada, a cada segundo da gravação de áudio etc.: só redesenha quando a "Versao" muda
+   (a tela do ticket calcula a versão a partir das mensagens, do status de entrega e da seleção). *@
+@inject ApiClient Api
+
+@if (TemMais)
+{
+    <div class="mb-anteriores">
+        @if (CarregandoAnteriores)
+        {
+            <span class="mb-girando"></span>
+        }
+        else
+        {
+            <span>Role para ver mensagens anteriores</span>
+        }
+    </div>
+}
+
+@{
+    DateTime? diaAnterior = null;
+    MobileMensagemDto? anterior = null;
+}
+
+@foreach (var m in Mensagens)
+{
+    if (diaAnterior != m.DataHora.Date)
+    {
+        diaAnterior = m.DataHora.Date;
+        anterior = null;
+        <div class="mb-dia"><span>@Formato.DiaConversa(m.DataHora)</span></div>
+    }
+
+    if (m.Sistema)
+    {
+        <div class="mb-sistema" id="m-@m.Codigo" @key="m.Codigo"><span>@m.Texto</span></div>
+        anterior = null;
+        continue;
+    }
+
+    var nossa = !m.DoCliente;
+    var mesmoAutor = anterior != null && anterior.DoCliente == m.DoCliente && anterior.Usuario == m.Usuario
+                     && anterior.Interna == m.Interna && (m.DataHora - anterior.DataHora).TotalMinutes < 5;
+    var mostrarAutor = nossa && !mesmoAutor && !m.Usuario.Equals(UsuarioAtual, StringComparison.OrdinalIgnoreCase);
+    var classe = m.Interna ? "interna" : (nossa ? "nossa" : "cliente");
+    var falhou = m.Codigo < 0 && m.Status == "error";
+    anterior = m;
+
+    <div class="mb-msg-linha @(nossa ? "dir" : "esq") @(mesmoAutor ? "seguida" : "")" id="m-@m.Codigo" @key="m.Codigo">
+        <div class="mb-balao @classe @(Selecionada == m.Codigo ? "selecionada" : "")" @onclick="() => OnSelecionar.InvokeAsync(m)">
+
+            @if (m.Interna)
+            {
+                <div class="mb-balao-etiqueta"><Icone Nome="cadeado" Classe="mb-ic-p" /> Nota interna</div>
+            }
+            else if (m.Automatica)
+            {
+                <div class="mb-balao-etiqueta">🤖 Mensagem automática</div>
+            }
+
+            @if (mostrarAutor && !m.Automatica)
+            {
+                <div class="mb-balao-autor" style="color:@Formato.Cor(m.Usuario)">@Formato.Primeiro(m.Usuario)</div>
+            }
+
+            @if (m.CodRespondida.HasValue && !string.IsNullOrWhiteSpace(m.TextoRespondida))
+            {
+                <button class="mb-citacao" @onclick:stopPropagation="true" @onclick="() => OnIrPara.InvokeAsync(m.CodRespondida!.Value)">
+                    <strong>@(string.IsNullOrWhiteSpace(m.UsuarioRespondida) ? "Mensagem" : Formato.Primeiro(m.UsuarioRespondida))</strong>
+                    <span>@m.TextoRespondida</span>
+                </button>
+            }
+
+            @if (m.Excluida)
+            {
+                <div class="mb-balao-texto mb-apagada">🚫 Mensagem apagada</div>
+            }
+            else
+            {
+                @if (!string.IsNullOrWhiteSpace(m.AudioUrl))
+                {
+                    <audio class="mb-audio" controls preload="none" src="@Api.Url(m.AudioUrl)" @onclick:stopPropagation="true"></audio>
+                    @if (!string.IsNullOrWhiteSpace(m.Transcricao))
+                    {
+                        <div class="mb-transcricao">“@m.Transcricao”</div>
+                    }
+                }
+
+                @if (!string.IsNullOrWhiteSpace(m.VideoUrl))
+                {
+                    @* preload="none": não baixa o vídeo do banco só por abrir a conversa *@
+                    <video class="mb-video" controls preload="none" playsinline src="@Api.Url(m.VideoUrl)" @onclick:stopPropagation="true"></video>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(m.ImagemUrl))
+                {
+                    @if (m.ArquivoEhImagem)
+                    {
+                        <img class="mb-imagem" src="@Api.Url(m.ImagemUrl)" alt="Imagem" loading="lazy" decoding="async"
+                             @onclick:stopPropagation="true" @onclick="() => OnAbrirImagem.InvokeAsync(Api.Url(m.ImagemUrl))" />
+                    }
+                    else
+                    {
+                        <a class="mb-arquivo" href="@Api.Url(m.ImagemUrl)" target="_blank" rel="noopener" @onclick:stopPropagation="true">
+                            <Icone Nome="arquivo" />
+                            <span>@(m.NomeArquivo ?? "Arquivo")</span>
+                        </a>
+                    }
+                }
+
+                @if (!string.IsNullOrWhiteSpace(m.Texto))
+                {
+                    <div class="mb-balao-texto">@m.Texto</div>
+                }
+            }
+
+            <div class="mb-balao-rodape">
+                @if (m.Alterada && !m.Excluida) { <span>editada</span> }
+                <span>@m.DataHora.ToString("HH:mm")</span>
+                @if (nossa && !m.Interna)
+                {
+                    <Entrega Status="@m.Status" />
+                }
+            </div>
+        </div>
+
+        @if (falhou)
+        {
+            <div class="mb-falha-envio">
+                <span>Não enviada</span>
+                <button @onclick="() => OnReenviar.InvokeAsync(m)">Tentar de novo</button>
+                <button @onclick="() => OnDescartar.InvokeAsync(m)">Descartar</button>
+            </div>
+        }
+        else if (Selecionada == m.Codigo && PodeResponder && !m.Excluida)
+        {
+            <button class="mb-acao-responder" @onclick="() => OnResponder.InvokeAsync(m)">
+                <Icone Nome="responder" /> Responder
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public List<MobileMensagemDto> Mensagens { get; set; } = new();
+
+    /// <summary>Muda quando algo visível na lista muda. Igual à anterior = não redesenha.</summary>
+    [Parameter] public int Versao { get; set; }
+
+    [Parameter] public string UsuarioAtual { get; set; } = "";
+    [Parameter] public int? Selecionada { get; set; }
+    [Parameter] public bool PodeResponder { get; set; }
+    [Parameter] public bool TemMais { get; set; }
+    [Parameter] public bool CarregandoAnteriores { get; set; }
+
+    [Parameter] public EventCallback<MobileMensagemDto> OnSelecionar { get; set; }
+    [Parameter] public EventCallback<MobileMensagemDto> OnResponder { get; set; }
+    [Parameter] public EventCallback<MobileMensagemDto> OnReenviar { get; set; }
+    [Parameter] public EventCallback<MobileMensagemDto> OnDescartar { get; set; }
+    [Parameter] public EventCallback<int> OnIrPara { get; set; }
+    [Parameter] public EventCallback<string?> OnAbrirImagem { get; set; }
+
+    private int? _versaoDesenhada;
+
+    protected override bool ShouldRender()
+    {
+        if (_versaoDesenhada == Versao) return false;
+        _versaoDesenhada = Versao;
+        return true;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // O primeiro desenho não passa pelo ShouldRender
+        if (firstRender) _versaoDesenhada = Versao;
+    }
+}

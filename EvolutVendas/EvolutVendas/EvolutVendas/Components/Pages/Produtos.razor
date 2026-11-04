@@ -1,0 +1,298 @@
+﻿@page "/produtos"
+@using System.Globalization
+@using EvolutVendas.Services
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject BuscaProdutosService produtoService
+@inject NavigationManager NavManager
+@implements IDisposable
+
+<div class="page-container">
+
+    <!-- 🔹 Top Bar -->
+    <div class="top-bar">
+        <button class="btn-voltar" @onclick="Voltar">⬅️</button>
+        <h3>📦 Produtos</h3>
+    </div>
+
+    <!-- 🔹 Campo de busca -->
+    <div class="search-bar">
+        <input type="text"
+               placeholder="🔍 Buscar produto..."
+               @oninput="OnFiltroChanged"
+               class="search-input" />
+    </div>
+
+    <!-- 🔹 Lista de produtos -->
+    @if (produtos is null)
+    {
+            <p class="loading">Carregando produtos...</p>
+    }
+    else if (!produtos.Any())
+    {
+            <p class="no-results">Nenhum produto encontrado.</p>
+    }
+    else
+    {
+            <div class="lista-produtos">
+            @foreach (var p in produtos)
+            {
+                        <div class="card-produto">
+                            <div class="info-produto">
+                                <div class="nome">@p.Descricao</div>
+                                <div class="detalhes">
+                                    🧾 <b>Cód:</b> @p.Codigo<br />
+                                    📊 <b>Estoque:</b> @p.EstoqueAtual.ToString("N2")<br />
+                                    ⚠️ <b>Mínimo:</b> @p.EstoqueMinimo.ToString("N2")<br />
+                                    💲 <b>Custo:</b> @p.PrecoCusto.ToString("C", new CultureInfo("pt-BR"))
+                                </div>
+                            </div>
+
+                            <div class="valor-produto">
+                                <div class="preco">@p.PrecoVenda.ToString("C", new CultureInfo("pt-BR"))</div>
+                            </div>
+                        </div>
+            }
+            </div>
+    }
+
+    <!-- 🔹 Bottom Navigation -->
+    <div class="bottom-bar">
+        <a href="/menu" class="nav-item">
+            <i>🏠</i><span>Menu</span>
+        </a>
+        <a href="/vendas" class="nav-item">
+            <i>📑</i><span>Vendas</span>
+        </a>
+        <a href="/novavenda" class="nav-item">
+            <i>🛒</i><span>Nova</span>
+        </a>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --primary-dark: #005a9e;
+        --success: #008A00;
+        --bg: #f0f4fa;
+        --radius: 12px;
+        --shadow: 0 4px 10px rgba(0,0,0,0.08);
+        --transition: all 0.25s ease;
+    }
+
+    .page-container {
+        background: var(--bg);
+        min-height: 100vh;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        padding-bottom: 80px;
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--primary);
+        color: white;
+        padding: 12px;
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .top-bar h3 {
+        flex: 1;
+        text-align: center;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .btn-voltar {
+        position: absolute;
+        left: 12px;
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        font-weight: bold;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-voltar:hover {
+            transform: scale(1.08);
+            background: #f0f0f0;
+        }
+
+    /* 🔹 Campo de busca */
+    .search-bar {
+        display: flex;
+        justify-content: center;
+        margin: 16px auto;
+        width: 90%;
+        max-width: 500px;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 12px 16px;
+        border-radius: 25px;
+        border: 1px solid #ccc;
+        font-size: 0.95rem;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(0,120,215,0.2);
+        }
+
+    /* 🔹 Lista de produtos */
+    .lista-produtos {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 0 12px;
+    }
+
+    .card-produto {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 12px 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: var(--transition);
+    }
+
+        .card-produto:hover {
+            transform: scale(1.01);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.12);
+        }
+
+    .info-produto {
+        flex: 1;
+    }
+
+    .nome {
+        font-weight: 600;
+        font-size: 1rem;
+        color: #1e293b;
+        margin-bottom: 6px;
+    }
+
+    .detalhes {
+        font-size: 0.85rem;
+        color: #555;
+        line-height: 1.3;
+    }
+
+    .valor-produto {
+        text-align: right;
+        min-width: 90px;
+    }
+
+    .preco {
+        font-weight: bold;
+        font-size: 1rem;
+        color: var(--success);
+    }
+
+    .no-results, .loading {
+        text-align: center;
+        color: #777;
+        margin-top: 40px;
+    }
+
+    /* 🔹 Bottom Navigation */
+    .bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px 0;
+        box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.1);
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        z-index: 50;
+    }
+
+    .nav-item {
+        text-align: center;
+        color: var(--primary-dark);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+        .nav-item i {
+            font-size: 1.4rem;
+            margin-bottom: 3px;
+        }
+
+        .nav-item:hover {
+            color: var(--primary);
+            transform: scale(1.08);
+        }
+</style>
+
+@code {
+    private List<Models.ProdutoBuscaModel> produtos = new();
+    private string filtro = "";
+    private string cnpj = "";
+    private System.Timers.Timer? debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cnpj = await localStorage.GetItemAsync<string>("CNPJ");
+        await BuscarProdutos();
+    }
+
+    private async Task BuscarProdutos()
+    {
+        produtos = await produtoService.BuscarProdutosAsync(cnpj, filtro);
+        StateHasChanged();
+    }
+
+    private void OnFiltroChanged(ChangeEventArgs e)
+    {
+        filtro = e.Value?.ToString() ?? "";
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+        debounceTimer = new System.Timers.Timer(400);
+        debounceTimer.AutoReset = false;
+        debounceTimer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(BuscarProdutos);
+        };
+        debounceTimer.Start();
+    }
+
+    private void Voltar() => NavManager.NavigateTo("/menu");
+
+    public void Dispose()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+    }
+}

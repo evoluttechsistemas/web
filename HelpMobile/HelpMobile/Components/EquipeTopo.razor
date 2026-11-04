@@ -1,0 +1,131 @@
+﻿@* Faixa da equipe no topo (igual à do HELP, sem o chat): quem está online, o status de cada um
+   (cor do anel), quantos atendimentos cada um tem e quantos estão disponíveis.
+   Tocar na faixa abre a lista completa. Atualiza a cada 20s. *@
+@implements IDisposable
+@inject ApiClient Api
+
+@if (_carregou)
+{
+    <div class="mb-eq" role="button" aria-label="Ver status da equipe" @onclick="() => _painel = true">
+        <div class="mb-eq-avatares">
+            @foreach (var m in Online)
+            {
+                <span class="mb-eq-membro" title="@Dica(m)">
+                    <span class="mb-eq-av" style="background:@Formato.Cor(m.Usuario); box-shadow:0 0 0 2px var(--mb-topo), 0 0 0 4px @m.Cor;">
+                        @Formato.Iniciais(m.Usuario)
+                    </span>
+                    <span class="mb-eq-qtd @(m.Atendimentos == 0 ? "zero" : "")">@m.Atendimentos</span>
+                </span>
+            }
+            @if (!Online.Any())
+            {
+                <span class="mb-eq-vazio">Ninguém online</span>
+            }
+        </div>
+        <span class="mb-eq-disp @ClasseDisponiveis">@TextoDisponiveis</span>
+    </div>
+}
+
+@if (_painel)
+{
+    <div class="mb-folha-fundo" @onclick="() => _painel = false">
+        <div class="mb-folha mb-eq-painel" @onclick:stopPropagation="true">
+            <div class="mb-eq-painel-topo">
+                <strong>Equipe</strong>
+                <span>@Online.Count() online · @TextoDisponiveis</span>
+                <button class="mb-icone-botao" aria-label="Fechar" @onclick="() => _painel = false"><Icone Nome="fechar" /></button>
+            </div>
+
+            <div class="mb-eq-lista">
+                @foreach (var m in Online)
+                {
+                    <div class="mb-eq-linha">
+                        <span class="mb-eq-av mb-eq-av-p" style="background:@Formato.Cor(m.Usuario); box-shadow:0 0 0 2px var(--mb-superficie), 0 0 0 4px @m.Cor;">
+                            @Formato.Iniciais(m.Usuario)
+                        </span>
+                        <span class="mb-eq-nome">@m.Usuario</span>
+                        <span class="mb-eq-qtd @(m.Atendimentos == 0 ? "zero" : "")" title="Atendimentos em andamento">@m.Atendimentos</span>
+                        <span class="mb-eq-st" style="color:@m.Cor; background:@(m.Cor)1a;">@m.Status</span>
+                        @if (!string.IsNullOrEmpty(m.Tempo))
+                        {
+                            <span class="mb-eq-tempo">@m.Tempo</span>
+                        }
+                    </div>
+                }
+
+                @if (Offline.Any())
+                {
+                    <div class="mb-eq-off-t">Offline</div>
+                    <div class="mb-eq-off">
+                        @foreach (var m in Offline)
+                        {
+                            <span class="mb-eq-off-nome">@m.Usuario</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MobileEquipeMembroDto> _membros = new();
+    private bool _carregou;
+    private bool _painel;
+    private CancellationTokenSource? _cts;
+
+    // Disponíveis primeiro, depois os ocupados; dentro de cada grupo, por nome (igual ao HELP)
+    private IEnumerable<MobileEquipeMembroDto> Online => _membros
+        .Where(m => m.Online)
+        .OrderByDescending(m => m.Disponivel)
+        .ThenBy(m => m.Usuario);
+
+    private IEnumerable<MobileEquipeMembroDto> Offline => _membros.Where(m => !m.Online).OrderBy(m => m.Usuario);
+
+    private int QtdDisponiveis => _membros.Count(m => m.Disponivel);
+    private string TextoDisponiveis => QtdDisponiveis == 1 ? "1 disponível" : $"{QtdDisponiveis} disponíveis";
+    private string ClasseDisponiveis => QtdDisponiveis switch { 0 => "critico", 1 => "alerta", _ => "ok" };
+
+    private static string Dica(MobileEquipeMembroDto m) =>
+        $"{m.Usuario} — {m.Status}{(string.IsNullOrEmpty(m.Tempo) ? "" : " " + m.Tempo)} · {m.Atendimentos} atendimento(s)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CarregarAsync();
+        _cts = new CancellationTokenSource();
+        _ = AtualizarSozinhoAsync(_cts.Token);
+    }
+
+    private async Task AtualizarSozinhoAsync(CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(20), token);
+                await CarregarAsync();
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            _membros = await Api.EquipeAsync();
+            _carregou = true;
+        }
+        catch
+        {
+            // sem conexão no momento: mantém a última lista e tenta de novo em 20s
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

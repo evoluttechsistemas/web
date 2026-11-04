@@ -1,0 +1,98 @@
+@page "/financeiro/cobranca"
+@inject ApiClient Api
+
+<PageTitle>Cobrança · HELP</PageTitle>
+
+<TopoPagina Titulo="Cobrança" Subtitulo="Clientes com títulos vencidos" />
+
+<div class="mb-busca">
+    <Icone Nome="buscar" />
+    <input type="search" placeholder="Buscar cliente" @bind="filtro" @bind:event="oninput" />
+    @if (!string.IsNullOrEmpty(filtro))
+    {
+        <button class="mb-icone-botao" aria-label="Limpar busca" @onclick="() => filtro = string.Empty"><Icone Nome="fechar" /></button>
+    }
+</div>
+
+<main class="mb-fin-lista">
+    @if (carregando)
+    {
+        @for (var i = 0; i < 6; i++)
+        {
+            <div class="mb-item mb-esqueleto">
+                <div class="mb-avatar"></div>
+                <div class="mb-item-corpo"><i></i><i></i></div>
+            </div>
+        }
+    }
+    else if (!string.IsNullOrEmpty(erro))
+    {
+        <div class="mb-vazio">
+            <p>@erro</p>
+            <button class="mb-botao mb-botao-sec" @onclick="CarregarAsync">Tentar de novo</button>
+        </div>
+    }
+    else if (clientes.Count == 0)
+    {
+        <div class="mb-vazio"><p>Nenhum cliente com títulos vencidos. 👏</p></div>
+    }
+    else
+    {
+        var lista = Filtrados().ToList();
+
+        <div class="mb-fin-resumo">
+            <div><span>Clientes</span><strong>@lista.Count</strong></div>
+            <div><span>Total vencido</span><strong class="mb-fin-juros">@Formato.Moeda(lista.Sum(c => c.ValorTotal))</strong></div>
+        </div>
+
+        @if (lista.Count == 0)
+        {
+            <div class="mb-vazio"><p>Nenhum cliente encontrado.</p></div>
+        }
+
+        @foreach (var c in lista)
+        {
+            <a class="mb-fin-cliente" href="financeiro/cobranca/@c.CodCliente" @key="c.CodCliente">
+                <Avatar Nome="@Nome(c)" />
+                <div>
+                    <strong>@Nome(c)</strong>
+                    <span>
+                        #@c.CodCliente
+                        @if (string.IsNullOrWhiteSpace(c.Celular)) { <text> · sem celular</text> }
+                    </span>
+                </div>
+                <strong class="mb-fin-valor">@Formato.Moeda(c.ValorTotal)</strong>
+            </a>
+        }
+    }
+</main>
+
+@code {
+    private List<FinCobrancaClienteDto> clientes = new();
+    private string filtro = "";
+    private bool carregando = true;
+    private string erro = "";
+
+    private static string Nome(FinCobrancaClienteDto c) => string.IsNullOrWhiteSpace(c.Apelido) ? c.Nome : c.Apelido;
+
+    protected override Task OnInitializedAsync() => CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        carregando = true;
+        erro = "";
+        try { clientes = await Api.FinCobrancaAsync(); }
+        catch (ApiException ex) { erro = ex.Message; }
+        finally { carregando = false; }
+    }
+
+    private IEnumerable<FinCobrancaClienteDto> Filtrados()
+    {
+        var f = filtro.Trim();
+        if (f.Length == 0) return clientes;
+        return clientes.Where(c =>
+            c.CodCliente.ToString().Contains(f) ||
+            c.Nome.Contains(f, StringComparison.OrdinalIgnoreCase) ||
+            c.Apelido.Contains(f, StringComparison.OrdinalIgnoreCase));
+    }
+}

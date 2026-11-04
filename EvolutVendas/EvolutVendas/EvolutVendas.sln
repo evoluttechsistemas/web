@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35931.197
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EvolutVendas", "EvolutVendas\EvolutVendas.csproj", "{520778E1-1397-48B8-AC51-DEFBE61BE3B2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{520778E1-1397-48B8-AC51-DEFBE61BE3B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{520778E1-1397-48B8-AC51-DEFBE61BE3B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{520778E1-1397-48B8-AC51-DEFBE61BE3B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{520778E1-1397-48B8-AC51-DEFBE61BE3B2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3060FBDB-4C19-477A-A67A-ADCB0CDE7665}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,360 @@
+﻿@page "/estatisticas"
+@using System.Globalization
+@using EvolutVendas.Services
+@inject BuscaEstatisticasService estatisticaService
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<div class="page">
+    <!-- 🔹 Top Bar -->
+    <header class="top-bar">
+        <button class="btn-voltar" @onclick="Voltar">←</button>
+        <h2>📊 Estatísticas</h2>
+    </header>
+
+    <!-- 🔹 Tabs -->
+    <div class="tabs">
+        <button class="@(modo == "DIA" ? "tab ativo" : "tab")" @onclick='() => AlterarModo("DIA")'>Hoje</button>
+        <button class="@(modo == "MES" ? "tab ativo" : "tab")" @onclick='() => AlterarModo("MES")'>Mês</button>
+        <button class="@(modo == "TRIMESTRE" ? "tab ativo" : "tab")" @onclick='() => AlterarModo("TRIMESTRE")'>Trimestre</button>
+    </div>
+
+    @if (dados is null)
+    {
+            <p class="loading">Carregando informações...</p>
+    }
+    else
+    {
+            <main class="conteudo">
+
+                <!-- 🔹 Cards principais -->
+                <div class="cards">
+                    <div class="card destaque">
+                        <span>💰</span>
+                        <div>
+                            <h3>Faturamento</h3>
+                            <p>@dados.Faturamento.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <span>🛒</span>
+                        <div>
+                            <h3>Vendas</h3>
+                            <p>@dados.QuantidadeVendas</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <span>📈</span>
+                        <div>
+                            <h3>Ticket Médio</h3>
+                            <p>@dados.TicketMedio.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🔹 Cards por forma de pagamento -->
+                <div class="cards pagamentos">
+                    <div class="card">
+                        <span>💵</span>
+                        <div>
+                            <h3>Dinheiro</h3>
+                            <p>@dados.Dinheiro.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <span>💳</span>
+                        <div>
+                            <h3>Cartão</h3>
+                            <p>@dados.Cartao.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <span>📄</span>
+                        <div>
+                            <h3>PIX</h3>
+                            <p>@dados.PIX.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <span>🏬</span>
+                        <div>
+                            <h3>Crediário</h3>
+                            <p>@dados.Crediario.ToString("C", new CultureInfo("pt-BR"))</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 🔹 Gráficos -->
+                <section class="graficos">
+                    <div class="grafico">
+                        <h4>💳 Faturamento por Pagamento</h4>
+                        <canvas id="graficoPagamentos"></canvas>
+                    </div>
+                    <div class="grafico">
+                        <h4>📆 Evolução do Faturamento</h4>
+                        <canvas id="graficoEvolucao"></canvas>
+                    </div>
+                </section>
+            </main>
+    }
+
+    <!-- 🔹 Bottom Navigation -->
+    <nav class="bottom-bar">
+        <a href="/menu" class="item"><i>🏠</i><span>Menu</span></a>
+        <a href="/vendas" class="item"><i>🧾</i><span>Vendas</span></a>
+        <a href="/estatisticas" class="item ativo"><i>📊</i><span>Estatísticas</span></a>
+        <a href="/produtos" class="item"><i>📦</i><span>Produtos</span></a>
+        <a href="/clientes" class="item"><i>👥</i><span>Clientes</span></a>
+    </nav>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --accent: #00AEEF;
+        --bg-gradient: linear-gradient(180deg, #E6F0FF 0%, #ffffff 100%);
+        --radius: 14px;
+        --shadow: 0 6px 16px rgba(0,0,0,0.1);
+        --transition: all 0.25s ease;
+    }
+
+    .page {
+        background: var(--bg-gradient);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        padding-bottom: 80px;
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        position: sticky;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(90deg, var(--primary), var(--accent));
+        color: white;
+        padding: 14px;
+        font-weight: bold;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+        z-index: 50;
+    }
+
+    .btn-voltar {
+        position: absolute;
+        left: 12px;
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-voltar:hover { transform: scale(1.08); }
+
+    /* 🔹 Tabs */
+    .tabs {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin: 18px 0;
+    }
+
+    .tab {
+        border: none;
+        background: #EAF3FF;
+        color: #0078D7;
+        font-weight: bold;
+        padding: 8px 18px;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+        .tab.ativo {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+    /* 🔹 Cards */
+    .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 14px;
+        padding: 0 14px;
+    }
+
+    .card {
+        background: white;
+        border-radius: var(--radius);
+        padding: 14px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .card:hover { transform: scale(1.03); }
+
+        .card.destaque {
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            color: white;
+        }
+
+    .card h3 {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    .card p {
+        font-size: 1.1rem;
+        font-weight: bold;
+        margin: 4px 0 0;
+    }
+
+    .card span {
+        font-size: 1.6rem;
+    }
+
+    /* 🔹 Gráficos */
+    .graficos {
+        padding: 10px 16px 20px;
+    }
+
+    .grafico {
+        background: white;
+        border-radius: var(--radius);
+        padding: 12px;
+        margin-bottom: 14px;
+        box-shadow: var(--shadow);
+        text-align: center;
+    }
+
+    .grafico h4 {
+        color: #0078D7;
+        margin-bottom: 10px;
+    }
+
+    canvas {
+        width: 100% !important;
+        height: 220px !important;
+    }
+
+    /* 🔹 Bottom Bar */
+    .bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px 0;
+        box-shadow: 0 -3px 10px rgba(0,0,0,0.1);
+        border-top-left-radius: 20px;
+        border-top-right-radius: 20px;
+    }
+
+    .item {
+        text-align: center;
+        font-size: 0.75rem;
+        color: #555;
+        text-decoration: none;
+        transition: var(--transition);
+    }
+
+        .item i { font-size: 1.4rem; }
+
+        .item.ativo {
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+    @@media (max-width: 480px) {
+        .card { flex-direction: column; text-align: center; }
+    }
+</style>
+
+@code {
+    private string modo = "DIA";
+    private Models.EstatisticasModel dados;
+    private string cnpj = "";
+    private bool _renderizado = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cnpj = await localStorage.GetItemAsync<string>("CNPJ");
+        await BuscarEstatisticas();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (dados != null && !_renderizado)
+        {
+            _renderizado = true;
+
+            // aguarda um pequeno delay para garantir que o canvas existe no DOM
+            await Task.Delay(150);
+
+            try
+            {
+                await JS.InvokeVoidAsync("renderGraficosEstatisticas", dados);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Erro ao renderizar gráficos: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task BuscarEstatisticas()
+    {
+        DateTime dataInicio, dataFim;
+
+        if (modo == "DIA")
+        {
+            dataInicio = DateTime.Today;
+            dataFim = DateTime.Today;
+        }
+        else if (modo == "MES")
+        {
+            dataInicio = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            dataFim = dataInicio.AddMonths(1).AddDays(-1);
+        }
+        else
+        {
+            dataInicio = new DateTime(DateTime.Today.AddMonths(-2).Year, DateTime.Today.AddMonths(-2).Month, 1);
+            dataFim = DateTime.Today;
+        }
+
+        dados = await estatisticaService.BuscaEstatisticaPagamentos(cnpj, dataInicio, dataFim);
+        _renderizado = false;
+        StateHasChanged();
+    }
+
+    private async Task AlterarModo(string novoModo)
+    {
+        modo = novoModo;
+        await BuscarEstatisticas();
+    }
+
+    private void Voltar() => NavManager.NavigateTo("/menu");
+}

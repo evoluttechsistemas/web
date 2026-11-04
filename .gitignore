@@ -1,5 +1,10 @@
 # ==========================================
-# SEGURANÇA - Arquivos sensíveis
+# REPOSITORIO: pasta "Desenvolvimento Web" inteira
+#   EvolutCRM (HELP), EvolutDelivery, EvolutVendas, HelpMobile
+# ==========================================
+
+# ==========================================
+# SEGURANCA - Arquivos sensiveis
 # ==========================================
 appsettings.json
 appsettings.*.json
@@ -7,6 +12,19 @@ EnvioWhatsAppBackgroundService.cs
 *.pfx
 *.p12
 secrets.json
+
+# Scripts de publicacao (tem senha do FTP e do SQL)
+publicar*.ps1
+
+# ==========================================
+# PUBLICACOES GERADAS
+# ==========================================
+/publish/
+/publish-mobile/
+/publishDelivery/
+**/publish/
+**/PublishProfiles/
+publish-hashes*.json
 
 # ==========================================
 # BUILD - Pastas geradas automaticamente
@@ -24,13 +42,7 @@ secrets.json
 *.sln.docstates
 
 # ==========================================
-# PUBLISH
-# ==========================================
-**/publish/
-**/PublishProfiles/
-
-# ==========================================
-# ARQUIVOS COMPILADOS SOLTOS NA RAIZ
+# ARQUIVOS COMPILADOS SOLTOS
 # ==========================================
 *.dll
 *.exe
@@ -43,31 +55,21 @@ secrets.json
 # ==========================================
 # UPLOADS E ARQUIVOS GERADOS EM RUNTIME
 # ==========================================
-wwwroot/uploads/
-wwwroot/chat-uploads/
-embedding_cache.json
-
-# ==========================================
-# OUTROS
-# ==========================================
-web.config
-
 **/wwwroot/uploads/
 **/wwwroot/chat-uploads/
-
+embedding_cache.json
 *.staticwebassets.endpoints.json
 
-/wwwroot/
-
-# Exceções - DLLs externas necessárias
-!EvolutCRM/ssleay32.dll
-!EvolutCRM/libeay32.dll
-!EvolutCRM/KHelpDeskIntegraV3.dll
-!HelpDesktop/KHelpDeskIntegraV3.dll
-!HelpDesktop/libeay32.dll
-
 # ==========================================
-# SCRIPTS DE PUBLICACAO (tem senha do FTP e do SQL)
+# EvolutCRM (o que antes ficava na raiz do repositorio)
 # ==========================================
-publicar.ps1
-publicar-rapido.ps1
+/EvolutCRM/web.config
+/EvolutCRM/wwwroot/
+/EvolutCRM/nultype
+
+# Excecoes - DLLs externas necessarias
+!EvolutCRM/EvolutCRM/ssleay32.dll
+!EvolutCRM/EvolutCRM/libeay32.dll
+!EvolutCRM/EvolutCRM/KHelpDeskIntegraV3.dll
+!EvolutCRM/HelpDesktop/KHelpDeskIntegraV3.dll
+!EvolutCRM/HelpDesktop/libeay32.dll

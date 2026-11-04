@@ -1,0 +1,122 @@
+@* Menu lateral do app: módulos (Atendimento, Financeiro), notificações e sair *@
+@implements IDisposable
+@inject MenuState Menu
+@inject AuthState Auth
+@inject ApiClient Api
+@inject PushService Push
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="mb-gaveta-fundo @(Menu.Aberto ? "aberto" : "")" @onclick="Menu.Fechar"></div>
+<aside class="mb-gaveta @(Menu.Aberto ? "aberto" : "")" aria-hidden="@(!Menu.Aberto)">
+    <div class="mb-gaveta-topo">
+        <Avatar Nome="@Auth.Usuario" />
+        <div>
+            <strong>@Auth.Usuario</strong>
+            <span>@Auth.Empresa</span>
+        </div>
+    </div>
+
+    <nav class="mb-gaveta-nav">
+        <div class="mb-gaveta-grupo">Atendimento</div>
+        <a class="mb-gaveta-item @Ativo("")" href="" @onclick="Menu.Fechar"><Icone Nome="atendimento" /> Tickets</a>
+
+        @if (Menu.PodeFinanceiro == true)
+        {
+            <div class="mb-gaveta-grupo">Financeiro</div>
+            <a class="mb-gaveta-item @Ativo("financeiro/baixa")" href="financeiro/baixa" @onclick="Menu.Fechar"><Icone Nome="dinheiro" /> Baixa a Receber</a>
+            <a class="mb-gaveta-item @Ativo("financeiro/cobranca")" href="financeiro/cobranca" @onclick="Menu.Fechar"><Icone Nome="cobranca" /> Cobrança</a>
+        }
+    </nav>
+
+    <div class="mb-gaveta-rodape">
+        @if (situacaoPush == "ativo")
+        {
+            <button class="mb-gaveta-item" @onclick="DesativarPushAsync"><Icone Nome="sino" /> Desativar notificações</button>
+        }
+        else if (situacaoPush == "desativado")
+        {
+            <button class="mb-gaveta-item" @onclick="AtivarPushAsync"><Icone Nome="sino" /> Ativar notificações</button>
+        }
+        <button class="mb-gaveta-item perigo" @onclick="SairAsync"><Icone Nome="sair" /> Sair da conta</button>
+    </div>
+</aside>
+
+@code {
+    private string situacaoPush = "";
+
+    protected override void OnInitialized()
+    {
+        Menu.Mudou += AoMudar;
+        Nav.LocationChanged += AoNavegar;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        await CarregarPermissoesAsync();
+    }
+
+    private async Task CarregarPermissoesAsync()
+    {
+        if (Menu.PodeFinanceiro != null || !Auth.Logado) return;
+        try
+        {
+            var eu = await Api.EuAsync();
+            Menu.PodeFinanceiro = eu?.PodeFinanceiro ?? false;
+            StateHasChanged();
+        }
+        catch { /* sem conexão: tenta de novo ao abrir o menu */ }
+    }
+
+    private async void AoMudar()
+    {
+        if (Menu.Aberto)
+        {
+            situacaoPush = await Push.SituacaoAsync();
+            await CarregarPermissoesAsync();
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void AoNavegar(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        Menu.Fechar();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string Ativo(string rota)
+    {
+        var atual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0];
+        var ativo = rota == "" ? (atual == "" || atual.StartsWith("ticket/")) : atual.StartsWith(rota);
+        return ativo ? "ativo" : "";
+    }
+
+    private async Task AtivarPushAsync()
+    {
+        try { situacaoPush = await Push.AtivarAsync(); }
+        catch { situacaoPush = await Push.SituacaoAsync(); }
+    }
+
+    private async Task DesativarPushAsync()
+    {
+        await Push.DesativarAsync();
+        situacaoPush = await Push.SituacaoAsync();
+    }
+
+    private async Task SairAsync()
+    {
+        Menu.Limpar();
+        await Push.DesativarAsync();
+        try { await JS.InvokeVoidAsync("helpMobile.badge", 0); } catch { }
+        Api.UltimasConversas = null;
+        await Auth.SairAsync();
+        Nav.NavigateTo("login", replace: true);
+    }
+
+    public void Dispose()
+    {
+        Menu.Mudou -= AoMudar;
+        Nav.LocationChanged -= AoNavegar;
+    }
+}

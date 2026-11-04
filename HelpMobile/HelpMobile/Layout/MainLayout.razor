@@ -1,0 +1,87 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AuthState Auth
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject PushService Push
+@inject MenuState Menu
+
+<div class="mb-app">
+    @if (PodeMostrar)
+    {
+        @Body
+    }
+
+    @if (Auth.Logado && !NaTelaLogin)
+    {
+        <MenuLateral />
+    }
+</div>
+
+@code {
+    private DotNetObjectReference<MainLayout>? _ref;
+    private bool _pushSincronizado;
+
+    private bool NaTelaLogin =>
+        Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].Equals("login", StringComparison.OrdinalIgnoreCase);
+
+    // Sem login → só a tela de login aparece
+    private bool PodeMostrar => Auth.Logado || NaTelaLogin;
+
+    protected override void OnInitialized()
+    {
+        Nav.LocationChanged += AoNavegar;
+        Auth.Mudou += AoMudarLogin;
+        Proteger();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _ref = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("helpMobile.onNavegar", _ref);
+        }
+
+        // Ao abrir o app logado: confirma no HELP a inscrição de notificação deste celular
+        if (Auth.Logado && !_pushSincronizado)
+        {
+            _pushSincronizado = true;
+            _ = Push.SincronizarAsync();
+        }
+    }
+
+    /// <summary>Chamado pelo service worker quando tocam numa notificação com o app aberto.</summary>
+    [JSInvokable]
+    public void Navegar(string url) => Nav.NavigateTo(url);
+
+    private void AoNavegar(object? sender, LocationChangedEventArgs e)
+    {
+        Proteger();
+        StateHasChanged();
+    }
+
+    private void AoMudarLogin()
+    {
+        if (!Auth.Logado)
+        {
+            _pushSincronizado = false;
+            Menu.Limpar(); // outro usuário pode entrar: permissões são consultadas de novo
+        }
+        Proteger();
+        StateHasChanged();
+    }
+
+    private void Proteger()
+    {
+        if (!Auth.Logado && !NaTelaLogin)
+            Nav.NavigateTo("login", replace: true);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= AoNavegar;
+        Auth.Mudou -= AoMudarLogin;
+        _ref?.Dispose();
+    }
+}

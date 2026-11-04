@@ -1,0 +1,24 @@
+@inject ApiClient Api
+
+@if (!string.IsNullOrWhiteSpace(Foto) && !_falhou)
+{
+    <img class="mb-avatar @Classe" src="@Api.Url(Foto)" alt="" loading="lazy" @onerror="() => _falhou = true" />
+}
+else
+{
+    <div class="mb-avatar mb-avatar-iniciais @Classe" style="background:@Formato.Cor(Nome)">@Formato.Iniciais(Nome)</div>
+}
+
+@code {
+    [Parameter] public string? Nome { get; set; }
+    [Parameter] public string? Foto { get; set; }
+    [Parameter] public string? Classe { get; set; }
+
+    private bool _falhou;
+    private string? _fotoAnterior;
+
+    protected override void OnParametersSet()
+    {
+        if (Foto != _fotoAnterior) { _falhou = false; _fotoAnterior = Foto; }
+    }
+}

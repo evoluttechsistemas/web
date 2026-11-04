@@ -1,0 +1,328 @@
+﻿@page "/clientes"
+@using EvolutVendas.Services
+@inject Blazored.LocalStorage.ILocalStorageService localStorage
+@inject BuscaClientesService clienteService
+@inject NavigationManager NavManager
+@implements IDisposable
+
+<div class="page-container">
+    <!-- 🔹 Top Bar -->
+    <div class="top-bar">
+        <button class="btn-voltar" @onclick="Voltar">⬅️</button>
+        <h3>👥 Clientes</h3>
+        <div class="search-container">
+            <input type="text" placeholder="Buscar cliente..."
+                   @oninput="OnFiltroChanged"
+                   class="search-input" />
+        </div>
+    </div>
+
+    <!-- 🔹 Conteúdo -->
+    @if (clientes is null)
+    {
+        <p class="loading">Carregando clientes...</p>
+    }
+    else if (!clientes.Any())
+    {
+        <p class="no-results">Nenhum cliente encontrado.</p>
+    }
+    else
+    {
+        <div class="lista-clientes">
+            @foreach (var c in clientes)
+            {
+                <div class="card-cliente">
+                    <div class="icone">👤</div>
+                    <div class="info-cliente">
+                        <div class="nome">@c.Nome</div>
+                        <div class="detalhes">
+                            🆔 <b>Cód:</b> @c.Codigo<br />
+                            ☎️ <b>Telefone:</b> @c.Telefone<br />
+                            📱 <b>Celular:</b> @c.Celular
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- 🔹 Bottom bar -->
+    <div class="bottom-bar">
+        <a href="/menu" class="nav-item">
+            <i>🏠</i>
+            <span>Menu</span>
+        </a>
+        <a href="/vendas" class="nav-item">
+            <i>🧾</i>
+            <span>Vendas</span>
+        </a>
+        <a href="/estatisticas" class="nav-item">
+            <i>📊</i>
+            <span>Estatísticas</span>
+        </a>
+        <a href="/produtos" class="nav-item">
+            <i>📦</i>
+            <span>Produtos</span>
+        </a>
+        <a href="/clientes" class="nav-item ativo">
+            <i>👥</i>
+            <span>Clientes</span>
+        </a>
+    </div>
+</div>
+
+<style>
+    :root {
+        --primary: #0078D7;
+        --primary-dark: #005a9e;
+        --bg: #f0f4fa;
+        --radius: 12px;
+        --shadow: 0 4px 10px rgba(0,0,0,0.08);
+        --transition: all 0.25s ease;
+    }
+
+    .page-container {
+        background: var(--bg);
+        min-height: 100vh;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        padding-bottom: 80px;
+    }
+
+    /* 🔹 Top Bar */
+    .top-bar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--primary);
+        color: white;
+        padding: 12px;
+        border-bottom-left-radius: 20px;
+        border-bottom-right-radius: 20px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+    }
+
+        .top-bar h3 {
+            flex: 1;
+            text-align: center;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+
+    /* 🔙 Botão Voltar */
+    .btn-voltar {
+        background: white;
+        color: var(--primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .btn-voltar:hover {
+            transform: scale(1.08);
+            background: #f0f0f0;
+        }
+
+    /* 🔍 Campo de busca */
+    .search-container {
+        flex: 1;
+        display: flex;
+        justify-content: flex-end;
+        margin-left: 10px;
+    }
+
+    .search-input {
+        padding: 8px 14px;
+        border-radius: 20px;
+        border: none;
+        width: 60%;
+        max-width: 220px;
+        outline: none;
+        font-size: 14px;
+        box-shadow: var(--shadow);
+        transition: var(--transition);
+    }
+
+        .search-input:focus {
+            transform: scale(1.03);
+            box-shadow: 0 0 0 3px rgba(0,120,215,0.2);
+        }
+
+    /* 🔹 Lista de clientes */
+    .lista-clientes {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding: 10px;
+    }
+
+    .card-cliente {
+        background: white;
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: var(--transition);
+    }
+
+        .card-cliente:hover {
+            transform: scale(1.02);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.15);
+        }
+
+    .icone {
+        font-size: 28px;
+        color: var(--primary);
+        background: #e8f3ff;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: inset 0 0 8px rgba(0,0,0,0.05);
+    }
+
+    .info-cliente {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .nome {
+        font-weight: 600;
+        font-size: 16px;
+        color: #1e293b;
+        margin-bottom: 4px;
+    }
+
+    .detalhes {
+        font-size: 13px;
+        color: #555;
+        line-height: 1.3;
+    }
+
+    .no-results, .loading {
+        text-align: center;
+        margin-top: 40px;
+        color: #777;
+        font-size: 0.95rem;
+    }
+
+    /* 🔹 Bottom bar */
+    .bottom-bar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        padding: 8px 0;
+        box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.1);
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        z-index: 50;
+    }
+
+    .nav-item {
+        text-align: center;
+        color: var(--primary-dark);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: var(--transition);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+        .nav-item i {
+            font-size: 1.4rem;
+            margin-bottom: 3px;
+        }
+
+        .nav-item:hover {
+            color: var(--primary);
+            transform: scale(1.08);
+        }
+
+        .nav-item.ativo {
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+    @@media (max-width: 480px) {
+        .card-cliente {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 14px;
+        }
+
+        .icone {
+            align-self: center;
+            margin-bottom: 6px;
+        }
+
+        .nome {
+            text-align: center;
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    private List<Models.ClienteBuscaModels> clientes = new();
+    private string filtro = "";
+    private string cnpj = "";
+    private System.Timers.Timer? debounceTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        cnpj = await localStorage.GetItemAsync<string>("CNPJ");
+        await BuscarClientes();
+    }
+
+    private async Task BuscarClientes()
+    {
+        clientes = await clienteService.BuscarClientesAsync(cnpj, filtro);
+        StateHasChanged();
+    }
+
+    private void OnFiltroChanged(ChangeEventArgs e)
+    {
+        filtro = e.Value?.ToString() ?? "";
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+        debounceTimer = new System.Timers.Timer(400);
+        debounceTimer.AutoReset = false;
+        debounceTimer.Elapsed += async (_, _) =>
+        {
+            await InvokeAsync(BuscarClientes);
+        };
+        debounceTimer.Start();
+    }
+
+    private void Voltar() => NavManager.NavigateTo("/menu");
+
+    public void Dispose()
+    {
+        debounceTimer?.Stop();
+        debounceTimer?.Dispose();
+    }
+}

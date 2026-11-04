@@ -1,0 +1,394 @@
+@page "/"
+@implements IAsyncDisposable
+@inject ApiClient Api
+@inject AuthState Auth
+@inject PushService Push
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject MenuState Menu
+
+<PageTitle>HELP</PageTitle>
+
+<header class="mb-topo">
+    <button class="mb-icone-botao mb-topo-menu" aria-label="Abrir menu" @onclick="Menu.Abrir"><Icone Nome="menu" /></button>
+    <div class="mb-topo-titulo">
+        <h1>HELP</h1>
+        <span>@Auth.Empresa</span>
+    </div>
+</header>
+
+<EquipeTopo />
+
+@if ((situacaoPush is "desativado" or "instalar-ios" or "negado" or "inseguro") && !avisoPushFechado)
+{
+    <div class="mb-aviso">
+        <Icone Nome="sino" Classe="mb-aviso-ic" />
+        <div class="mb-aviso-texto">
+            @if (situacaoPush == "desativado")
+            {
+                <strong>Receba as mensagens dos clientes</strong>
+                <span>Ative as notificações para ser avisado mesmo com o app fechado.</span>
+            }
+            else if (situacaoPush == "instalar-ios")
+            {
+                <strong>Instale o HELP no iPhone</strong>
+                <span>No Safari, toque em Compartilhar e depois em "Adicionar à Tela de Início". Abra pelo ícone para ativar as notificações.</span>
+            }
+            else if (situacaoPush == "inseguro")
+            {
+                <strong>Notificações desligadas neste endereço</strong>
+                <span>Aberto pelo IP (sem HTTPS) dá para usar as telas, mas o celular só permite notificações em HTTPS.</span>
+            }
+            else
+            {
+                <strong>Notificações bloqueadas</strong>
+                <span>Libere as notificações deste site nas configurações do navegador.</span>
+            }
+        </div>
+        @if (situacaoPush == "desativado")
+        {
+            <button class="mb-aviso-botao" @onclick="AtivarPushAsync" disabled="@ativandoPush">@(ativandoPush ? "..." : "Ativar")</button>
+        }
+        <button class="mb-icone-botao mb-aviso-fechar" aria-label="Fechar aviso" @onclick="FecharAvisoPush"><Icone Nome="fechar" /></button>
+    </div>
+}
+
+<div class="mb-busca">
+    <Icone Nome="buscar" />
+    <input type="search" placeholder="Buscar cliente, ticket ou assunto" @bind="busca" @bind:event="oninput" />
+    @if (!string.IsNullOrEmpty(busca))
+    {
+        <button class="mb-icone-botao" aria-label="Limpar busca" @onclick="() => busca = string.Empty"><Icone Nome="fechar" /></button>
+    }
+</div>
+
+<nav class="mb-filtros" aria-label="Filtros">
+    @foreach (var f in Filtros)
+    {
+        var qtd = Contar(f.Chave);
+        <button class="mb-chip @(filtro == f.Chave ? "ativo" : "")" @onclick="() => MudarFiltroAsync(f.Chave)">
+            @f.Nome
+            @if (qtd > 0 && f.Chave is not ("todos" or "equipe"))
+            {
+                <span class="mb-chip-qtd">@qtd</span>
+            }
+        </button>
+    }
+</nav>
+
+<main class="mb-lista">
+    @if (carregando && conversas.Count == 0)
+    {
+        @for (var i = 0; i < 8; i++)
+        {
+            <div class="mb-item mb-esqueleto">
+                <div class="mb-avatar"></div>
+                <div class="mb-item-corpo"><i></i><i></i></div>
+            </div>
+        }
+    }
+    else if (!string.IsNullOrEmpty(erro) && conversas.Count == 0)
+    {
+        <div class="mb-vazio">
+            <p>@erro</p>
+            <button class="mb-botao mb-botao-sec" @onclick="CarregarAsync">Tentar de novo</button>
+        </div>
+    }
+    else
+    {
+        var lista = Visiveis().ToList();
+        if (lista.Count == 0)
+        {
+            <div class="mb-vazio">
+                <p>@(string.IsNullOrWhiteSpace(busca) ? MensagemVazio() : "Nada encontrado para essa busca.")</p>
+            </div>
+        }
+
+        @foreach (var t in lista)
+        {
+            var naFila = Formato.UsuarioAutomatico(t.Responsavel);
+            var meu = !naFila && t.Responsavel.Equals(Auth.Usuario, StringComparison.OrdinalIgnoreCase);
+            var destaque = t.NaoLidas > 0 && (meu || naFila);
+
+            <a class="mb-item @(destaque ? "mb-item-pendente" : "")" href="ticket/@t.Codigo" @key="t.Codigo">
+                <Avatar Nome="@t.Nome" Foto="@t.FotoUrl" />
+                <div class="mb-item-corpo">
+                    <div class="mb-item-linha">
+                        <span class="mb-item-nome">@t.Nome</span>
+                        <span class="mb-item-hora @(destaque ? "destaque" : "")">@Formato.HoraLista(t.DataHora)</span>
+                    </div>
+                    <div class="mb-item-linha">
+                        <span class="mb-item-previa">
+                            @if (!t.PreviaDoCliente && t.PreviaTipo != "interno")
+                            {
+                                <Entrega Status="@t.PreviaStatus" />
+                                @if (!Formato.UsuarioAutomatico(t.PreviaUsuario) && !t.PreviaUsuario.Equals(Auth.Usuario, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <b>@Formato.Primeiro(t.PreviaUsuario):</b>
+                                }
+                            }
+                            @if (t.PreviaTipo == "imagem")
+                            {
+                                <Icone Nome="imagem" Classe="mb-ic-p" />
+                                <span>@(string.IsNullOrWhiteSpace(t.Previa) ? "Imagem" : t.Previa)</span>
+                            }
+                            else if (t.PreviaTipo == "audio")
+                            {
+                                <Icone Nome="mic" Classe="mb-ic-p" />
+                                <span>Áudio</span>
+                            }
+                            else if (t.PreviaTipo == "video")
+                            {
+                                <Icone Nome="video" Classe="mb-ic-p" />
+                                <span>Vídeo</span>
+                            }
+                            else if (t.PreviaTipo == "interno")
+                            {
+                                <Icone Nome="cadeado" Classe="mb-ic-p" />
+                                <span>@t.Previa</span>
+                            }
+                            else
+                            {
+                                <span>@t.Previa</span>
+                            }
+                        </span>
+                        @if (t.NaoLidas > 0)
+                        {
+                            <span class="mb-badge @(destaque ? "" : "mb-badge-cinza")">@t.NaoLidas</span>
+                        }
+                    </div>
+                    <div class="mb-item-meta">
+                        <span class="mb-item-num">#@t.Codigo</span>
+                        @if (!string.IsNullOrWhiteSpace(t.Assunto))
+                        {
+                            <span class="mb-item-assunto">@t.Assunto</span>
+                        }
+                        @if (naFila)
+                        {
+                            <span class="mb-tag mb-tag-fila">Fila</span>
+                        }
+                        else if (!meu)
+                        {
+                            <span class="mb-tag" style="--cor:@Formato.Cor(t.Responsavel)">@Formato.Primeiro(t.Responsavel)</span>
+                        }
+                    </div>
+                </div>
+            </a>
+        }
+    }
+</main>
+
+<button class="mb-fab" aria-label="Novo ticket" @onclick='() => Nav.NavigateTo("novo-ticket")'>
+    <Icone Nome="adicionar" />
+</button>
+
+@code {
+    private record Filtro(string Chave, string Nome);
+    private static readonly Filtro[] Filtros =
+    {
+        new("todos", "Todos"),
+        new("meus", "Meus"),
+        new("fila", "Fila"),
+        new("aguardando", "Sem resposta"),
+        new("equipe", "Equipe")
+    };
+
+    private List<MobileTicketItemDto> conversas = new();
+    private string filtro = "todos";
+    private string busca = "";
+    private bool carregando = true;
+    private string erro = "";
+    private bool menuAberto;
+
+    private string situacaoPush = "";
+    private bool ativandoPush;
+    private bool avisoPushFechado;
+
+    private DotNetObjectReference<Home>? _ref;
+    private CancellationTokenSource _cts = new();
+    private bool _visivel = true;
+    private bool _atualizando;
+    private const string ChavePagina = "conversas";
+
+    protected override async Task OnInitializedAsync()
+    {
+        filtro = await JS.InvokeAsync<string?>("helpMobile.get", "help_filtro") ?? "todos";
+        if (!Filtros.Any(f => f.Chave == filtro) || filtro == "equipe") filtro = "todos";
+        avisoPushFechado = (await JS.InvokeAsync<string?>("helpMobile.get", "help_aviso_push")) == "1";
+
+        if (Api.UltimasConversas != null)
+        {
+            conversas = Api.UltimasConversas;
+            carregando = false;
+        }
+
+        await CarregarAsync();
+        _ = LoopAtualizacaoAsync(_cts.Token);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _ref = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("helpMobile.registrarPagina", ChavePagina, _ref);
+        situacaoPush = await Push.SituacaoAsync();
+        StateHasChanged();
+    }
+
+    private async Task CarregarAsync()
+    {
+        if (_atualizando) return;
+        _atualizando = true;
+        try
+        {
+            if (conversas.Count == 0) carregando = true;
+            var pedidoEquipe = filtro == "equipe";
+            var lista = await Api.ConversasAsync(todos: pedidoEquipe);
+            if (pedidoEquipe != (filtro == "equipe")) return; // trocou de aba enquanto carregava
+            conversas = lista;
+            Api.UltimasConversas = conversas;
+            erro = "";
+            await AtualizarBadgeAsync();
+        }
+        catch (ApiException ex) { erro = ex.Message; }
+        catch (Exception) { erro = "Não foi possível carregar as conversas."; }
+        finally
+        {
+            carregando = false;
+            _atualizando = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Atualiza sozinho a cada 10s enquanto o app está na tela (push avisa na hora).</summary>
+    private async Task LoopAtualizacaoAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_visivel && !menuAberto)
+                    await CarregarAsync();
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    [JSInvokable]
+    public async Task MudouVisibilidade(bool visivel)
+    {
+        _visivel = visivel;
+        if (visivel) await CarregarAsync();
+    }
+
+    [JSInvokable]
+    public Task ChegouPush(int ticket) => CarregarAsync();
+
+    // ───────────── Filtros ─────────────
+
+    private bool EhMeu(MobileTicketItemDto t) => t.Responsavel.Equals(Auth.Usuario, StringComparison.OrdinalIgnoreCase);
+
+    private bool Passa(MobileTicketItemDto t, string chave) => chave switch
+    {
+        "meus" => EhMeu(t),
+        "fila" => Formato.UsuarioAutomatico(t.Responsavel),
+        "aguardando" => t.NaoRespondidas > 0 && (EhMeu(t) || Formato.UsuarioAutomatico(t.Responsavel)),
+        "equipe" => true,
+        _ => EhMeu(t) || Formato.UsuarioAutomatico(t.Responsavel)
+    };
+
+    private int Contar(string chave) => conversas.Count(t => Passa(t, chave));
+
+    private IEnumerable<MobileTicketItemDto> Visiveis()
+    {
+        var q = conversas.Where(t => Passa(t, filtro));
+        var b = busca.Trim();
+        if (b.Length > 0)
+        {
+            q = q.Where(t =>
+                t.Nome.Contains(b, StringComparison.OrdinalIgnoreCase) ||
+                t.Assunto.Contains(b, StringComparison.OrdinalIgnoreCase) ||
+                t.Codigo.ToString().Contains(b) ||
+                t.Telefone.Contains(b) ||
+                t.Previa.Contains(b, StringComparison.OrdinalIgnoreCase));
+        }
+        return q;
+    }
+
+    private string MensagemVazio() => filtro switch
+    {
+        "meus" => "Nenhum ticket com você agora.",
+        "fila" => "A fila está vazia.",
+        "aguardando" => "Nenhum cliente esperando resposta. 👏",
+        "equipe" => "Nenhum ticket em aberto na equipe.",
+        _ => "Nenhum ticket em aberto."
+    };
+
+    private async Task MudarFiltroAsync(string chave)
+    {
+        var mudouEquipe = (filtro == "equipe") != (chave == "equipe");
+        filtro = chave;
+
+        // "Equipe" é só uma consulta: ao abrir o app de novo volta para os meus tickets
+        if (chave != "equipe")
+            await JS.InvokeVoidAsync("helpMobile.set", "help_filtro", chave);
+
+        if (mudouEquipe)
+        {
+            if (chave != "equipe")
+                conversas = conversas.Where(t => EhMeu(t) || Formato.UsuarioAutomatico(t.Responsavel)).ToList();
+            else
+                carregando = true;
+            _atualizando = false;
+            await CarregarAsync();
+        }
+    }
+
+    private async Task AtualizarBadgeAsync()
+    {
+        var pendentes = conversas.Count(t => t.NaoLidas > 0 && (EhMeu(t) || Formato.UsuarioAutomatico(t.Responsavel)));
+        try { await JS.InvokeVoidAsync("helpMobile.badge", pendentes); } catch { }
+    }
+
+    // ───────────── Notificações ─────────────
+
+    private async Task AtivarPushAsync()
+    {
+        menuAberto = false;
+        ativandoPush = true;
+        try { situacaoPush = await Push.AtivarAsync(); }
+        catch { situacaoPush = await Push.SituacaoAsync(); }
+        finally { ativandoPush = false; }
+    }
+
+    private async Task DesativarPushAsync()
+    {
+        menuAberto = false;
+        await Push.DesativarAsync();
+        situacaoPush = await Push.SituacaoAsync();
+    }
+
+    private async Task FecharAvisoPush()
+    {
+        avisoPushFechado = true;
+        await JS.InvokeVoidAsync("helpMobile.set", "help_aviso_push", "1");
+    }
+
+    private async Task SairAsync()
+    {
+        menuAberto = false;
+        await Push.DesativarAsync();
+        try { await JS.InvokeVoidAsync("helpMobile.badge", 0); } catch { }
+        Api.UltimasConversas = null;
+        await Auth.SairAsync();
+        Nav.NavigateTo("login", replace: true);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts.Cancel();
+        try { await JS.InvokeVoidAsync("helpMobile.liberarPagina", ChavePagina); } catch { }
+        _ref?.Dispose();
+    }
+}

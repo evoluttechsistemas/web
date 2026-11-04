@@ -1,0 +1,348 @@
+﻿@page "/novo-ticket"
+@implements IDisposable
+@inject ApiClient Api
+@inject NavigationManager Nav
+
+<PageTitle>Novo ticket · HELP</PageTitle>
+
+<header class="mb-topo">
+    <button class="mb-icone-botao" aria-label="Voltar" @onclick="Voltar"><Icone Nome="voltar" /></button>
+    <div class="mb-topo-titulo"><h1>Novo ticket</h1></div>
+</header>
+
+<main class="mb-novo">
+    @* ───── 1. Cliente ───── *@
+    <section class="mb-novo-bloco">
+        <span class="mb-novo-rotulo">Cliente</span>
+
+        @if (ClienteDefinido)
+        {
+            <div class="mb-novo-escolhido">
+                <Avatar Nome="@NomeClienteExibicao" Classe="mb-avatar-p" />
+                <span>
+                    <strong>@NomeClienteExibicao</strong>
+                    <small>@(codCliente > 0 ? "Cód. " + codCliente : "Cliente novo (será cadastrado)")</small>
+                </span>
+                <button class="mb-novo-trocar" @onclick="TrocarCliente">Trocar</button>
+            </div>
+        }
+        else if (cadastrandoContato)
+        {
+            <div class="mb-novo-contato">
+                <p class="mb-dica">O número <strong>@telefoneBuscaFmt</strong> não está cadastrado. Informe quem é e de qual cliente.</p>
+
+                <label class="mb-novo-rotulo" for="nt-nome">Nome do contato</label>
+                <input id="nt-nome" class="mb-novo-input" placeholder="Ex.: Gabriel" @bind="nomeContatoNovo" @bind:event="oninput" />
+
+                <label class="mb-novo-rotulo" for="nt-vinc">Vincular ao cliente</label>
+                <div class="mb-busca mb-novo-busca">
+                    <Icone Nome="buscar" />
+                    <input id="nt-vinc" type="search" placeholder="Buscar cliente" @bind="buscaVinculo" @bind:event="oninput" @bind:after="BuscarVinculoAsync" />
+                </div>
+                <div class="mb-acoes-lista">
+                    @foreach (var c in sugestoesVinculo)
+                    {
+                        <button class="mb-acao" @onclick="() => VincularContato(c)">
+                            <Avatar Nome="@c.Nome" Classe="mb-avatar-p" />
+                            <span><strong>@c.Nome</strong><small>Cód. @c.Codigo</small></span>
+                        </button>
+                    }
+                </div>
+                <button class="mb-botao mb-botao-sec" @onclick="() => cadastrandoContato = false">Cancelar</button>
+            </div>
+        }
+        else
+        {
+            <div class="mb-busca mb-novo-busca">
+                <Icone Nome="buscar" />
+                <input type="search" placeholder="Cliente, contato ou telefone" autofocus
+                       @bind="busca" @bind:event="oninput" @bind:after="BuscarAsync" />
+            </div>
+
+            @if (buscando)
+            {
+                <div class="mb-carregando"><span></span><span></span><span></span></div>
+            }
+
+            <div class="mb-acoes-lista">
+                @foreach (var c in sugestoes)
+                {
+                    <button class="mb-acao" @onclick="() => EscolherClienteAsync(c)">
+                        <Avatar Nome="@c.Nome" Classe="mb-avatar-p" />
+                        <span><strong>@c.Nome</strong><small>@(string.IsNullOrEmpty(c.Contato) ? "Cód. " + c.Codigo : c.Contato)</small></span>
+                    </button>
+                }
+                @if (PodeCriarCliente)
+                {
+                    <button class="mb-acao" @onclick="CriarClienteNovo">
+                        <Icone Nome="adicionar" />
+                        <span><strong>Criar cliente "@busca.Trim()"</strong><small>Cadastro rápido, igual ao HELP</small></span>
+                    </button>
+                }
+                @if (oferecerNovoContato)
+                {
+                    <button class="mb-acao" @onclick="AbrirCadastroContato">
+                        <Icone Nome="whatsapp" />
+                        <span><strong>Cadastrar novo contato</strong><small>@telefoneBuscaFmt não está cadastrado</small></span>
+                    </button>
+                }
+            </div>
+        }
+    </section>
+
+    @* ───── 2. WhatsApp do contato ───── *@
+    @if (codCliente > 0 && contatos.Count > 0)
+    {
+        <section class="mb-novo-bloco">
+            <span class="mb-novo-rotulo">WhatsApp do contato</span>
+            <div class="mb-acoes-lista">
+                @foreach (var ct in contatos)
+                {
+                    var sel = ct.Telefone == telefoneContato;
+                    <button class="mb-acao @(sel ? "mb-acao-sel" : "")" @onclick="() => EscolherContato(ct)">
+                        <Icone Nome="@(sel ? "check" : "whatsapp")" />
+                        <span><strong>@ct.Nome</strong><small>@ct.TelefoneFormatado</small></span>
+                    </button>
+                }
+            </div>
+        </section>
+    }
+
+    @if (!string.IsNullOrEmpty(TelefoneEnvio) && !cadastrandoContato)
+    {
+        <p class="mb-dica">
+            Será aberto como <strong>WhatsApp</strong> para <strong>@TelefoneEnvioFmt</strong>@(string.IsNullOrEmpty(nomeContato) ? "" : " (" + nomeContato + ")").
+        </p>
+    }
+
+    @if (!string.IsNullOrEmpty(erro))
+    {
+        <div class="mb-erro" role="alert">@erro</div>
+    }
+
+    @* ───── 3. Primeira mensagem ───── *@
+    @if (TemDestino && !cadastrandoContato)
+    {
+        <section class="mb-novo-bloco">
+            <label class="mb-novo-rotulo" for="nt-msg">Primeira mensagem</label>
+            <textarea id="nt-msg" class="mb-novo-input mb-novo-texto" rows="4"
+                      placeholder="Descreva o problema ou a solicitação"
+                      @bind="mensagem" @bind:event="oninput"></textarea>
+        </section>
+
+        <button class="mb-botao mb-novo-criar" disabled="@enviando" @onclick="CriarAsync">
+            @if (enviando)
+            {
+                <span class="mb-girando"></span>
+            }
+            else
+            {
+
+                <text>Criar ticket</text>
+            }
+        </button>
+    }
+</main>
+
+@code {
+    // Busca principal
+    private string busca = "";
+    private bool buscando;
+    private string ultimaBusca = "";
+    private List<MobileClienteSugestaoDto> sugestoes = new();
+    private string telefoneBusca = "", telefoneBuscaFmt = "";
+    private bool oferecerNovoContato;
+    private CancellationTokenSource? _ctsBusca;
+
+    // Cliente escolhido
+    private int codCliente;
+    private string nomeCliente = "";
+    private string novoClienteNome = "";
+
+    // Contato (WhatsApp)
+    private List<MobileContatoDto> contatos = new();
+    private string telefoneContato = "", telefoneContatoFmt = "", nomeContato = "";
+    private bool contatoNovo;
+
+    // Cadastro de contato novo
+    private bool cadastrandoContato;
+    private string nomeContatoNovo = "";
+    private string buscaVinculo = "";
+    private List<MobileClienteDto> sugestoesVinculo = new();
+    private CancellationTokenSource? _ctsVinculo;
+
+    // Mensagem
+    private string mensagem = "";
+    private string erro = "";
+    private bool enviando;
+
+    private bool ClienteDefinido => codCliente > 0 || !string.IsNullOrEmpty(novoClienteNome);
+    private string NomeClienteExibicao => codCliente > 0 ? nomeCliente : novoClienteNome;
+    private string TelefoneEnvio => !string.IsNullOrEmpty(telefoneContato) ? telefoneContato : telefoneBusca;
+    private string TelefoneEnvioFmt => !string.IsNullOrEmpty(telefoneContato) ? telefoneContatoFmt : telefoneBuscaFmt;
+    private bool TemDestino => ClienteDefinido || !string.IsNullOrEmpty(telefoneBusca);
+    private bool PodeCriarCliente => !buscando && string.IsNullOrEmpty(telefoneBusca)
+                                     && busca.Trim().Length >= 3 && ultimaBusca == busca.Trim();
+
+    private async Task BuscarAsync()
+    {
+        _ctsBusca?.Cancel();
+        var cts = _ctsBusca = new CancellationTokenSource();
+        var termo = busca.Trim();
+        erro = "";
+
+        if (termo.Length < 2)
+        {
+            sugestoes = new();
+            telefoneBusca = telefoneBuscaFmt = ultimaBusca = "";
+            oferecerNovoContato = false;
+            buscando = false;
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(350, cts.Token);            // espera parar de digitar
+            buscando = true;
+            StateHasChanged();
+            var r = await Api.NovoTicketBuscarAsync(termo);
+            if (cts.IsCancellationRequested) return;
+            sugestoes = r.Clientes;
+            telefoneBusca = r.Telefone;
+            telefoneBuscaFmt = r.TelefoneFormatado;
+            oferecerNovoContato = r.OferecerNovoContato;
+            ultimaBusca = termo;
+        }
+        catch (TaskCanceledException) { }
+        catch (ApiException ex) { erro = ex.Message; }
+        finally
+        {
+            if (!cts.IsCancellationRequested) buscando = false;
+        }
+    }
+
+    private async Task EscolherClienteAsync(MobileClienteSugestaoDto c)
+    {
+        codCliente = c.Codigo;
+        nomeCliente = c.Nome;
+        novoClienteNome = "";
+        sugestoes = new();
+        LimparContato();
+        try
+        {
+            var r = await Api.NovoTicketContatosAsync(c.Codigo, busca.Trim());
+            contatos = r.Contatos;
+            // Só um contato bate com o que foi digitado: já seleciona (igual ao HELP)
+            if (r.Filtrado && contatos.Count == 1) EscolherContato(contatos[0]);
+        }
+        catch (ApiException ex) { erro = ex.Message; }
+    }
+
+    private void CriarClienteNovo()
+    {
+        novoClienteNome = busca.Trim();
+        codCliente = 0;
+        sugestoes = new();
+        contatos = new();
+        LimparContato();
+    }
+
+    private void TrocarCliente()
+    {
+        codCliente = 0;
+        nomeCliente = novoClienteNome = "";
+        contatos = new();
+        LimparContato();
+        busca = ultimaBusca = telefoneBusca = telefoneBuscaFmt = "";
+        sugestoes = new();
+        oferecerNovoContato = false;
+    }
+
+    private void EscolherContato(MobileContatoDto ct)
+    {
+        if (telefoneContato == ct.Telefone) { LimparContato(); return; }   // toque de novo = desmarca
+        telefoneContato = ct.Telefone;
+        telefoneContatoFmt = ct.TelefoneFormatado;
+        nomeContato = ct.Nome;
+        contatoNovo = false;
+    }
+
+    private void LimparContato()
+    {
+        telefoneContato = telefoneContatoFmt = nomeContato = "";
+        contatoNovo = false;
+    }
+
+    // ── Contato novo ──
+    private void AbrirCadastroContato()
+    {
+        cadastrandoContato = true;
+        nomeContatoNovo = buscaVinculo = "";
+        sugestoesVinculo = new();
+        erro = "";
+    }
+
+    private async Task BuscarVinculoAsync()
+    {
+        _ctsVinculo?.Cancel();
+        var cts = _ctsVinculo = new CancellationTokenSource();
+        var termo = buscaVinculo.Trim();
+        if (termo.Length < 2) { sugestoesVinculo = new(); return; }
+        try
+        {
+            await Task.Delay(350, cts.Token);
+            var lista = await Api.BuscarClientesAsync(termo);
+            if (!cts.IsCancellationRequested) sugestoesVinculo = lista;
+        }
+        catch (TaskCanceledException) { }
+        catch (ApiException ex) { erro = ex.Message; }
+    }
+
+    private void VincularContato(MobileClienteDto c)
+    {
+        if (nomeContatoNovo.Trim().Length < 2) { erro = "Informe o nome do contato."; return; }
+        codCliente = c.Codigo;
+        nomeCliente = c.Nome;
+        novoClienteNome = "";
+        telefoneContato = telefoneBusca;
+        telefoneContatoFmt = telefoneBuscaFmt;
+        nomeContato = nomeContatoNovo.Trim();
+        contatoNovo = true;
+        contatos = new();
+        cadastrandoContato = false;
+        erro = "";
+    }
+
+    // ── Criar ──
+    private async Task CriarAsync()
+    {
+        erro = "";
+        if (mensagem.Trim().Length == 0) { erro = "Escreva a primeira mensagem."; return; }
+
+        enviando = true;
+        try
+        {
+            var r = await Api.CriarTicketAsync(new MobileNovoTicketRequest
+            {
+                CodCliente = codCliente,
+                NovoClienteNome = novoClienteNome,
+                Telefone = TelefoneEnvio,
+                NomeContato = nomeContato,
+                ContatoNovo = contatoNovo,
+                Mensagem = mensagem.Trim()
+            });
+            Api.UltimasConversas = null;                       // a lista recarrega com o ticket novo
+            Nav.NavigateTo($"ticket/{r.Codigo}", replace: true);   // já abre a conversa
+        }
+        catch (ApiException ex) { erro = ex.Message; }
+        finally { enviando = false; }
+    }
+
+    private void Voltar() => Nav.NavigateTo("");
+
+    public void Dispose()
+    {
+        _ctsBusca?.Cancel();
+        _ctsVinculo?.Cancel();
+    }
+}
