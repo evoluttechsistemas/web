@@ -7,11 +7,13 @@
 @inject EvolutTech.CRM.Services.MenuCRMService Service
 @inject EvolutCRM.Services.CardService CardService
 @inject EvolutCRM.Services.UserState UserState
+@inject EvolutCRM.Services.AdminService AdminService
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @layout MainLayout
 @implements IDisposable
 
+<ExigePermissao Permissoes="COMERCIAL_ACESSAR">
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
@@ -1063,11 +1065,19 @@
             </div>
 
             <div class="cm-user-filter">
-                <select @bind="UsuarioSelecionado" @bind:event="onchange">
-                    <option value="">Todos os usuários</option>
-                    @foreach (var u in UsuariosDisponiveis)
+                <select @bind="UsuarioSelecionado" @bind:event="onchange" disabled="@(!_podeVerTodosCrm)"
+                        title="@(_podeVerTodosCrm ? "" : "Seu usuário vê só o próprio funil")">
+                    @if (_podeVerTodosCrm)
                     {
-                        <option value="@u">@u</option>
+                        <option value="">Todos os usuários</option>
+                        foreach (var u in UsuariosDisponiveis)
+                        {
+                            <option value="@u">@u</option>
+                        }
+                    }
+                    else
+                    {
+                        <option value="@_usuarioSelecionado">@_usuarioSelecionado</option>
                     }
                 </select>
             </div>
@@ -1308,6 +1318,8 @@
                     Aberto="_aiaAberto"
                     OnFechar="() => _aiaAberto = false" />
 
+</ExigePermissao>
+
 @code {
     // Assistente IA do comercial sem card aberto (o sistema tem / atende?)
     private bool _aiaAberto;
@@ -1397,8 +1409,29 @@
         StateHasChanged();
     }
 
+    // COMERCIAL_VER_TODOS: escolher outro vendedor (ou "Todos"). Sem ela, o funil é sempre o do próprio usuário.
+    private bool _podeVerTodosCrm;
+    private bool _permCrmCarregada;
+
+    private async Task CarregarPermissaoCrmAsync()
+    {
+        if (_permCrmCarregada) return;
+        var u = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+        if (u.Length == 0) return;
+        try
+        {
+            _podeVerTodosCrm = (await AdminService.GetPermissoesUsuarioAsync(u)).Contains("COMERCIAL_VER_TODOS");
+            _permCrmCarregada = true;
+        }
+        catch { _podeVerTodosCrm = false; }
+    }
+
     private async Task RefreshAll()
     {
+        await CarregarPermissaoCrmAsync();
+        if (!_podeVerTodosCrm)
+            _usuarioSelecionado = (UserState.CurrentUser ?? currentUser ?? "").Trim().ToUpper();
+
         (funnelColumns, totalProducts, totalServices, totalGeneral) =
             await Service.BuscaCRM(UserState.CurrentCompanyId,
                 string.IsNullOrWhiteSpace(_usuarioSelecionado) ? null : _usuarioSelecionado);

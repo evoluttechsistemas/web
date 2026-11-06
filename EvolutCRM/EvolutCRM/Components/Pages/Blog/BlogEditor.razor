@@ -11,6 +11,8 @@
 @inject AbaService Abas
 @inject IConfiguration Config
 @inject EvolutCRM.Services.ImagemArmazenamentoService Imagens
+@inject EvolutCRM.Services.AdminService AdminService
+@inject EvolutCRM.Services.UserState UserState
 
 <style>
     * {
@@ -999,7 +1001,14 @@
     }
 </style>
 
-<div class="blog-editor-root">
+@if (_permissaoVerificada == false)
+{
+    <div style="margin:16px; padding:14px 16px; border:1px solid #fecaca; background:#fff1f2; color:#b91c1c;
+                border-radius:10px; font-weight:700; font-size:13px;">
+        🔒 Você não tem permissão para editar o blog. Nada aqui será salvo.
+    </div>
+}
+<div class="blog-editor-root" style="@(_semPermissao ? "display:none" : "")">
 
     <!-- Topbar -->
     <div class="be-topbar">
@@ -2608,8 +2617,25 @@
     private void FecharModalLink() => modalLinkAberto = false;
     private string _htmlInjetado = "";
 
+    // O blog publica no site público: editar exige BLOG_ACESSAR
+    private bool? _permissaoVerificada;
+    private bool _semPermissao => _permissaoVerificada != true;
+
     protected override async Task OnParametersSetAsync()
     {
+        if (_permissaoVerificada == null)
+        {
+            try
+            {
+                var t = 0;
+                while (!UserState.IsReady && t < 100) { await Task.Delay(50); t++; }
+                var u = UserState.CurrentUser?.Trim().ToUpperInvariant() ?? "";
+                _permissaoVerificada = u.Length > 0 && (await AdminService.GetPermissoesUsuarioAsync(u)).Contains("BLOG_ACESSAR");
+            }
+            catch { _permissaoVerificada = false; }
+        }
+        if (_semPermissao) return;
+
         if (Id == _idAnterior) return;
         _idAnterior = Id;
 
@@ -2692,6 +2718,7 @@
     [JSInvokable]
     public async Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
     {
+        if (_semPermissao) return null;
         // Print colado: grava em /uploads/blog e devolve a URL completa (o site do blog é outro domínio)
         try
         {
@@ -2798,7 +2825,7 @@
 
     private async Task Salvar()
     {
-        if (salvando) return;
+        if (salvando || _semPermissao) return;
         salvando = true;
         mensagem = "";
 
@@ -2965,6 +2992,7 @@
 
     private async Task SalvarLayout()
     {
+        if (_semPermissao) return;
         if (Id.HasValue && Id.Value > 0)
         {
             try

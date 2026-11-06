@@ -2,9 +2,11 @@
 @using EvolutCRM.Models
 @inject EvolutCRM.Services.CardService CardService
 @inject EvolutCRM.Services.UserState UserState
+@inject EvolutCRM.Services.AdminService AdminService
 @inject NavigationManager Nav
 @implements IAsyncDisposable
 
+<ExigePermissao Permissoes="COMERCIAL_ACESSAR">
 <style>
     .cards-container {
         max-width: 1400px;
@@ -267,6 +269,8 @@
     }
 </div>
 
+</ExigePermissao>
+
 @code {
     private List<CardModels> ListaCards = new();
     private bool Carregando = true;
@@ -339,7 +343,10 @@
             if (!ListaCards.Any())
                 Carregando = true;
 
-            var cards = await CardService.GetCardsAsync();
+            // Sem COMERCIAL_VER_TODOS: só os cards do próprio usuário (e os ainda sem dono)
+            var eu = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+            var verTodos = eu.Length > 0 && (await AdminService.GetPermissoesUsuarioAsync(eu)).Contains("COMERCIAL_VER_TODOS");
+            var cards = await CardService.GetCardsAsync(verTodos ? null : (eu.Length > 0 ? eu : "-"));
             var idsAtuais = cards.Select(c => c.Codigo).ToHashSet();
 
             if (_idsConhecidos.Count > 0)

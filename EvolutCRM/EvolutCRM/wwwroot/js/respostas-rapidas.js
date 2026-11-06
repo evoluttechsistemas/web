@@ -121,7 +121,7 @@
                 <div class="rr-item ${n === s.sel ? 'sel' : ''}" data-n="${n}">
                     <span class="rr-at">/${escapar(i.atalho)}</span>
                     <span class="rr-ti">${escapar(i.titulo)}</span>
-                    <span class="rr-tx">${escapar(resolver(i.texto, s.ctx))}</span>
+                    <span class="rr-tx">${i.qtdImagens ? `🖼️ ${i.qtdImagens} imagem(ns) · ` : ''}${escapar(resolver(semImagens(i.texto), s.ctx))}</span>
                 </div>`).join('') + '</div>';
         }
         html += `<div class="rr-rod"><span>↑ ↓ escolher · Enter inserir · Esc fechar</span><a data-gerenciar="1">⚙️ Gerenciar</a></div>`;
@@ -140,10 +140,22 @@
         if (selEl) selEl.scrollIntoView({ block: 'nearest' });
     }
 
+    function semImagens(t) { return (t || '').replace(/\[\[img:[A-Za-z0-9_-]+\]\]/g, ' ').replace(/\s{2,}/g, ' ').trim(); }
+
     function inserir(el, item) {
         const s = estado.get(el);
         const tk = tokenAtual(el);
         if (!s || !item || !tk) { fechar(el); return; }
+
+        // Resposta com imagens: o HELP mostra a sequência (texto, imagem, texto...) para conferir e enviar
+        if (item.qtdImagens > 0 && s.ref) {
+            el.value = el.value.slice(0, tk.inicio) + el.value.slice(tk.fim);
+            el.setSelectionRange(tk.inicio, tk.inicio);
+            fechar(el);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            try { s.ref.invokeMethodAsync('AbrirRespostaRapidaComImagens', item.codigo); } catch { }
+            return;
+        }
 
         const texto = resolver(item.texto, s.ctx);
         el.value = el.value.slice(0, tk.inicio) + texto + el.value.slice(tk.fim);
@@ -156,7 +168,175 @@
         if (s.ref) { try { s.ref.invokeMethodAsync('RegistrarUsoRespostaRapida', item.codigo); } catch { } }
     }
 
-    // itens: [{ codigo, atalho, titulo, texto }], ctx: { cliente, atendente }
+    // ════════════════════════════════════════════════════════════════
+    // Editor da tela de cadastro: texto + imagens onde o cursor estiver
+    // As imagens viram [[img:chave]] no texto, na posição em que foram coladas.
+    // ════════════════════════════════════════════════════════════════
+    const editores = {};   // id -> { ref, imgs: {chave: dataUrl}, timer }
+
+    function reduzirImagem(file, max = 1600) {
+        return new Promise((ok, erro) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                const escala = Math.min(1, max / Math.max(img.width, img.height));
+                const c = document.createElement('canvas');
+                c.width = Math.round(img.width * escala);
+                c.height = Math.round(img.height * escala);
+                const g = c.getContext('2d');
+                g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+                g.drawImage(img, 0, 0, c.width, c.height);
+                URL.revokeObjectURL(url);
+                ok(c.toDataURL('image/jpeg', 0.85));
+            };
+            img.onerror = e => { URL.revokeObjectURL(url); erro(e); };
+            img.src = url;
+        });
+    }
+
+    function criarImg(chave, src) {
+        const im = document.createElement('img');
+        im.src = src;
+        im.dataset.chave = chave;
+        im.className = 'rre-img';
+        im.contentEditable = 'false';
+        im.draggable = false;
+        return im;
+    }
+
+    // HTML do editor -> texto com [[img:chave]]
+    function serializar(box) {
+        let out = '';
+        const andar = (n, bloco) => {
+            for (const c of n.childNodes) {
+                if (c.nodeType === 3) out += c.nodeValue.replace(/\u00a0/g, ' ');
+                else if (c.nodeName === 'BR') out += '\n';
+                else if (c.nodeName === 'IMG' && c.dataset.chave) out += `[[img:${c.dataset.chave}]]`;
+                else if (c.nodeName === 'DIV' || c.nodeName === 'P') {
+                    if (out.length && !out.endsWith('\n')) out += '\n';
+                    andar(c, true);
+                    if (!out.endsWith('\n')) out += '\n';
+                }
+                else andar(c, false);
+            }
+        };
+        andar(box, false);
+        return out.replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+    }
+
+    function render(box, texto, imgs) {
+        box.innerHTML = '';
+        const partes = (texto || '').split(/(\[\[img:[A-Za-z0-9_-]+\]\])/);
+        for (const p of partes) {
+            const m = p.match(/^\[\[img:([A-Za-z0-9_-]+)\]\]$/);
+            if (m) {
+                if (imgs[m[1]]) box.appendChild(criarImg(m[1], imgs[m[1]]));
+                continue;
+            }
+            const linhas = p.split('\n');
+            linhas.forEach((l, i) => {
+                if (i > 0) box.appendChild(document.createElement('br'));
+                if (l) box.appendChild(document.createTextNode(l));
+            });
+        }
+    }
+
+    function noEditor(box) {
+        const sel = window.getSelection();
+        return sel && sel.rangeCount && box.contains(sel.getRangeAt(0).commonAncestorContainer) ? sel.getRangeAt(0) : null;
+    }
+
+    function inserirNo(box, node) {
+        let r = noEditor(box);
+        if (!r) { box.focus(); r = document.createRange(); r.selectNodeContents(box); r.collapse(false); }
+        r.deleteContents();
+        r.insertNode(node);
+        r.setStartAfter(node); r.collapse(true);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+
+    function avisar(id) {
+        const ed = editores[id]; const box = document.getElementById(id);
+        if (!ed || !box) return;
+        clearTimeout(ed.timer);
+        ed.timer = setTimeout(() => {
+            const t = serializar(box);
+            // imagens apagadas do editor saem da lista
+            ed.ref.invokeMethodAsync('EditorRespostaMudou', t).catch(() => { });
+        }, 180);
+    }
+
+    async function colarImagem(id, file) {
+        const ed = editores[id]; const box = document.getElementById(id);
+        if (!ed || !box || !file || !file.type.startsWith('image/')) return;
+        try {
+            const dataUrl = await reduzirImagem(file);
+            const chave = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+            ed.imgs[chave] = dataUrl;
+            await ed.ref.invokeMethodAsync('ImagemColadaRespostaRapida', chave, dataUrl);
+            inserirNo(box, criarImg(chave, dataUrl));
+            avisar(id);
+        } catch (e) { console.warn('[RespostasRapidas] imagem', e); }
+    }
+
+    window.rrEditorIniciar = (id, texto, imgs, dotnetRef, inputArquivoId) => {
+        const box = document.getElementById(id);
+        if (!box) return;
+        editores[id] = editores[id] || { imgs: {} };
+        const ed = editores[id];
+        ed.ref = dotnetRef;
+        ed.imgs = Object.assign({}, imgs || {});
+        render(box, texto, ed.imgs);
+
+        if (box.dataset.rre !== '1') {
+            box.dataset.rre = '1';
+            box.addEventListener('input', () => avisar(id));
+            box.addEventListener('paste', async e => {
+                const itens = e.clipboardData ? Array.from(e.clipboardData.items) : [];
+                const imgItens = itens.filter(i => i.type && i.type.startsWith('image/'));
+                e.preventDefault();
+                if (imgItens.length) {
+                    for (const it of imgItens) await colarImagem(id, it.getAsFile());
+                    return;
+                }
+                // texto colado entra sem formatação
+                const txt = e.clipboardData ? e.clipboardData.getData('text/plain') : '';
+                if (txt) document.execCommand('insertText', false, txt);
+            });
+            box.addEventListener('drop', async e => {
+                const files = e.dataTransfer ? Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')) : [];
+                if (!files.length) return;
+                e.preventDefault();
+                if (document.caretRangeFromPoint) {
+                    const r = document.caretRangeFromPoint(e.clientX, e.clientY);
+                    if (r) { const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+                }
+                for (const f of files) await colarImagem(id, f);
+            });
+            box.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); }
+            });
+        }
+
+        const inp = inputArquivoId ? document.getElementById(inputArquivoId) : null;
+        if (inp && inp.dataset.rre !== '1') {
+            inp.dataset.rre = '1';
+            inp.addEventListener('change', async () => {
+                for (const f of Array.from(inp.files || [])) await colarImagem(id, f);
+                inp.value = '';
+            });
+        }
+    };
+
+    // Variável ({cliente}...) entra onde está o cursor
+    window.rrEditorInserirTexto = (id, txt) => {
+        const box = document.getElementById(id);
+        if (!box) return;
+        inserirNo(box, document.createTextNode(txt));
+        avisar(id);
+    };
+
+    // itens: [{ codigo, atalho, titulo, texto, qtdImagens }], ctx: { cliente, atendente }
     window.rrIniciar = (textareaId, itens, ctx, dotnetRef) => {
         const el = document.getElementById(textareaId);
         if (!el) return;

@@ -61,6 +61,10 @@ builder.Services.AddSingleton<IaUsoService>();
 builder.Services.AddTransient<UsoOpenAiHandler>();
 builder.Services.ConfigureHttpClientDefaults(b => b.AddHttpMessageHandler<UsoOpenAiHandler>());
 builder.Services.AddHttpClient();
+// AtendimentoIA: responde as perguntas do painel "Assistente IA" do ticket (AtendimentoIA:Url e AtendimentoIA:Token no appsettings)
+builder.Services.AddHttpClient(AtendimentoIaClient.NomeHttpClient, client => client.Timeout = TimeSpan.FromSeconds(100))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });   // redirecionamento = erro, nao segue para o login
+builder.Services.AddSingleton<AtendimentoIaClient>();
 builder.Services.AddHttpClient("local", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["App:BaseUrl"]!);
@@ -288,6 +292,8 @@ builder.Services.AddControllers();
 // JWT configuration
 var jwt = builder.Configuration.GetSection("Jwt");
 var key = Encoding.UTF8.GetBytes(jwt["Key"]!);
+// Links assinados dos anexos dos tickets e do aviso de saída (marcar-offline)
+AssinaturaHelp.Configurar(jwt["Key"]!);
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

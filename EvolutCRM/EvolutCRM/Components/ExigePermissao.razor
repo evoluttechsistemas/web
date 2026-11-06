@@ -1,0 +1,59 @@
+﻿@* Mostra o conteúdo da tela só para quem tem as permissões pedidas (todas).
+   O menu já esconde o item; isto protege quem chega pelo endereço, por aba aberta ou por link interno.
+   Uso: <ExigePermissao Permissoes="ADMIN_ACESSAR,WHATSAPP_CONEXOES"> ...tela... </ExigePermissao> *@
+@inject AdminService AdminService
+@inject UserState UserState
+
+@if (_estado == Estado.Liberado)
+{
+    @ChildContent
+}
+else if (_estado == Estado.Negado)
+{
+    <div style="max-width:520px; margin:48px auto; padding:28px 24px; text-align:center;
+                background:#fff; border:1px solid #e2e8f0; border-radius:14px;
+                box-shadow:0 10px 26px rgba(15,23,42,.06); font-family:inherit;">
+        <div style="font-size:34px; line-height:1; margin-bottom:10px;">🔒</div>
+        <div style="font-size:16px; font-weight:800; color:#0f172a; margin-bottom:6px;">Sem permissão para esta tela</div>
+        <div style="font-size:13px; color:#64748b;">
+            Seu usuário não tem acesso a esta área. Se precisar, peça ao administrador para liberar em
+            <b>Configurações → Permissões</b>.
+        </div>
+    </div>
+}
+else
+{
+    <div style="padding:40px; text-align:center; color:#94a3b8; font-size:13px;">Carregando...</div>
+}
+
+@code {
+    /// <summary>Códigos separados por vírgula. O usuário precisa ter todos.</summary>
+    [Parameter, EditorRequired] public string Permissoes { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private enum Estado { Carregando, Liberado, Negado }
+    private Estado _estado = Estado.Carregando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tentativas = 0;
+            while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
+
+            var usuario = UserState.CurrentUser?.Trim() ?? "";
+            if (!UserState.IsReady || usuario.Length == 0) { _estado = Estado.Negado; return; }
+
+            var exigidas = (Permissoes ?? "")
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (exigidas.Length == 0) { _estado = Estado.Liberado; return; }
+
+            var minhas = await AdminService.GetPermissoesUsuarioAsync(usuario.ToUpperInvariant());
+            _estado = exigidas.All(minhas.Contains) ? Estado.Liberado : Estado.Negado;
+        }
+        catch
+        {
+            _estado = Estado.Negado;   // na dúvida, não mostra
+        }
+    }
+}

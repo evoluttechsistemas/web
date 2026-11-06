@@ -594,6 +594,24 @@ WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
                 ? nomeClienteEncontrado
                 : (contactName ?? "");
 
+            // Contato: usa o último nome que o atendente deixou num ticket deste telefone
+            // (antes todo ticket novo voltava para o nome do cliente/WhatsApp)
+            string ultimoContato = "";
+            using (var cmdContato = new SqlCommand($@"
+        SELECT TOP 1 LTRIM(RTRIM(T.UsuarioAbertura))
+        FROM TicketChamadoC T
+        WHERE T.CodEmp = @CodEmp
+          AND {limpaTelTicket} IN ({inCli})
+          AND LTRIM(RTRIM(ISNULL(T.UsuarioAbertura, ''))) <> ''
+        ORDER BY T.Codigo DESC", conn, transaction))
+            {
+                cmdContato.CommandTimeout = 10;
+                cmdContato.Parameters.AddWithValue("@CodEmp", codEmp);
+                for (int i = 0; i < variantes.Count; i++)
+                    cmdContato.Parameters.AddWithValue(pCli[i], variantes[i]);
+                ultimoContato = (await cmdContato.ExecuteScalarAsync())?.ToString()?.Trim() ?? "";
+            }
+
             using (var cmdInsere = new SqlCommand(@"
         DECLARE @NovoTicket TABLE (Codigo INT);
 
@@ -615,7 +633,7 @@ WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
             {
                 // Truncagem defensiva — espelha exatamente o schema de TicketChamadoC
                 string assuntoSeguro = (nomeParaAssunto ?? "").Trim();
-                string usuarioAberturaSeguro = assuntoSeguro;
+                string usuarioAberturaSeguro = !string.IsNullOrWhiteSpace(ultimoContato) ? ultimoContato : assuntoSeguro;
                 string telefoneSeguro = (telefoneWhatsApp ?? "").Trim();
                 string chatTipoSeguro = (chatType ?? "user").Trim();
 

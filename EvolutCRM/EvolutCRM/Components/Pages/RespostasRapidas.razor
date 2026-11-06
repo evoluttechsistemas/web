@@ -3,6 +3,8 @@
 @inject RespostaRapidaService Respostas
 @inject AdminService AdminService
 @inject UserState UserState
+@inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Respostas rápidas</PageTitle>
 
@@ -65,6 +67,20 @@
         .rrp-corpo { grid-template-columns: 1fr; }
         .rrp-linha { grid-template-columns: 1fr; }
     }
+    /* editor com imagens no meio do texto */
+    .rre { min-height: 150px; max-height: 420px; overflow: auto; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 10px 12px;
+           font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #fff; cursor: text; }
+    .rre:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+    .rre:empty::before { content: attr(data-placeholder); color: #94a3b8; }
+    .rre .rre-img { display: block; max-width: 260px; max-height: 190px; margin: 8px 0; border-radius: 8px;
+                    box-shadow: 0 2px 10px rgba(15,23,42,.14); outline: 2px solid transparent; transition: outline-color .12s; }
+    .rre .rre-img:hover { outline-color: #99f6e4; }
+    .rre-dica { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: #64748b; }
+    .rre-dica kbd { font: 700 11px 'JetBrains Mono', ui-monospace, monospace; background: #fff; border: 1px solid #cbd5e1;
+                    border-bottom-width: 2px; border-radius: 5px; padding: 1px 5px; }
+    .rre-dica label { color: #0f766e; font-weight: 700; cursor: pointer; }
+    .rrp-prev .pimg { display: block; max-width: 220px; max-height: 160px; border-radius: 8px; margin: 6px 0; }
+    .rrp-prev .ptx { white-space: pre-wrap; }
 </style>
 
 <div class="rrp">
@@ -114,7 +130,7 @@
                                 <span class="rrp-at">/@r.Atalho</span>
                                 <span class="rrp-ti">@r.Titulo@(r.Ativo ? "" : " · inativa")</span>
                                 <span class="rrp-usos" title="Vezes usada">@r.QtdUsos×</span>
-                                <span class="rrp-tx">@r.Texto</span>
+                                <span class="rrp-tx">@(r.QtdImagens > 0 ? $"🖼️ {r.QtdImagens} · " : "")@RespostaRapidaService.TextoSemImagens(r.Texto)</span>
                             </button>
                         }
                         @if (!Filtradas.Any())
@@ -145,18 +161,48 @@
 
                 <div class="rrp-campo">
                     <label for="rrp-texto">Texto</label>
-                    <textarea id="rrp-texto" placeholder="Escreva a resposta como vai para o cliente…" @bind="_edit.Texto" @bind:event="oninput"></textarea>
+                    @* Editor controlado pelo respostas-rapidas.js: o Blazor não desenha o conteúdo daqui *@
+                    <div id="rrp-editor" class="rre" contenteditable="true" @key="_editorKey"
+                         data-placeholder="Escreva a resposta como vai para o cliente… Cole prints com Ctrl+V onde quiser que apareçam."></div>
+                    <div class="rre-dica">
+                        <span>🖼️ <kbd>Ctrl</kbd> + <kbd>V</kbd> cola a imagem <b>onde está o cursor</b> (quantas quiser) · arraste para dentro ·</span>
+                        <label>escolher arquivo<input id="rrp-arquivo" type="file" accept="image/*" multiple style="display:none;" /></label>
+                        @if (QtdImagensNoTexto > 0)
+                        {
+                            <span>· @QtdImagensNoTexto imagem(ns)</span>
+                        }
+                    </div>
                     <div class="rrp-vars">
                         @foreach (var v in new[] { "{saudacao}", "{primeiro_nome}", "{cliente}", "{atendente}" })
                         {
-                            <button type="button" class="rrp-var" title="Inserir no fim do texto" @onclick="() => InserirVariavel(v)">@v</button>
+                            <button type="button" class="rrp-var" title="Inserir onde está o cursor" @onmousedown:preventDefault="true" @onclick="() => InserirVariavel(v)">@v</button>
                         }
                     </div>
                 </div>
 
                 <div class="rrp-prev">
-                    <small>Como o cliente vai ver (exemplo)</small>
-                    @(string.IsNullOrWhiteSpace(_edit.Texto) ? "—" : Exemplo(_edit.Texto))
+                    <small>Como o cliente vai receber (exemplo · uma mensagem por parte, nesta ordem)</small>
+                    @if (string.IsNullOrWhiteSpace(_edit.Texto))
+                    {
+                        <span>—</span>
+                    }
+                    else
+                    {
+                        foreach (var p in PartesPrevia())
+                        {
+                            if (p.Imagem != null)
+                            {
+                                if (_imgs.TryGetValue(p.Imagem, out var src))
+                                {
+                                    <img class="pimg" src="@src" alt="" />
+                                }
+                            }
+                            else
+                            {
+                                <div class="ptx">@Exemplo(p.Texto!)</div>
+                            }
+                        }
+                    }
                 </div>
 
                 <label class="rrp-check">
@@ -221,27 +267,100 @@
 
     private async Task CarregarAsync() => _lista = await Respostas.ListarAsync(false);
 
+    // ── Editor (texto + imagens onde o cursor estiver) ──
+    private readonly Dictionary<string, string> _imgs = new();   // chave da imagem → data URL (gravadas e novas)
+    private DotNetObjectReference<RespostasRapidas>? _ref;
+    private bool _editorPendente = true;   // o conteúdo do editor precisa ser (re)carregado pelo JS
+    private int _editorKey;
+
+    private static readonly System.Text.RegularExpressions.Regex RxImg =
+        new(@"\[\[img:([A-Za-z0-9_-]+)\]\]", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private int QtdImagensNoTexto => RxImg.Matches(_edit.Texto ?? "").Count;
+
+    private List<(string? Texto, string? Imagem)> PartesPrevia()
+    {
+        var r = new List<(string?, string?)>();
+        var t = _edit.Texto ?? "";
+        var pos = 0;
+        foreach (System.Text.RegularExpressions.Match m in RxImg.Matches(t))
+        {
+            var antes = t[pos..m.Index].Trim();
+            if (antes.Length > 0) r.Add((antes, null));
+            r.Add((null, m.Groups[1].Value));
+            pos = m.Index + m.Length;
+        }
+        var resto = t[pos..].Trim();
+        if (resto.Length > 0) r.Add((resto, null));
+        return r;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_editorPendente || !_carregado || !_pode) return;
+        _editorPendente = false;
+        try
+        {
+            _ref ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("rrEditorIniciar", "rrp-editor", _edit.Texto ?? "", _imgs, _ref, "rrp-arquivo");
+        }
+        catch { _editorPendente = true; }
+    }
+
+    [JSInvokable]
+    public async Task EditorRespostaMudou(string texto)
+    {
+        _edit.Texto = texto ?? "";
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public Task ImagemColadaRespostaRapida(string chave, string dataUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(chave) && (dataUrl ?? "").StartsWith("data:image/"))
+        {
+            _imgs[chave] = dataUrl!;
+            _edit.ImagensNovas[chave] = dataUrl!;
+        }
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _ref?.Dispose();
+
     private void Nova()
     {
         _edit = new RespostaRapidaService.RespostaRapida();
+        _imgs.Clear();
+        _editorPendente = true;
         _confirmarExclusao = false;
         _msg = null;
     }
 
-    private void Editar(RespostaRapidaService.RespostaRapida r)
+    private async Task Editar(RespostaRapidaService.RespostaRapida r)
     {
         _edit = new RespostaRapidaService.RespostaRapida
         {
-            Codigo = r.Codigo, Atalho = r.Atalho, Titulo = r.Titulo, Texto = r.Texto, Ativo = r.Ativo
+            Codigo = r.Codigo, Atalho = r.Atalho, Titulo = r.Titulo, Texto = r.Texto, Ativo = r.Ativo, QtdImagens = r.QtdImagens
         };
+        _imgs.Clear();
         _confirmarExclusao = false;
         _msg = null;
+        if (r.QtdImagens > 0)
+        {
+            try
+            {
+                foreach (var (cod, img) in await Respostas.ListarImagensAsync(r.Codigo))
+                    _imgs[cod.ToString()] = $"data:{img.Tipo};base64,{Convert.ToBase64String(img.Bytes)}";
+            }
+            catch (Exception ex) { Aviso("Não consegui carregar as imagens: " + ex.Message, true); }
+        }
+        _editorPendente = true;
     }
 
-    private void InserirVariavel(string v)
+    private async Task InserirVariavel(string v)
     {
-        var t = _edit.Texto ?? "";
-        _edit.Texto = t.Length == 0 || t.EndsWith(' ') || t.EndsWith('\n') ? t + v : t + " " + v;
+        try { await JS.InvokeVoidAsync("rrEditorInserirTexto", "rrp-editor", v); }
+        catch { _edit.Texto = (_edit.Texto ?? "") + " " + v; _editorPendente = true; }
     }
 
     private async Task Salvar()
@@ -255,7 +374,7 @@
             var atalho = RespostaRapidaService.NormalizarAtalho(_edit.Atalho);
             await CarregarAsync();
             var salva = _lista.FirstOrDefault(r => r.Atalho == atalho);
-            if (salva != null) Editar(salva);
+            if (salva != null) await Editar(salva);
             Aviso($"Salvo. No ticket, digite /{atalho}.", false);
         }
         catch (Exception ex) { Aviso("Erro ao salvar: " + ex.Message, true); }

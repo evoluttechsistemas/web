@@ -21,16 +21,14 @@ namespace EvolutCRM.Services
                                     -- 1) Responsável Offline e o cliente respondeu depois da última atividade dele
                                     (
                                         ISNULL(U.Online, 'N') = 'N'
-                                        -- Transferido para ele enquanto estava offline: fica com ele até ele entrar
-                                        AND NOT (
-                                            TicketChamadoC.DataHoraTransferencia IS NOT NULL
-                                            AND TicketChamadoC.DataHoraTransferencia > ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
-                                        )
+                                        -- Transferido para ele enquanto estava offline: fica com ele e só volta
+                                        -- para a fila quando o cliente mandar mensagem DEPOIS da transferência
                                         AND EXISTS (
                                             SELECT 1 FROM TicketChamadoD D
                                             WHERE D.CodTicketChamadoC = TicketChamadoC.Codigo
                                               AND ISNULL(D.EnvioCliente, 'N') = 'S'
                                               AND D.DataHora > ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
+                                              AND D.DataHora > ISNULL(TicketChamadoC.DataHoraTransferencia, '2000-01-01')
                                         )
                                     )
                                     OR
@@ -50,6 +48,8 @@ namespace EvolutCRM.Services
                                             WHERE D.CodTicketChamadoC = TicketChamadoC.Codigo
                                               AND ISNULL(D.EnvioCliente, 'N') = 'S'
                                               AND D.DataHora > U.DataHoraStatus
+                                              -- transferido para ele já no almoço/status: só redistribui com mensagem nova
+                                              AND D.DataHora > ISNULL(TicketChamadoC.DataHoraTransferencia, '2000-01-01')
                                         )
                                     )
                                 )
@@ -69,15 +69,8 @@ namespace EvolutCRM.Services
                                     -- 1) Responsável Offline e o cliente respondeu depois da última atividade dele
                                     (
                                         ISNULL(U.Online, 'N') = 'N'
-                                        -- Transferido para ele enquanto estava offline: fica com ele até ele entrar
-                                        AND NOT (
-                                            TicketChamadoC.DataHoraTransferencia IS NOT NULL
-                                            AND TicketChamadoC.DataHoraTransferencia > CASE
-                                                  WHEN ISNULL(U.UltimaAtividadeMobile, '2000-01-01') > ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
-                                                  THEN U.UltimaAtividadeMobile
-                                                  ELSE ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
-                                                END
-                                        )
+                                        -- Transferido para ele enquanto estava offline: fica com ele e só volta
+                                        -- para a fila quando o cliente mandar mensagem DEPOIS da transferência
                                         -- HELP Mobile aberto (atividade nos últimos 90s): o ticket continua com ele
                                         AND (U.UltimaAtividadeMobile IS NULL
                                              OR DATEDIFF(SECOND, U.UltimaAtividadeMobile, GETDATE()) > 90)
@@ -91,6 +84,7 @@ namespace EvolutCRM.Services
                                                     THEN U.UltimaAtividadeMobile
                                                     ELSE ISNULL(U.UltimaAtividadeOnline, '2000-01-01')
                                                   END
+                                              AND D.DataHora > ISNULL(TicketChamadoC.DataHoraTransferencia, '2000-01-01')
                                         )
                                     )
                                     OR
@@ -110,6 +104,8 @@ namespace EvolutCRM.Services
                                             WHERE D.CodTicketChamadoC = TicketChamadoC.Codigo
                                               AND ISNULL(D.EnvioCliente, 'N') = 'S'
                                               AND D.DataHora > U.DataHoraStatus
+                                              -- transferido para ele já no almoço/status: só redistribui com mensagem nova
+                                              AND D.DataHora > ISNULL(TicketChamadoC.DataHoraTransferencia, '2000-01-01')
                                         )
                                     )
                                 )

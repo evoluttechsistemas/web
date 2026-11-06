@@ -4,6 +4,7 @@
 @inject EvolutCRM.Services.UserState UserState
 @inject NavigationManager Nav
 @inject EvolutCRM.Abas.AbaService Abas
+@inject EvolutCRM.Services.AdminService AdminService
 @implements IDisposable
 
 @using EvolutCRM.Models
@@ -202,9 +203,12 @@
             <p>Crie tutoriais com texto, vídeos, imagens e links para compartilhar com clientes.</p>
         </div>
         <div class="docs-actions">
+            @if (_podeEditar)
+            {
             <button class="docs-btn" @onclick="NovaInterna"
                     title="Registrar como um problema foi resolvido: só a equipe e a IA veem">🔒 Nova interna</button>
             <button class="docs-btn primary" @onclick="NovaDocumentacao">Nova documentação</button>
+            }
         </div>
     </div>
 
@@ -326,11 +330,14 @@
                                             title="@(doc.Publicado == "S" && !doc.EhInterna ? "Abre o link público" : "Abre uma pré-visualização para a equipe (link válido por 12 horas)")">
                                         @(doc.Publicado == "S" && !doc.EhInterna ? "Ver" : "Pré-visualizar")
                                     </button>
+                                    @if (_podeEditar)
+                                    {
                                     <button class="docs-btn" @onclick="() => Editar(doc.Codigo)">Editar</button>
                                     <button class="docs-btn" style="color:#b91c1c; border-color:#fecaca;"
                                             @onclick="() => ExcluirAsync(doc)">
                                         Excluir
                                     </button>
+                                    }
                                 </div>
                             </td>
                         </tr>
@@ -452,9 +459,20 @@
     private string? _erro;
     private bool _abaAtiva = true;
 
+    // Ver a lista é livre para a equipe; criar, editar e excluir exige DOCUMENTACOES_EDITAR
+    private bool _podeEditar;
+
     protected override async Task OnInitializedAsync()
     {
         Abas.OnMudanca += AoMudarAba;
+        try
+        {
+            var t = 0;
+            while (!UserState.IsReady && t < 100) { await Task.Delay(50); t++; }
+            var u = UserState.CurrentUser?.Trim().ToUpperInvariant() ?? "";
+            _podeEditar = u.Length > 0 && (await AdminService.GetPermissoesUsuarioAsync(u)).Contains("DOCUMENTACOES_EDITAR");
+        }
+        catch { _podeEditar = false; }
         await CarregarAsync();
     }
 
@@ -531,6 +549,7 @@
 
     private async Task ExcluirAsync(DocumentacaoTutorialModel doc)
     {
+        if (!_podeEditar) return;
         var confirmar = await JS.InvokeAsync<bool>(
             "confirm",
             $"Deseja excluir a documentação \"{doc.Titulo}\"? Esta ação não pode ser desfeita.");

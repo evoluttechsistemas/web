@@ -9,6 +9,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
+<ExigePermissao Permissoes="ADMIN_ACESSAR,ADMIN_ADMINISTRAR_CLIENTES">
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
@@ -1993,6 +1994,8 @@
 }
 
 
+</ExigePermissao>
+
 @code {
     // ── PIX MERCADO PAGO ──
     private bool GerandoLinkPix = false;
@@ -2255,9 +2258,13 @@
 
             var usuarioLogado = UserState.CurrentUser.Trim().ToUpperInvariant();
 
+            // Mesmas permissões do menu e do app (antes bastava ADMIN_ACESSAR para dar baixa e cancelar títulos)
             PodeAcessarAdmin = await AdminService.UsuarioTemPermissaoAsync(
                 usuarioLogado,
                 "ADMIN_ACESSAR"
+            ) && await AdminService.UsuarioTemPermissaoAsync(
+                usuarioLogado,
+                "ADMIN_ADMINISTRAR_CLIENTES"
             );
 
             if (!PodeAcessarAdmin)
@@ -2531,7 +2538,7 @@
             var descricao = $"Mensalidade cliente: {nome} Títulos: {listaTitulos}";
 
             var resultado = await bxClienteService.GerarLinkPagamentoMercadoPagoAsync(
-    valor: ClienteCobrancaSelecionado.ValorTotalComJuros,
+                valor: ClienteCobrancaSelecionado.ValorTotalComJuros,
                 descricao: descricao,
                 emailPagador: config.EmailMercadoPago,
                 cpfPagador: config.CPFMercadoPago,
@@ -2593,12 +2600,12 @@
                       $"Cliente: {ClienteCobrancaSelecionado?.NomeCliente}";
 
         await LogFinanceiroService.RegistrarAsync(
-    usuario: UserState.CurrentUser?.Trim() ?? "",
-    codEmp: UserState.CurrentCompanyId,
-    nomeEmpresa: UserState.CurrentCompany,
-    tipoEvento: LogFinanceiroService.WHATSAPP_LEMBRETE,
-    detalhe: detalhe,
-    ip: null);
+        usuario: UserState.CurrentUser?.Trim() ?? "",
+        codEmp: UserState.CurrentCompanyId,
+        nomeEmpresa: UserState.CurrentCompany,
+        tipoEvento: LogFinanceiroService.WHATSAPP_LEMBRETE,
+        detalhe: detalhe,
+        ip: null);
 
         await JS.InvokeVoidAsync("open", url, "_blank");
     }

@@ -1049,9 +1049,10 @@
                 "ADMIN_ACESSAR"
             );
 
+            // Mesma permissão do item do menu ("Acesso remoto"); antes a tela pedia ADMIN_ADMINISTRAR_CLIENTES
             PodeAdministrarClientes = await AdminService.UsuarioTemPermissaoAsync(
                 usuarioLogado,
-                "ADMIN_ADMINISTRAR_CLIENTES"
+                "ADMIN_ACESSO_REMOTO"
             );
 
             if (!PodeAcessarAdmin || !PodeAdministrarClientes)

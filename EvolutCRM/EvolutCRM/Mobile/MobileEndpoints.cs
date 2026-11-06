@@ -17,6 +17,20 @@ namespace EvolutCRM.Mobile
         private static readonly HashSet<string> UsuariosAutomaticos = new(StringComparer.OrdinalIgnoreCase)
         { "", "NOVO", "WHATSAPP", "CLIENTE", "BOT", "SISTEMA", "IA", "EVOLUTTECH" };
 
+        /// <summary>Responsável atual do ticket (null se não existe).</summary>
+        private static async Task<string?> ResponsavelDoTicketAsync(HttpContext http, int idTicket, int codEmp)
+        {
+            var cs = http.RequestServices.GetRequiredService<IConfiguration>().GetConnectionString("Connection");
+            await using var con = new Microsoft.Data.SqlClient.SqlConnection(cs);
+            await con.OpenAsync();
+            await using var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+                "SELECT ISNULL(Usuario,'') FROM TicketChamadoC WHERE Codigo = @Id AND CodEmp = @CodEmp", con);
+            cmd.Parameters.AddWithValue("@Id", idTicket);
+            cmd.Parameters.AddWithValue("@CodEmp", codEmp);
+            var r = await cmd.ExecuteScalarAsync();
+            return r == null || r == DBNull.Value ? null : r.ToString()!.Trim().ToUpperInvariant();
+        }
+
         public static void MapMobileEndpoints(this WebApplication app)
         {
             // ── PÚBLICO: login ───────────────────────────────────────────────
@@ -79,6 +93,22 @@ namespace EvolutCRM.Mobile
                     http.RequestServices.GetRequiredService<UserState>().SetUser(usuario, codEmp, "");
                     http.Items[ItemUsuario] = new MobileUsuarioContexto { Usuario = usuario, CodEmp = codEmp };
 
+                    // Permissão conferida a cada pedido (antes só no login: tirar a permissão não valia até o token vencer)
+                    var admin = http.RequestServices.GetRequiredService<AdminService>();
+                    var perms = await admin.GetPermissoesUsuarioAsync(usuario);
+                    if (!perms.Contains("TICKETS_VISUALIZAR"))
+                        return Results.Json(new { mensagem = "Seu usuário não tem permissão para ver tickets." }, statusCode: 403);
+
+                    // Ticket de outro atendente: só com "Ver todos os tickets"
+                    if (!perms.Contains("TICKETS_VER_TODOS")
+                        && http.Request.Path.StartsWithSegments("/api/mobile/tickets")
+                        && int.TryParse(http.Request.RouteValues["id"]?.ToString(), out var idTicket) && idTicket > 0)
+                    {
+                        var resp = await ResponsavelDoTicketAsync(http, idTicket, codEmp);
+                        if (resp != null && resp != usuario && !UsuariosAutomaticos.Contains(resp))
+                            return Results.Json(new { mensagem = "Este ticket está com outro atendente." }, statusCode: 403);
+                    }
+
                     return await next(ctx);
                 });
 
@@ -96,12 +126,14 @@ namespace EvolutCRM.Mobile
             });
 
             // Lista de conversas
-            api.MapGet("/tickets", async (HttpContext http, MobileRepository repo, bool? todos) =>
+            api.MapGet("/tickets", async (HttpContext http, MobileRepository repo, AdminService admin, bool? todos) =>
             {
-                // Padrão: meus + fila. ?todos=true: todos os tickets em aberto (aba "Equipe").
+                // Padrão: meus + fila. ?todos=true: todos os tickets em aberto (aba "Equipe"),
+                // só para quem tem "Ver todos os tickets".
                 // As notificações não mudam: continuam só meus + fila.
                 var u = Contexto(http);
-                return Results.Ok(await repo.ListarConversasAsync(u.CodEmp, u.Usuario, todos == true));
+                var verTodos = todos == true && await admin.UsuarioTemPermissaoAsync(u.Usuario, "TICKETS_VER_TODOS");
+                return Results.Ok(await repo.ListarConversasAsync(u.CodEmp, u.Usuario, verTodos));
             });
 
             // Cabeçalho do ticket

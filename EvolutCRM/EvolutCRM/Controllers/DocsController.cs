@@ -22,7 +22,8 @@ namespace EvolutCRM.Controllers
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 3)
                 return Ok(new List<DocSearchItem>());
 
-            var docs = await _docService.SearchAsync(q.Trim(), top: 10, CancellationToken.None);
+            // Rota pública: só documentações públicas (as internas ficam só para a equipe e a IA)
+            var docs = await _docService.SearchAsync(q.Trim(), top: 10, CancellationToken.None, somentePublicas: true);
 
             var result = docs.Select(d =>
             {

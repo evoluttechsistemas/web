@@ -5,6 +5,7 @@
 @inject ComercialFluxoService Service
 @inject UserState UserState
 
+<ExigePermissao Permissoes="COMERCIAL_ACESSAR">
 <style>
     .multi-funil {
         min-height: 140px;
@@ -471,6 +472,8 @@
 
     </div>
 </div>
+
+</ExigePermissao>
 
 @code {
     private List<ComercialFluxoMensagemModel> Fluxos = new();

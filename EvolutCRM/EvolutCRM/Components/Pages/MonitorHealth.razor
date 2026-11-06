@@ -3,6 +3,7 @@
 @inject HealthMonitorService Monitor
 @implements IDisposable
 
+<ExigePermissao Permissoes="ADMIN_ACESSAR">
 <style>
     .mon-wrap {
         padding: 1rem 1.25rem;
@@ -907,6 +908,8 @@
     </div>
 
 </div>
+
+</ExigePermissao>
 
 @code {
     private HealthSnapshot snap = new(0, 0, 0, 0, new List<BaileysInstanciaInfo>());

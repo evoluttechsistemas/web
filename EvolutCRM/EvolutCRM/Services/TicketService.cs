@@ -1514,8 +1514,8 @@ ORDER BY DataHora DESC";
                 var alterado = rd.IsDBNull(18) ? "N" : rd.GetString(18);
                 var excluida = rd.IsDBNull(19) ? "N" : rd.GetString(19);
 
-                string? audioUrl = temAudio ? $"/api/tickets/audio/{codigo}?t={codigo}" : null;
-                string? imagemUrl = temImagem ? $"/api/tickets/anexo/{codigo}" : (temAudio ? null : caminhoImagem);
+                string? audioUrl = temAudio ? AssinaturaHelp.LinkAudio(codigo) : null;
+                string? imagemUrl = temImagem ? AssinaturaHelp.LinkAnexo(codigo) : (temAudio ? null : caminhoImagem);
 
                 var transcricao = rd["TranscricaoAudio"] == DBNull.Value ? "" : rd["TranscricaoAudio"].ToString();
                 var audioTranscrito = rd["AudioTranscrito"] == DBNull.Value ? "N" : rd["AudioTranscrito"].ToString();
@@ -1523,7 +1523,7 @@ ORDER BY DataHora DESC";
                 var temVideo = temVideoRaw != DBNull.Value && Convert.ToInt32(temVideoRaw) == 1;
                 var videoMimeType = rd["VideoMimeType"]?.ToString() ?? "";
                 var videoFileName = rd["VideoFileName"]?.ToString() ?? "";
-                var videoUrl = temVideo ? $"/api/tickets/video/{codigo}?t={codigo}" : "";
+                var videoUrl = temVideo ? AssinaturaHelp.LinkVideo(codigo) : "";
 
                 lista.Add(new TicketChamadoDModel
                 {
@@ -1622,8 +1622,8 @@ ORDER BY DataHora DESC";
                 var alterado = rd.IsDBNull(18) ? "N" : rd.GetString(18);
                 var excluida = rd.IsDBNull(19) ? "N" : rd.GetString(19);
 
-                string? audioUrl = temAudio ? $"/api/tickets/audio/{codigo}?t={codigo}" : null;
-                string? imagemUrl = temImagem ? $"/api/tickets/anexo/{codigo}" : (temAudio ? null : caminhoImagem);
+                string? audioUrl = temAudio ? AssinaturaHelp.LinkAudio(codigo) : null;
+                string? imagemUrl = temImagem ? AssinaturaHelp.LinkAnexo(codigo) : (temAudio ? null : caminhoImagem);
 
                 var transcricao = rd["TranscricaoAudio"] == DBNull.Value ? "" : rd["TranscricaoAudio"].ToString();
                 var audioTranscrito = rd["AudioTranscrito"] == DBNull.Value ? "N" : rd["AudioTranscrito"].ToString();
@@ -1631,7 +1631,7 @@ ORDER BY DataHora DESC";
                 var temVideo = temVideoRaw != DBNull.Value && Convert.ToInt32(temVideoRaw) == 1;
                 var videoMimeType = rd["VideoMimeType"]?.ToString() ?? "";
                 var videoFileName = rd["VideoFileName"]?.ToString() ?? "";
-                var videoUrl = temVideo ? $"/api/tickets/video/{codigo}?t={codigo}" : "";
+                var videoUrl = temVideo ? AssinaturaHelp.LinkVideo(codigo) : "";
 
                 lista.Add(new TicketChamadoDModel
                 {
@@ -2474,13 +2474,7 @@ VALUES
                         UPPER(LTRIM(RTRIM(ISNULL(Usuario,''))))=UPPER(LTRIM(RTRIM(@Usuario)))
                         OR UPPER(LTRIM(RTRIM(ISNULL(Usuario,''))))
                            IN ('','WHATSAPP','NOVO','CLIENTE')
-                        -- responsável offline ou em almoço/ausente: o aviso vai para todos
-                        OR EXISTS (SELECT 1 FROM Usuario RU
-                                LEFT JOIN UsuarioStatus RS ON RS.CodEmp = RU.CodEmp AND RS.Codigo = RU.CodUsuarioStatus
-                                WHERE RU.CodEmp = TicketChamadoC.CodEmp
-                                  AND UPPER(LTRIM(RTRIM(RU.Usuario))) = UPPER(LTRIM(RTRIM(ISNULL(TicketChamadoC.Usuario,''))))
-                                  AND (ISNULL(RU.Online,'N') <> 'S'
-                                       OR (RU.CodUsuarioStatus IS NOT NULL AND ISNULL(RS.Disponivel,'S') = 'N')))
+                        -- ticket de outro atendente nunca conta para mim (mesmo que ele esteja offline)
                       )";
 
             using var conn = new SqlConnection(_conn);

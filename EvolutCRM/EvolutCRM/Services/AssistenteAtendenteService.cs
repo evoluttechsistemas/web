@@ -36,6 +36,7 @@ public sealed class AssistenteAtendenteService
     private readonly AiTicketInsightsRepository _insights;
     private readonly EmbeddingIndexerService _indexer;
     private readonly TreinamentoClienteService _treinos;
+    private readonly AtendimentoIaClient _atendimentoIa;
 
     // Ferramenta de busca na web que a conta aceita: "web_search" (atual) ou "web_search_preview" (antiga).
     // Descoberta na primeira chamada e guardada para as próximas. "" = conta/modelo sem pesquisa na web.
@@ -65,8 +66,10 @@ public sealed class AssistenteAtendenteService
         EmbeddingIndexerService indexer,
         TreinamentoClienteService treinos,
         AiService ai,
-        DocumentacaoService docs)
+        DocumentacaoService docs,
+        AtendimentoIaClient atendimentoIa)
     {
+        _atendimentoIa = atendimentoIa;
         _ai = ai;
         _docs = docs;
         _treinos = treinos;
@@ -157,6 +160,12 @@ public sealed class AssistenteAtendenteService
             ? NormalizarEsforco(string.IsNullOrWhiteSpace(opcao.Esforco) ? pergunta.Esforco : opcao.Esforco)
             : null;
         var res = new AssistenteResultado { Modelo = esforco == null ? opcao.Id : $"{opcao.Id} ({esforco})" };
+
+        // Ticket com o AtendimentoIA configurado: a resposta vem de lá (docs, insights aprovados, parâmetros e
+        // código-fonte do ERP ficam centralizados nele). Pergunta com print continua na IA do HELP,
+        // porque a API do AtendimentoIA ainda não recebe imagens.
+        if (UsaAtendimentoIa(ticket) && pergunta.Imagens.Count == 0)
+            return await PerguntarAtendimentoIaAsync(ticket, pergunta, onTexto, onStatus, ct);
 
         if (string.IsNullOrWhiteSpace(_config["OpenAI:ApiKey"]))
         {
@@ -313,6 +322,120 @@ public sealed class AssistenteAtendenteService
             res.Erro = "Erro ao falar com a IA: " + ex.Message;
             return res;
         }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // 1b) Pergunta pelo AtendimentoIA (API externa)
+    // ═════════════════════════════════════════════════════════════════════
+
+    /// <summary>O painel do ticket usa o AtendimentoIA quando ele está configurado no appsettings.</summary>
+    public bool UsaAtendimentoIa(AssistenteContextoTicket ticket) =>
+        ticket.Origem == "ticket" && ticket.CodTicket > 0 && _atendimentoIa.Configurado;
+
+    private async Task<AssistenteResultado> PerguntarAtendimentoIaAsync(
+        AssistenteContextoTicket ticket, AssistentePergunta pergunta,
+        Func<string, Task> onTexto, Func<string, Task> onStatus, CancellationToken ct)
+    {
+        var relogio = Stopwatch.StartNew();
+        var res = new AssistenteResultado { Modelo = "AtendimentoIA" };
+        var texto = (pergunta.Texto ?? "").Trim();
+        if (texto.Length == 0)
+        {
+            res.Erro = "Digite uma pergunta.";
+            return res;
+        }
+
+        try
+        {
+            res.CodMensagemAtendente = await GravarMensagemAsync(ticket, "atendente", texto, null, false, null,
+                new List<(string, int, string)>());
+
+            // A API não lê a conversa do ticket: no começo da conversa o HELP manda o assunto e
+            // o que o cliente escreveu por último, para "não funciona" virar uma pergunta completa.
+            var novaConversa = !_atendimentoIa.TemConversa(ticket.CodTicket, ticket.Usuario);
+            var enviada = novaConversa ? MontarPerguntaAtendimentoIa(texto, ticket) : texto;
+
+            await onStatus("Consultando o AtendimentoIA (docs, casos, parâmetros e código do ERP)...");
+            var r = await _atendimentoIa.PerguntarAsync(ticket.CodTicket, ticket.Usuario, enviada, ct);
+            relogio.Stop();
+            res.DuracaoMs = (int)relogio.ElapsedMilliseconds;
+
+            if (!r.Ok)
+            {
+                res.Erro = r.Erro;
+                LogHelper.Log($"[ASSISTENTE] Ticket #{ticket.CodTicket} | {ticket.Usuario} | AtendimentoIA falhou: {r.Erro}");
+                return res;
+            }
+
+            var final = FormatarRespostaAtendimentoIa(r);
+            await onTexto(final);
+            res.Texto = final;
+            res.Ok = true;
+            res.CodMensagemIA = await GravarMensagemAsync(ticket, "ia", final, res.Fontes, false, res, null);
+
+            LogHelper.Log($"[ASSISTENTE] Ticket #{ticket.CodTicket} | {ticket.Usuario} | AtendimentoIA | {res.DuracaoMs}ms " +
+                          $"| evidencias={(r.EvidenciasSuficientes ? "ok" : "insuficientes")} | formato={r.Formato}");
+            return res;
+        }
+        catch (OperationCanceledException)
+        {
+            res.Erro = "Resposta interrompida.";
+            res.Texto = "";
+            return res;
+        }
+        catch (Exception ex)
+        {
+            LogHelper.Log("[ASSISTENTE] AtendimentoIA erro: " + ex);
+            res.Erro = "Erro ao falar com o AtendimentoIA: " + ex.Message;
+            return res;
+        }
+    }
+
+    /// <summary>Pergunta do atendente + assunto e últimas mensagens do cliente (máx. 2.000 caracteres, limite da API).</summary>
+    private static string MontarPerguntaAtendimentoIa(string texto, AssistenteContextoTicket t)
+    {
+        var pergunta = Cortar(texto, 1200);
+        var extra = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(t.Assunto)) extra.Append("Assunto do chamado: ").Append(t.Assunto!.Trim()).Append('\n');
+        if (!string.IsNullOrWhiteSpace(t.UltimasDoCliente)) extra.Append("Últimas mensagens do cliente: ").Append(t.UltimasDoCliente.Trim());
+        if (extra.Length == 0) return pergunta;
+
+        var cabeca = pergunta + "\n\n";
+        var sobra = 2000 - cabeca.Length;
+        return sobra < 80 ? pergunta : cabeca + Cortar(extra.ToString(), sobra);
+    }
+
+    /// <summary>Monta o texto do painel. O que vai para o cliente fica em &lt;resposta_cliente&gt; (botão "Usar na resposta").</summary>
+    private static string FormatarRespostaAtendimentoIa(AtendimentoIaResposta r)
+    {
+        var sb = new StringBuilder();
+        if (!r.EvidenciasSuficientes)
+            sb.Append("⚠️ **O AtendimentoIA não encontrou evidências suficientes.** Confira antes de enviar ao cliente.\n\n");
+
+        sb.Append("<resposta_cliente>\n");
+        sb.Append((r.Resposta ?? "").Trim());
+        var passos = (r.Passos ?? new()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        if (passos.Count > 0)
+        {
+            sb.Append("\n\n");
+            for (int i = 0; i < passos.Count; i++) sb.Append(i + 1).Append(". ").Append(passos[i].Trim()).Append('\n');
+        }
+        var videos = (r.Videos ?? new()).Where(v => !string.IsNullOrWhiteSpace(v.Url)).Take(3).ToList();
+        if (videos.Count > 0)
+        {
+            sb.Append(videos.Count > 1 ? "\n\nVídeos que podem ajudar:\n" : "\n\nVídeo que pode ajudar:\n");
+            foreach (var v in videos) sb.Append("- ").Append((v.Titulo ?? "Vídeo").Trim()).Append(": ").Append(v.Url!.Trim()).Append('\n');
+        }
+        if (!string.IsNullOrWhiteSpace(r.PerguntaDeAcompanhamento))
+            sb.Append("\n\n").Append(r.PerguntaDeAcompanhamento!.Trim());
+        sb.Append("\n</resposta_cliente>");
+
+        var rodape = new List<string>();
+        if (!string.IsNullOrWhiteSpace(r.AvisoDaImagem)) rodape.Add(r.AvisoDaImagem!.Trim());
+        if (!string.IsNullOrWhiteSpace(r.VersaoErp)) rodape.Add($"Versão do ERP do cliente: {r.VersaoErp}");
+        if (!string.IsNullOrWhiteSpace(r.Segmento)) rodape.Add($"Segmento: {r.Segmento}");
+        if (rodape.Count > 0) sb.Append("\n\n_").Append(string.Join(" · ", rodape)).Append('_');
+        return sb.ToString();
     }
 
     private sealed class RodadaResultado
@@ -1069,6 +1192,7 @@ SELECT CodTicketAssistenteIA, Imagem FROM dbo.TicketAssistenteIAAnexo
     /// <summary>"Nova conversa": arquiva o chat atual (continua no banco).</summary>
     public async Task NovaConversaAsync(string origem, string modo, int cod, string usuario)
     {
+        if (origem == "ticket") _atendimentoIa.EsquecerConversa(cod, usuario);
         try
         {
             await using var conn = new SqlConnection(ConnStr);

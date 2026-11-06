@@ -8,7 +8,7 @@ public class DocService
     public DocService(IConfiguration config) => _config = config;
 
     public async Task<List<(int Id, int CodEmp, string Slug, string Title, string Content)>> SearchAsync(
-        string question, int top = 3, CancellationToken ct = default)
+        string question, int top = 3, CancellationToken ct = default, bool somentePublicas = false)
     {
         var cs = _config.GetConnectionString("Connection");
 
@@ -24,7 +24,7 @@ public class DocService
         var q = ExpandQuery(question);
         LogHelper.Log("[DOCSERVICE] QUERY EXPANDIDA: " + q);
 
-        var resultado = await SearchLikeAsync(conn, q, top, ct);
+        var resultado = await SearchLikeAsync(conn, q, top, ct, somentePublicas);
         LogHelper.Log("[DOCSERVICE] ENCONTRADOS: " + resultado.Count);
 
         foreach (var d in resultado.Take(5))
@@ -93,7 +93,7 @@ public class DocService
     }
 
     private static async Task<List<(int Id, int CodEmp, string Slug, string Title, string Content)>> SearchLikeAsync(
-        SqlConnection conn, string q, int top, CancellationToken ct)
+        SqlConnection conn, string q, int top, CancellationToken ct, bool somentePublicas = false)
     {
         var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                      .Select(w => new string(w.Where(ch => char.IsLetterOrDigit(ch) || ch == '-' || ch == '_').ToArray()))
@@ -150,6 +150,7 @@ public class DocService
                     '') AS ConteudoBlocos
                 FROM DocumentacaoTutorial T
                 WHERE ISNULL(T.Publicado, 'N') = 'S'
+                  {(somentePublicas ? "AND ISNULL(T.Visibilidade, 'P') = 'P'" : "")}
             )
             SELECT TOP (@top)
                 D.Codigo,

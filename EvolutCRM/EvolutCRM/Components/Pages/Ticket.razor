@@ -3421,6 +3421,39 @@ else
                             </div>
                         }
 
+                        @if (_rrEnvio != null)
+                        {
+                            <div style="margin-bottom:8px; padding:10px 12px; background:#f0fdfa; border:1px solid #99f6e4;
+                                        border-radius:12px; font-size:12px; color:#0f172a; box-shadow:0 6px 18px rgba(15,118,110,.10);">
+                                <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                    <span style="font-weight:800; color:#0f766e;">⚡ /@_rrEnvioAtalho</span>
+                                    <span style="color:#64748b;">vai em @_rrEnvio.Count mensagem(ns), nesta ordem</span>
+                                    <span style="flex:1;"></span>
+                                    <button type="button" class="btn-remover-midia" title="Cancelar" @onclick="CancelarRespostaRapidaComImagens">✕</button>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto;">
+                                    @foreach (var parte in _rrEnvio)
+                                    {
+                                        if (parte.Imagem != null)
+                                        {
+                                            <img src="@parte.Previa" alt="" style="max-width:200px; max-height:140px; border-radius:8px; border:1px solid #ccfbf1; background:#fff;" />
+                                        }
+                                        else
+                                        {
+                                            <div style="white-space:pre-wrap; background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:6px 10px;">@parte.Texto</div>
+                                        }
+                                    }
+                                </div>
+                                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
+                                    <button type="button" class="btn-remover-midia" style="width:auto; padding:0 10px;" @onclick="CancelarRespostaRapidaComImagens" disabled="@_rrEnviando">Cancelar</button>
+                                    <button type="button" @onclick="EnviarRespostaRapidaComImagens" disabled="@_rrEnviando"
+                                            style="height:30px; padding:0 14px; border:none; border-radius:8px; background:#0f766e; color:#fff; font-weight:800; cursor:pointer;">
+                                        @(_rrEnviando ? $"Enviando {_rrEnviadas}/{_rrEnvio.Count}..." : (MensagemInterna ? "Gravar como interna" : "Enviar ao cliente"))
+                                    </button>
+                                </div>
+                            </div>
+                        }
+
                         @if (ArquivoAnotacao != null)
                         {
                             var extPrev = Path.GetExtension(NomeArquivoAnotacao).ToLowerInvariant();
@@ -4129,11 +4162,13 @@ else
     </div>
 }
 
-@if (!PodeVisualizarTickets)
+@if (!PodeVisualizarTickets || _bloqueadoPorResponsavel)
 {
     <div class="container-ticket">
         <div class="msg erro">
-            Você não tem permissão para acessar esta tela.
+            @(_bloqueadoPorResponsavel
+                ? "Este ticket está com outro atendente. Seu usuário só pode ver os próprios tickets e os que ainda não têm responsável."
+                : "Você não tem permissão para acessar esta tela.")
         </div>
     </div>
     return;
@@ -5451,6 +5486,16 @@ private bool _finalizandoViaF2ComInsight = false;
     private bool PodeVisualizarTickets = false;
     private bool PodeResponderTickets = false;
     private bool PodeAlterarStatusTicket = false;
+    private bool PodeVerTodosTickets = false;
+    private bool _bloqueadoPorResponsavel;   // sem TICKETS_VER_TODOS e o ticket é de outro atendente
+
+    /// <summary>Sem "Ver todos os tickets": só os próprios e os que ainda não têm responsável.</summary>
+    private bool TicketVisivelParaMim(TicketChamadoCModel t)
+    {
+        var resp = (t.Usuario ?? "").Trim().ToUpperInvariant();
+        var eu = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+        return resp == eu || resp is "" or "NOVO" or "WHATSAPP" or "CLIENTE" or "BOT" or "SISTEMA";
+    }
 
     bool MostrarOverlayGerandoInsight = false;
     bool MostrarModalGerarInsight = false;
@@ -5663,10 +5708,12 @@ private bool _finalizandoViaF2ComInsight = false;
         var tVisualizar = AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "TICKETS_VISUALIZAR");
         var tResponder = AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "TICKETS_RESPONDER");
         var tStatus = AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "TICKETS_ALTERAR_STATUS");
+        var tVerTodos = AdminService.UsuarioTemPermissaoAsync(usuarioLogado, "TICKETS_VER_TODOS");
         var tUsuarios = TicketService.ListarUsuariosAsync();
 
-        await Task.WhenAll(tVisualizar, tResponder, tStatus, tUsuarios);
+        await Task.WhenAll(tVisualizar, tResponder, tStatus, tVerTodos, tUsuarios);
 
+        PodeVerTodosTickets = tVerTodos.Result;
         PodeVisualizarTickets = tVisualizar.Result;
         PodeResponderTickets = tResponder.Result;
         PodeAlterarStatusTicket = tStatus.Result;
@@ -5941,6 +5988,16 @@ private bool _finalizandoViaF2ComInsight = false;
         }
 
         TicketAtual = await TicketService.BuscarChamadoAsync(id);
+
+        _bloqueadoPorResponsavel = false;
+        if (TicketAtual != null && !PodeVerTodosTickets && !TicketVisivelParaMim(TicketAtual))
+        {
+            _bloqueadoPorResponsavel = true;
+            TicketAtual = null;
+            Historico.Clear();
+            Carregando = false;
+            return;
+        }
 
         if (TicketAtual != null)
         {
@@ -7900,7 +7957,7 @@ CodTipo == 5 ? NomeWhatsApp : null
         try
         {
             var itens = (await RespostasRapidas.ListarAsync(somenteAtivas: true))
-                .Select(r => new { codigo = r.Codigo, atalho = r.Atalho, titulo = r.Titulo, texto = r.Texto })
+                .Select(r => new { codigo = r.Codigo, atalho = r.Atalho, titulo = r.Titulo, texto = r.Texto, qtdImagens = r.QtdImagens })
                 .ToList();
             var ctx = new { cliente = NomeCliente ?? "", atendente = (UserState.CurrentUser ?? "").Trim() };
             await JS.InvokeVoidAsync("rrIniciar", $"obsAnotacao_{id}", itens, ctx, _pasteRef);
@@ -7913,6 +7970,134 @@ CodTipo == 5 ? NomeWhatsApp : null
 
     [JSInvokable]
     public Task RegistrarUsoRespostaRapida(int codigo) => RespostasRapidas.RegistrarUsoAsync(codigo);
+
+    // ── Resposta rápida com imagens: texto e imagens saem em mensagens separadas, na ordem do cadastro ──
+    private sealed class ParteRespostaRapida
+    {
+        public string? Texto { get; set; }
+        public byte[]? Imagem { get; set; }
+        public string Tipo { get; set; } = "image/jpeg";
+        public string? Previa { get; set; }
+    }
+
+    private List<ParteRespostaRapida>? _rrEnvio;
+    private string _rrEnvioAtalho = "";
+    private bool _rrEnviando;
+    private int _rrEnviadas;
+
+    [JSInvokable]
+    public async Task AbrirRespostaRapidaComImagens(int codigo)
+    {
+        try
+        {
+            var r = await RespostasRapidas.BuscarAsync(codigo);
+            if (r == null) return;
+            var imagens = await RespostasRapidas.ListarImagensAsync(codigo);
+            var atendente = (UserState.CurrentUser ?? "").Trim();
+            var partes = new List<ParteRespostaRapida>();
+            foreach (var (texto, img) in RespostaRapidaService.Partes(r.Texto))
+            {
+                if (img != null)
+                {
+                    if (!imagens.TryGetValue(img.Value, out var i)) continue;
+                    partes.Add(new ParteRespostaRapida
+                    {
+                        Imagem = i.Bytes, Tipo = i.Tipo,
+                        Previa = $"data:{i.Tipo};base64,{Convert.ToBase64String(i.Bytes)}"
+                    });
+                }
+                else
+                {
+                    var t = RespostaRapidaService.ResolverVariaveis(texto!, NomeCliente, atendente).Trim();
+                    if (t.Length > 0) partes.Add(new ParteRespostaRapida { Texto = t });
+                }
+            }
+            if (partes.Count == 0) return;
+            _rrEnvio = partes;
+            _rrEnvioAtalho = r.Atalho;
+            _rrEnviadas = 0;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Ticket] Resposta rápida com imagens: {ex.Message}");
+        }
+    }
+
+    private void CancelarRespostaRapidaComImagens()
+    {
+        if (_rrEnviando) return;
+        _rrEnvio = null;
+    }
+
+    private async Task EnviarRespostaRapidaComImagens()
+    {
+        if (_rrEnvio == null || _rrEnviando || TicketAtual == null) return;
+        if (!PodeResponderTickets)
+        {
+            Sucesso = false; Mensagem = "Você não tem permissão para responder ou alterar este ticket.";
+            return;
+        }
+        if (TicketAtual.CodCliente <= 0)
+        {
+            ClienteInvalido = true; Sucesso = false; Mensagem = "Selecione um cliente antes de enviar.";
+            return;
+        }
+
+        var usuarioLogado = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(TicketAtual.Usuario) || EqUser(TicketAtual.Usuario, "NOVO"))
+            AssumirResponsavel(usuarioLogado);
+
+        _rrEnviando = true;
+        _rrEnviadas = 0;
+        StateHasChanged();
+        try
+        {
+            foreach (var parte in _rrEnvio)
+            {
+                IBrowserFile? arquivo = parte.Imagem == null
+                    ? null
+                    : new BrowserFileFromStream(new MemoryStream(parte.Imagem), parte.Tipo,
+                        "resposta" + (parte.Tipo == "image/png" ? ".png" : ".jpg"));
+
+                var r = await TicketService.SalvarAlteracoesAsync(
+                    TicketAtual, parte.Texto ?? "", UserState.CurrentUser ?? "", arquivo,
+                    mensagemInterna: MensagemInterna);
+                if (!r.Sucesso)
+                {
+                    Sucesso = false;
+                    Mensagem = $"Parou na mensagem {_rrEnviadas + 1}: {r.Mensagem}";
+                    break;
+                }
+                _rrEnviadas++;
+                StateHasChanged();
+            }
+
+            if (_rrEnviadas > 0)
+                await TicketService.SalvarCabecalhoTicketAsync(TicketAtual, UserState.CurrentUser ?? "");
+
+            if (_rrEnviadas == _rrEnvio.Count)
+            {
+                _rrEnvio = null;
+                Sucesso = true;
+            }
+            Historico = await TicketService.BuscarHistoricoAsync(id);
+            _ultimoCodigoHistorico = Historico.Count > 0 ? Historico.Max(h => h.Codigo) : 0;
+            _rolarHistoricoTopo = true;
+            _codSituacaoOriginal = TicketAtual.CodSituacao;
+            _usuarioOriginal = (TicketAtual.Usuario ?? "").Trim();
+        }
+        catch (Exception ex)
+        {
+            Sucesso = false;
+            Mensagem = "Erro ao enviar a resposta rápida: " + ex.Message;
+        }
+        finally
+        {
+            _rrEnviando = false;
+            StateHasChanged();
+        }
+    }
 
     // Depois de enviar mensagem, rola o histórico até o topo (onde fica a mais nova)
     private bool _rolarHistoricoTopo;

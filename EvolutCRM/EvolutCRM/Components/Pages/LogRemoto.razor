@@ -5,6 +5,7 @@
 @inject UserState UserState
 @inject NavigationManager Nav
 
+<ExigePermissao Permissoes="ADMIN_LOGS_VISUALIZAR,ADMIN_ACESSO_REMOTO">
 <style>
     /* reutiliza as mesmas vars do BxPagar */
     @@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
@@ -366,6 +367,8 @@
         </div>
     }
 </div>
+
+</ExigePermissao>
 
 @code {
     private List<LogRemotoDto> Logs = new();

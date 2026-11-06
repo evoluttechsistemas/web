@@ -6,6 +6,7 @@
 @implements IDisposable
 @inject UserState UserState
 
+<ExigePermissao Permissoes="ADMIN_ACESSAR">
 <style>
     .mb-wrap {
         --mb-ink: #0f172a;
@@ -1425,6 +1426,8 @@
     }
 
 </div>
+
+</ExigePermissao>
 
 @code {
 

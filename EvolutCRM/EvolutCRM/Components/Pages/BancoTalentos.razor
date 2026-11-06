@@ -6,6 +6,7 @@
 @implements IDisposable
 @rendermode InteractiveServer
 
+<ExigePermissao Permissoes="BANCO_TALENTOS_ACESSAR">
 <PageTitle>Banco de Talentos</PageTitle>
 
 <style>
@@ -625,6 +626,8 @@
         </article>
     </section>
 </div>
+
+</ExigePermissao>
 
 @code {
     private List<CandidatoTalentoModel> candidatos = new();

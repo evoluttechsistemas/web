@@ -524,7 +524,7 @@ else if (_perguntasFinalizacao.Count > 0)
     // Marca offline só ao FECHAR/recarregar o HELP.
     // (Antes também marcava ao minimizar/trocar de aba — visibilitychange — e a pessoa
     //  "piscava" offline para a equipe; quem minimiza continua online pelo heartbeat de 5s.)
-    window.registrarOfflineAoFechar = (usuario, codEmp) => {
+    window.registrarOfflineAoFechar = (usuario, codEmp, assinatura) => {
         if (!usuario) return;
 
         if (window._offlineHandler)
@@ -536,7 +536,7 @@ else if (_perguntasFinalizacao.Count > 0)
 
         window._offlineHandler = () => {
             navigator.sendBeacon('/api/usuario/marcar-offline',
-                new Blob([JSON.stringify({ usuario, codEmp: Number(codEmp) || 0 })], { type: 'application/json' }));
+                new Blob([JSON.stringify({ usuario, codEmp: Number(codEmp) || 0, assinatura: assinatura || '' })], { type: 'application/json' }));
         };
 
         window.addEventListener('beforeunload', window._offlineHandler);
@@ -795,9 +795,11 @@ else if (_perguntasFinalizacao.Count > 0)
             await AtualizarNotificacoesTicketsSemResponsavel(ticketsIniciais);
             await VerificarServidoresForaAsync();
 
+            // A assinatura impede que alguém de fora marque qualquer usuário como offline
             await JS.InvokeVoidAsync("registrarOfflineAoFechar",
                 UserState.CurrentUser?.Trim() ?? "",
-                UserState.CurrentCompanyId);
+                UserState.CurrentCompanyId,
+                AssinaturaHelp.AssinarSaida(UserState.CurrentUser ?? "", UserState.CurrentCompanyId));
 
             IniciarPolling();
         }
@@ -1029,11 +1031,10 @@ else if (_perguntasFinalizacao.Count > 0)
                     var temMensagemNova = !_ticketsNotificadosLayout.TryGetValue(t.Codigo, out var jaAvisado)
                                           || t.DataHoraUltimaGravacao > jaAvisado;
 
-                    // Responsável offline ou em almoço/ausente: avisa todos (antes só ele, que não estava lá)
-                    var responsavelFora = !ehMeuTicket && !ehTicketSemResponsavel && t.ResponsavelIndisponivel;
-
+                    // Só avisa ticket novo (sem responsável) ou do próprio atendente.
+                    // Ticket com outra pessoa não notifica, nem quando ela está offline/almoço.
                     return ehNovo
-                        && (ehMeuTicket || ehTicketSemResponsavel || responsavelFora)
+                        && (ehMeuTicket || ehTicketSemResponsavel)
                         && !(olhandoTicketAberto && t.Codigo == idTicketAberto)
                         && !gravadoPorMim
                         && !VistoDepoisDe(NotificacaoVistaNotifier.Ticket, t.Codigo, t.DataHoraUltimaGravacao)
@@ -1080,11 +1081,6 @@ else if (_perguntasFinalizacao.Count > 0)
                         : $"Ticket #{t.Codigo}";
 
                 var ultimaAnotacao = ultimasAnotacoes.GetValueOrDefault(t.Codigo, "");
-                var usuarioResp = (t.Usuario ?? "").Trim().ToUpperInvariant();
-                var avisoResponsavelFora = t.ResponsavelIndisponivel && usuarioResp != usuario
-                                           && usuarioResp is not ("" or "NOVO" or "WHATSAPP" or "CLIENTE")
-                    ? $" (responsável {usuarioResp} indisponível)"
-                    : "";
 
                 if (t.CodSituacao == 6)
                     ultimaAnotacao = $"Aguardando aprovação: {t.Assunto}";
@@ -1103,7 +1099,7 @@ else if (_perguntasFinalizacao.Count > 0)
                     item: new NotificacaoItemModel
                     {
                         Codigo = t.Codigo,
-                        Descricao = $"{nomeCliente}{avisoResponsavelFora}: {ultimaAnotacao}",
+                        Descricao = $"{nomeCliente}: {ultimaAnotacao}",
                         Url = $"/ticket/{t.Codigo}",
                         DataHora = DateTime.Now
                     });
@@ -1179,9 +1175,13 @@ else if (_perguntasFinalizacao.Count > 0)
 
             // Tickets em aberto onde a ÚLTIMA GRAVAÇÃO foi do cliente/bot (não do atendente)
             // e aguardam resposta há mais de 5 min — sem depender do campo Novo
+            // Só tickets do próprio atendente ou ainda sem responsável (ticket de outra pessoa não avisa)
+            var euSemResp = UserState.CurrentUser.Trim().ToUpperInvariant();
             var ticketsSemResposta = tickets
                 .Where(t =>
                     t.CodSituacao == 1 &&
+                    ((t.Usuario ?? "").Trim().ToUpperInvariant() is var resp &&
+                     (resp == euSemResp || resp is "" or "NOVO" or "WHATSAPP" or "CLIENTE")) &&
                     (agora - t.DataHoraUltimaGravacao).TotalMinutes >= 5 &&
                     usuariosAutomaticos.Contains((t.UsuarioUltimaGravacao ?? "").Trim()))
                 .ToList();

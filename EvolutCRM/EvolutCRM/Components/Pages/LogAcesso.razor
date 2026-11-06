@@ -4,6 +4,7 @@
 @inject NavigationManager Nav
 @using EvolutCRM.Models
 
+<ExigePermissao Permissoes="ADMIN_LOGS_VISUALIZAR">
 <style>
     .la-wrap {
         display: flex;
@@ -490,6 +491,8 @@
     </div>
 
 </div>
+
+</ExigePermissao>
 
 @code {
     private List<LogAcessoModel>? registros;

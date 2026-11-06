@@ -3,6 +3,7 @@
 @inject BlogRepository BlogRepo
 @using EvolutCRM.Blog
 
+<ExigePermissao Permissoes="BLOG_ACESSAR">
 <style>
     .blog-wrap {
         padding: 24px;
@@ -521,6 +522,8 @@
 
     </div>
 }
+
+</ExigePermissao>
 
 @code {
     private List<Post>? posts;

@@ -7,6 +7,7 @@
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
 @inject EvolutCRM.Abas.AbaService Abas
+@inject EvolutCRM.Services.AdminService AdminService
 @implements IAsyncDisposable
 
 @using Microsoft.JSInterop
@@ -1541,6 +1542,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        // Criar/editar documentação exige permissão (antes qualquer usuário editava, inclusive as públicas)
+        if (!await TemPermissaoEdicaoAsync())
+        {
+            _erroCarga = "Você não tem permissão para criar ou editar documentações.";
+            return;
+        }
+
         if (Codigo > 0)
         {
             try
@@ -1636,9 +1644,22 @@ else
 
     // ── Chamados pelo JS ────────────────────────────────────────────────────
 
+    private async Task<bool> TemPermissaoEdicaoAsync()
+    {
+        try
+        {
+            var t = 0;
+            while (!UserState.IsReady && t < 100) { await Task.Delay(50); t++; }
+            var u = UserState.CurrentUser?.Trim().ToUpperInvariant() ?? "";
+            return u.Length > 0 && (await AdminService.GetPermissoesUsuarioAsync(u)).Contains("DOCUMENTACOES_EDITAR");
+        }
+        catch { return false; }
+    }
+
     [JSInvokable]
     public async Task<string?> SalvarImagemBase64JS(string base64, string mimeType)
     {
+        if (_erroCarga != null) return null;
         // Print colado (Ctrl+V): grava em arquivo e devolve a URL. O HTML guarda só o endereço.
         try
         {

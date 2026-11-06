@@ -11,6 +11,7 @@
 @inject EvolutCRM.Services.AdminService AdminService
 @inject EvolutCRM.Services.AgendaService AgendaService
 
+<ExigePermissao Permissoes="AGENDAS_VISUALIZAR">
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
@@ -1485,10 +1486,10 @@
                     @if (PodeVerTodasAgendas)
                     {
                         <option value="TODOS">Todos</option>
-                    }
-                    @foreach (var u in usuarios)
-                    {
-                        <option value="@u.Username">@u.Username</option>
+                        foreach (var u in usuarios)
+                        {
+                            <option value="@u.Username">@u.Username</option>
+                        }
                     }
                 </select>
             </div>
@@ -2053,6 +2054,8 @@
 
 </div>
 
+</ExigePermissao>
+
 @code {
 
     private async Task EditarAgendaDoGrupo(AgendaModel ag)
@@ -2168,9 +2171,12 @@
     private List<AgendaModel> FiltrarAgendas(List<AgendaModel> origem) =>
         origem
             .Where(a =>
-                (filtroUsuario == "TODOS"
-                 || (string.IsNullOrEmpty(filtroUsuario) && (a.Usuario ?? "").ToUpper() == UserState.CurrentUser.ToUpper())
-                 || (a.Usuario ?? "").ToUpper() == filtroUsuario.ToUpper())
+                // Sem "Ver todas as agendas": só as minhas, qualquer que seja o filtro escolhido
+                (!PodeVerTodasAgendas
+                    ? (a.Usuario ?? "").ToUpper() == UserState.CurrentUser.ToUpper()
+                    : filtroUsuario == "TODOS"
+                      || (string.IsNullOrEmpty(filtroUsuario) && (a.Usuario ?? "").ToUpper() == UserState.CurrentUser.ToUpper())
+                      || (a.Usuario ?? "").ToUpper() == filtroUsuario.ToUpper())
                 &&
                 (filtroStatus == "TODOS"
                  || (filtroStatus == "PENDENTE" && a.Status != "RESOLVIDO")
@@ -2315,7 +2321,8 @@
             PodeFinalizarAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_FINALIZAR");
             PodeVerTodasAgendas = await AdminService.UsuarioTemPermissaoAsync(UserState.CurrentUser, "AGENDAS_VER_TODAS");
 
-            if (!PodeVerAgendas) { Nav.NavigateTo("/dashboard"); return; }
+            // Sem permissão: a própria tela mostra o aviso (antes mandava para o Dashboard, que a pessoa também podia não ter)
+            if (!PodeVerAgendas) return;
             if (!PodeVerTodasAgendas && filtroUsuario == "TODOS") filtroUsuario = "";
 
             DefinirSemanaAtual();

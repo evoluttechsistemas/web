@@ -10,10 +10,12 @@
 @inject EvolutCRM.Services.TicketService TicketService
 @inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
 @inject EvolutCRM.Services.UserState UserState
+@inject EvolutCRM.Services.AdminService AdminService
 @inject NavigationManager Nav
 @inject TicketNotificationState TicketNotify
 @inject IJSRuntime JS
 
+<ExigePermissao Permissoes="TICKETS_VISUALIZAR">
 <style>
     @@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
@@ -2209,6 +2211,8 @@
                     Aberto="_aiaAberto"
                     OnFechar="() => _aiaAberto = false" />
 
+</ExigePermissao>
+
 @code {
     // Assistente IA sem ticket aberto (perguntas sobre o sistema)
     private bool _aiaAberto;
@@ -2858,6 +2862,9 @@
             _tickets.AddRange(_finalizadosCache);
         }
 
+        await GarantirPermissoesQuadroAsync();
+        AplicarVisibilidade();
+
         if (UsuariosDisponiveis.Count == 0)
         {
             UsuariosDisponiveis = (await TicketService.ListarUsuariosAsync())
@@ -2995,6 +3002,7 @@
     [JSInvokable]
     public async Task HandleTicketDropped(int ticketId, int novaSituacao)
     {
+        if (!await PodeArrastarAsync()) return;
         await TicketService.AlterarSituacaoAsync(ticketId, novaSituacao, UserState.CurrentUser);
         _finalizadosCache = null;
         await CarregarTickets();
@@ -3243,6 +3251,7 @@
     {
         if (!_ticketArrastando.HasValue) return;
         var id = _ticketArrastando.Value; _ticketArrastando = null;
+        if (!await PodeArrastarAsync()) return;
         await TicketService.AlterarSituacaoAsync(id, 1, UserState.CurrentUser);
         await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
         StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
@@ -3254,6 +3263,7 @@
     {
         if (!_ticketArrastando.HasValue) return;
         var id = _ticketArrastando.Value; _ticketArrastando = null;
+        if (!await PodeArrastarAsync()) return;
         await TicketService.AlterarSituacaoAsync(id, codSituacao, UserState.CurrentUser);
         await TicketService.AlterarSetorAsync(id, codSetor, UserState.CurrentUser);
         StatusSelecionado = 1; AbaSetorSelecionada = codSetor;
@@ -3282,7 +3292,8 @@
                 if (!_tickets.Any(t => t.Codigo == ticket.Codigo))
                 {
                     var completo = await TicketService.BuscarChamadoAsync(ticket.Codigo);
-                    if (completo != null)
+                    await GarantirPermissoesQuadroAsync();
+                    if (completo != null && (_podeVerTodosTickets || TicketVisivelParaMim(completo)))
                         _tickets.Add(completo);
                 }
             }
@@ -3372,6 +3383,49 @@
         var fin = await TicketService.ListarChamadosFinalizadosAsync();
         _tickets.RemoveAll(t => t.CodSituacao == 3);
         _tickets.AddRange(fin);
+        await GarantirPermissoesQuadroAsync();
+        AplicarVisibilidade();
+    }
+
+    // ── Permissões do quadro ──
+    // TICKETS_VER_TODOS: sem ela, o quadro mostra só os meus tickets e os que ainda não têm responsável.
+    // TICKETS_ALTERAR_STATUS: arrastar o ticket para outra coluna/aba muda a situação, então também exige.
+    private bool _permsQuadroOk, _podeVerTodosTickets, _podeAlterarStatusQuadro;
+
+    private async Task GarantirPermissoesQuadroAsync()
+    {
+        if (_permsQuadroOk) return;
+        var u = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+        if (u.Length == 0) return;
+        try
+        {
+            var p = await AdminService.GetPermissoesUsuarioAsync(u);
+            _podeVerTodosTickets = p.Contains("TICKETS_VER_TODOS");
+            _podeAlterarStatusQuadro = p.Contains("TICKETS_ALTERAR_STATUS");
+            _permsQuadroOk = true;
+        }
+        catch { }
+    }
+
+    private bool TicketVisivelParaMim(TicketChamadoCModel t)
+    {
+        var resp = (t.Usuario ?? "").Trim().ToUpperInvariant();
+        var eu = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+        return resp == eu || resp is "" or "NOVO" or "WHATSAPP" or "CLIENTE" or "BOT" or "SISTEMA";
+    }
+
+    private void AplicarVisibilidade()
+    {
+        if (_podeVerTodosTickets) return;
+        _tickets.RemoveAll(t => !TicketVisivelParaMim(t));
+    }
+
+    private async Task<bool> PodeArrastarAsync()
+    {
+        await GarantirPermissoesQuadroAsync();
+        if (_podeAlterarStatusQuadro) return true;
+        try { await JS.InvokeVoidAsync("crmToast", "Você não tem permissão para alterar a situação dos tickets.", "danger"); } catch { }
+        return false;
     }
 
     /* ── FILTRO ── */

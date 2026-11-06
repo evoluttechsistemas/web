@@ -20,6 +20,11 @@ namespace EvolutCRM.Controllers
             if (string.IsNullOrWhiteSpace(dto?.Usuario))
                 return Ok();
 
+            // Só aceita o aviso assinado pelo próprio HELP (gerado na sessão do usuário)
+            if (dto.CodEmp <= 0 || !EvolutCRM.Services.AssinaturaHelp.Confere(
+                    "offline", $"{dto.Usuario.Trim().ToUpperInvariant()}|{dto.CodEmp}", dto.Assinatura))
+                return Ok();
+
             try
             {
                 using var conn = new SqlConnection(
@@ -50,5 +55,6 @@ namespace EvolutCRM.Controllers
     {
         public string Usuario { get; set; } = "";
         public int CodEmp { get; set; }
+        public string? Assinatura { get; set; }
     }
 }

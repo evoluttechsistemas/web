@@ -34,8 +34,11 @@ namespace EvolutCRM.Controllers
         }
 
         [HttpGet("anexo/{codigo:int}")]
-        public async Task<IActionResult> ObterAnexo(int codigo)
+        public async Task<IActionResult> ObterAnexo(int codigo, [FromQuery] string? s)
         {
+            // Sem login de API: o link só abre com a assinatura gerada pelo HELP (não dá para trocar o número)
+            if (!AssinaturaHelp.Confere("anexo", codigo.ToString(), s)) return NotFound();
+
             var cs = _config.GetConnectionString("Connection");
 
             await using var conn = new SqlConnection(cs);
@@ -82,8 +85,10 @@ WHERE Codigo = @Codigo
         }
 
         [HttpGet("audio/{codigo:int}")]
-        public async Task<IActionResult> ObterAudio(int codigo)
+        public async Task<IActionResult> ObterAudio(int codigo, [FromQuery] string? s)
         {
+            if (!AssinaturaHelp.Confere("audio", codigo.ToString(), s)) return NotFound();
+
             var cs = _config.GetConnectionString("Connection");
 
             await using var conn = new SqlConnection(cs);
@@ -116,8 +121,10 @@ WHERE Codigo = @Codigo
         }
 
         [HttpGet("video/{codigo:int}")]
-        public async Task<IActionResult> ObterVideo(int codigo)
+        public async Task<IActionResult> ObterVideo(int codigo, [FromQuery] string? s)
         {
+            if (!AssinaturaHelp.Confere("video", codigo.ToString(), s)) return NotFound();
+
             var cs = _config.GetConnectionString("Connection");
 
             await using var conn = new SqlConnection(cs);

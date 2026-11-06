@@ -1373,6 +1373,8 @@
                         <span class="ni-lbl">Documentação</span>
                     </button>
 
+                    @if (PodeAcessarBlog)
+                    {
                     <button class="@(GetNavItemClass("/blog"))"
                             @onclick="@(() => NavigateAndCloseMobile("/blog"))">
                         <span class="ni-icon">
@@ -1380,6 +1382,7 @@
                         </span>
                         <span class="ni-lbl">Blog</span>
                     </button>
+                    }
                 </div>
 
                 @if ((PodeAcessarDashboard) || (PodeAcessarAdmin && PodeAdministrarClientes) || (PodeAcessarAdmin && PodeVisualizarComissoes) || (PodeAcessarBancoTalentos) || (PodeAcessarAdmin && PodeVisualizarTarefas))
@@ -1678,7 +1681,7 @@
                                     }
                                 }
 
-                                @if ((PodeVisualizarChangelog) || (PodeVisualizarChangelog) || (PodeVisualizarChangelog && PodeAcessoRemoto) || (PodeVisualizarChangelog))
+                                @if (PodeVisualizarChangelog || PodeVisualizarLogs)
                                 {
                                     <div class="flyout-section-title">Registros</div>
 
@@ -1693,7 +1696,7 @@
                                         </button>
                                     }
 
-                                    @if (PodeVisualizarChangelog)
+                                    @if (PodeVisualizarLogs)
                                     {
                                         <button class="@(GetNavItemClass("/admin/log-acesso")) flyout-item"
                                                 @onclick="@(() => NavigateAndCloseMobile("/admin/log-acesso"))">
@@ -1704,7 +1707,7 @@
                                         </button>
                                     }
 
-                                    @if (PodeVisualizarChangelog && PodeAcessoRemoto)
+                                    @if (PodeVisualizarLogs && PodeAcessoRemoto)
                                     {
                                         <button class="@(GetNavItemClass("/admin/log-remoto")) flyout-item"
                                                 @onclick="@(() => NavigateAndCloseMobile("/admin/log-remoto"))">
@@ -1715,7 +1718,7 @@
                                         </button>
                                     }
 
-                                    @if (PodeVisualizarChangelog)
+                                    @if (PodeVisualizarLogs)
                                     {
                                         <button class="@(GetNavItemClass("/admin/log-financeiro")) flyout-item"
                                                 @onclick="@(() => NavigateAndCloseMobile("/admin/log-financeiro"))">
@@ -1830,11 +1833,15 @@
 @code {
 
     private PeriodicTimer? _timerBadgeComercial;
+    private PeriodicTimer? _timerPermissoes;
+    private CancellationTokenSource? _timerPermissoesCts;
     private CancellationTokenSource? _timerBadgeComercialCts;
     [Parameter] public EventCallback<NotificacaoItemModel> OnRemoverItem { get; set; }
     private bool _permissoesCarregadas = false;
     private bool mostrarLogs = false;
     private bool PodeVisualizarChangelog;
+    private bool PodeVisualizarLogs;     // logs de acesso, financeiro e remoto (antes vinham junto com o changelog)
+    private bool PodeAcessarBlog;
     private bool mostrarAdmin = false;
     private bool mostrarConfiguracoes = false;
     private PeriodicTimer? _timerAtividade;
@@ -1989,6 +1996,24 @@
         // (AtualizarChatInterno / AtualizarTickets). Os timers de 15s e 10s que ficavam aqui
         // repetiam as mesmas consultas e foram removidos — os avisos continuam no mesmo tempo.
 
+        // Permissões alteradas pelo administrador passam a valer no menu em até 1 minuto (antes só ao recarregar)
+        _timerPermissoesCts = new CancellationTokenSource();
+        _timerPermissoes = new PeriodicTimer(TimeSpan.FromSeconds(60));
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _timerPermissoes.WaitForNextTickAsync(_timerPermissoesCts.Token))
+                {
+                    if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                        continue;
+                    try { await InvokeAsync(CarregarPermissoesMenuAsync); }
+                    catch { }
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+
         _timerBadgeComercialCts = new CancellationTokenSource();
         _timerBadgeComercial = new PeriodicTimer(TimeSpan.FromSeconds(10));
         _ = Task.Run(async () =>
@@ -2111,44 +2136,23 @@
         _timerBadgeComercialCts?.Cancel();
         _timerBadgeComercial?.Dispose();
         _timerBadgeComercialCts?.Dispose();
+        _timerPermissoesCts?.Cancel(); _timerPermissoes?.Dispose(); _timerPermissoesCts?.Dispose();
         UserState.OnChange -= OnUserStateChangedMenu;
         Equipe.OnChange -= AoMudarEquipe;
     }
 
     private async Task CarregarPermissoesMenuAsync()
     {
-        PodeVisualizarChangelog = false;
-        PodeAcessarDashboard = false;
-        PodeAcessarComercial = false;
-        PodeVisualizarAgendas = false;
-        PodeVisualizarTickets = false;
-        PodeAcessarAdmin = false;
-        PodeAcessarConexoesWhatsApp = false;
-        PodeAcessarBancoTalentos = false;
-        PodeAcessarCadastros = false;
-        PodeAcessarCadastroClientes = false;
-        PodeAcessarParametrosDinamicos = false;
-        PodeAcessarTicketSetores = false;
-        PodeAcessarTicketSituacoes = false;
-        PodeAcessarTicketTipos = false;
-        PodeAcessarUsuarioStatus = false;
-        PodeAcessarReunioes = false;
-        PodeGerenciarIndicacoes = false;
-
-        PodeAdministrarClientes = false;
-        PodeGerenciarPermissoes = false;
-        PodeVisualizarTarefas = false;
-        PodeVisualizarComissoes = false;
-        PodeAcessoRemoto = false;
-
+        // Lê tudo primeiro e só depois troca os itens (recarregar a cada minuto não pisca o menu)
         int tentativas = 0;
         while (!UserState.IsReady && tentativas < 100) { await Task.Delay(50); tentativas++; }
 
         var u = UserState.CurrentUser?.Trim().ToUpper() ?? "";
-        if (string.IsNullOrWhiteSpace(u)) { await InvokeAsync(StateHasChanged); return; }
 
         // UMA query só, em vez de 13 chamadas separadas ao banco
-        var perms = await AdminService.GetPermissoesUsuarioAsync(u);
+        var perms = string.IsNullOrWhiteSpace(u)
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : await AdminService.GetPermissoesUsuarioAsync(u);
 
         PodeAcessarDashboard = perms.Contains("DASHBOARD_VISUALIZAR");
         PodeAcessarComercial = perms.Contains("COMERCIAL_ACESSAR");
@@ -2158,6 +2162,8 @@
         PodeAcessarConexoesWhatsApp = perms.Contains("WHATSAPP_CONEXOES");
         PodeAcessarBancoTalentos = perms.Contains("BANCO_TALENTOS_ACESSAR");
         PodeVisualizarChangelog = perms.Contains("ADMIN_CHANGELOG_VISUALIZAR");
+        PodeVisualizarLogs = perms.Contains("ADMIN_LOGS_VISUALIZAR");
+        PodeAcessarBlog = perms.Contains("BLOG_ACESSAR");
         PodeAcessarCadastros = perms.Contains("CADASTROS_ACESSAR");
         PodeAcessarCadastroClientes = perms.Contains("CADASTROS_CLIENTES_VISUALIZAR");
         PodeAcessarParametrosDinamicos = perms.Contains("CADASTROS_PARAMETROS_VISUALIZAR");

@@ -5,6 +5,7 @@
 @using EvolutCRM.Components.Layout
 @layout LoginLayout
 
+<ExigePermissao Permissoes="ADMIN_ACESSAR">
 <style>
     :root {
         --login-primary: #0d47a1;
@@ -513,6 +514,8 @@
         </main>
     </section>
 </div>
+
+</ExigePermissao>
 
 @code {
     private string novoUsuario = "";
