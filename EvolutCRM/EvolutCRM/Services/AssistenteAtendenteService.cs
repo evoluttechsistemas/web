@@ -162,9 +162,8 @@ public sealed class AssistenteAtendenteService
         var res = new AssistenteResultado { Modelo = esforco == null ? opcao.Id : $"{opcao.Id} ({esforco})" };
 
         // Ticket com o AtendimentoIA configurado: a resposta vem de lá (docs, insights aprovados, parâmetros e
-        // código-fonte do ERP ficam centralizados nele). Pergunta com print continua na IA do HELP,
-        // porque a API do AtendimentoIA ainda não recebe imagens.
-        if (UsaAtendimentoIa(ticket) && pergunta.Imagens.Count == 0)
+        // código-fonte do ERP ficam centralizados nele), inclusive quando a pergunta tem print.
+        if (UsaAtendimentoIa(ticket))
             return await PerguntarAtendimentoIaAsync(ticket, pergunta, onTexto, onStatus, ct);
 
         if (string.IsNullOrWhiteSpace(_config["OpenAI:ApiKey"]))
@@ -339,24 +338,39 @@ public sealed class AssistenteAtendenteService
         var relogio = Stopwatch.StartNew();
         var res = new AssistenteResultado { Modelo = "AtendimentoIA" };
         var texto = (pergunta.Texto ?? "").Trim();
-        if (texto.Length == 0)
+        if (texto.Length == 0 && pergunta.Imagens.Count == 0)
         {
-            res.Erro = "Digite uma pergunta.";
+            res.Erro = "Digite uma pergunta ou cole um print.";
             return res;
         }
+        if (texto.Length == 0) texto = "O que aparece nesta imagem e como resolvo?";
 
         try
         {
+            // Prints: os do ticket vêm do banco; os colados já chegam reduzidos. A API aceita até 2 por pergunta.
+            var imagens = new List<(AssistenteImagem Img, string DataUrl)>();
+            if (pergunta.Imagens.Count > 0) await onStatus("Preparando o print...");
+            foreach (var img in pergunta.Imagens.Take(AtendimentoIaClient.MaxImagens))
+            {
+                string? url = img.Origem == "ticket"
+                    ? await CarregarImagemDoTicketAsync(ticket.CodTicket, img.CodTicketChamadoD, 1600, ct)
+                    : img.DataUrl;
+                if (!string.IsNullOrWhiteSpace(url)) imagens.Add((img, url));
+            }
+
             res.CodMensagemAtendente = await GravarMensagemAsync(ticket, "atendente", texto, null, false, null,
-                new List<(string, int, string)>());
+                imagens.Select(i => (i.Img.Origem, i.Img.CodTicketChamadoD, i.DataUrl)).ToList());
 
             // A API não lê a conversa do ticket: no começo da conversa o HELP manda o assunto e
             // o que o cliente escreveu por último, para "não funciona" virar uma pergunta completa.
             var novaConversa = !_atendimentoIa.TemConversa(ticket.CodTicket, ticket.Usuario);
             var enviada = novaConversa ? MontarPerguntaAtendimentoIa(texto, ticket) : texto;
 
-            await onStatus("Consultando o AtendimentoIA (docs, casos, parâmetros e código do ERP)...");
-            var r = await _atendimentoIa.PerguntarAsync(ticket.CodTicket, ticket.Usuario, enviada, ct);
+            await onStatus(imagens.Count > 0
+                ? "Lendo o print e consultando o AtendimentoIA (docs, casos, parâmetros e código do ERP)..."
+                : "Consultando o AtendimentoIA (docs, casos, parâmetros e código do ERP)...");
+            var r = await _atendimentoIa.PerguntarAsync(ticket.CodTicket, ticket.Usuario, enviada, ct,
+                imagens.Select(i => i.DataUrl).ToList());
             relogio.Stop();
             res.DuracaoMs = (int)relogio.ElapsedMilliseconds;
 
@@ -391,6 +405,62 @@ public sealed class AssistenteAtendenteService
         }
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Botão "Gerar resposta IA" (ticket e card) pelo AtendimentoIA
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// <summary>Quando ligado, os botões "Gerar resposta IA" do ticket e do card usam o AtendimentoIA.</summary>
+    public bool AtendimentoIaConfigurado => _atendimentoIa.Configurado;
+
+    /// <summary>Resposta para o cliente do ticket a partir das mensagens pendentes dele (e dos prints que mandou).</summary>
+    public async Task<AtendimentoIaResposta> GerarRespostaClienteTicketAsync(int codTicket, string mensagensCliente,
+        string? assunto, IReadOnlyList<int> codigosImagens, CancellationToken ct = default)
+    {
+        var imagens = new List<string>();
+        foreach (var codD in codigosImagens.TakeLast(AtendimentoIaClient.MaxImagens))
+        {
+            var url = await CarregarImagemDoTicketAsync(codTicket, codD, 1600, ct);
+            if (!string.IsNullOrWhiteSpace(url)) imagens.Add(url);
+        }
+        return await _atendimentoIa.GerarRespostaTicketAsync(codTicket, MontarPerguntaBotao(mensagensCliente, assunto), imagens, ct);
+    }
+
+    /// <summary>Resposta para o lead do card (modo comercial do AtendimentoIA).</summary>
+    public async Task<AtendimentoIaResposta> GerarRespostaLeadCardAsync(int codCard, string mensagensLead,
+        IReadOnlyList<byte[]> imagens, CancellationToken ct = default)
+    {
+        var urls = new List<string>();
+        foreach (var bytes in imagens.TakeLast(AtendimentoIaClient.MaxImagens))
+        {
+            var url = await ImagemIA.ParaDataUrlAsync(bytes, 1600, ct);
+            if (!string.IsNullOrWhiteSpace(url)) urls.Add(url);
+        }
+        return await _atendimentoIa.GerarRespostaCardAsync(codCard, MontarPerguntaBotao(mensagensLead, null), urls, ct);
+    }
+
+    /// <summary>
+    /// Texto que vai para o campo de mensagem. Sem evidência suficiente, usa a pergunta de acompanhamento
+    /// (pede o detalhe que falta ao cliente) em vez de mandar "não encontrei" para ele.
+    /// </summary>
+    public static string TextoParaCliente(AtendimentoIaResposta r)
+    {
+        var resposta = (r.Resposta ?? "").Trim();
+        var acompanhamento = (r.PerguntaDeAcompanhamento ?? "").Trim();
+        if (!r.EvidenciasSuficientes && acompanhamento.Length > 0) return acompanhamento;
+        if (r.Formato == "fluxo" && r.Passos is { Count: > 1 } passos)
+            resposta += "\n\n" + string.Join("\n", passos.Select((p, i) => $"{i + 1}. {p.Trim()}"));
+        if (acompanhamento.Length > 0 && !resposta.Contains(acompanhamento, StringComparison.OrdinalIgnoreCase))
+            resposta += "\n\n" + acompanhamento;
+        return resposta.Trim();
+    }
+
+    private static string MontarPerguntaBotao(string mensagens, string? assunto)
+    {
+        var texto = Cortar((mensagens ?? "").Trim(), 1700);
+        if (!string.IsNullOrWhiteSpace(assunto)) texto += "\n(Assunto do chamado: " + Cortar(assunto.Trim(), 200) + ")";
+        return Cortar(texto, 2000);
+    }
+
     /// <summary>Pergunta do atendente + assunto e últimas mensagens do cliente (máx. 2.000 caracteres, limite da API).</summary>
     private static string MontarPerguntaAtendimentoIa(string texto, AssistenteContextoTicket t)
     {
@@ -411,6 +481,8 @@ public sealed class AssistenteAtendenteService
         var sb = new StringBuilder();
         if (!r.EvidenciasSuficientes)
             sb.Append("⚠️ **O AtendimentoIA não encontrou evidências suficientes.** Confira antes de enviar ao cliente.\n\n");
+        else if (r.BaseadoEmCasoAnterior)
+            sb.Append("📌 **Baseado em atendimento anterior resolvido.** Confira se vale para a versão deste cliente.\n\n");
 
         sb.Append("<resposta_cliente>\n");
         sb.Append((r.Resposta ?? "").Trim());

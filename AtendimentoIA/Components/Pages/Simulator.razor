@@ -1,6 +1,8 @@
 @page "/simulador"
 @implements IDisposable
 @inject SimulationService Simulation
+@inject PanelStore Store
+@inject AuthenticationStateProvider Authentication
 <PageTitle>Simulador de atendimento · EvolutTech IA</PageTitle>
 <div class="page-heading"><div><div class="eyebrow">PERGUNTE À BASE DO ERP</div><h1>Teste antes de atender.</h1><p>Simule uma conversa de suporte ou comercial, com contexto e fontes verificáveis.</p></div><a class="secondary" href="/configuracoes#ia">Configurações ↗</a></div>
 @if(!Simulation.IsConfigured) { <div class="notice">Cadastre a chave da OpenAI em <a href="/configuracoes#ia"><strong>Configurações → OpenAI</strong></a> para gerar respostas. A chave é diferente do token do GitHub.</div> }
@@ -39,7 +41,27 @@ else
 @if(answer.Checks is {Count:>0} checks) { <details class="answer-details"><summary>Cruzamento das fontes · visualização interna</summary>@foreach(var check in checks) { <article class="evidence"><strong>@check.Source · @check.State</strong><small>@check.Matches correspondência(s) encontrada(s)</small><p>@check.Detail</p></article> }</details> }
 @if(answer.Sources.Count>0) { <details class="answer-details"><summary>@answer.Sources.Count fonte(s) utilizada(s) · visualização interna</summary>@foreach(var source in answer.Sources) { <article class="evidence"><div class="tags"><span class="badge neutral">@source.Id · @SourceLabel(source.Kind) @(string.IsNullOrWhiteSpace(source.Module) ? "" : " · " + source.Module)</span></div><strong>@source.Title</strong><small>@source.Locator @(!string.IsNullOrWhiteSpace(source.Version)?$"· commit {source.Version[..Math.Min(8,source.Version.Length)]}":"")</small><p class="preserve-lines">@source.Text</p></article> }</details> }
 @if(answer.Warnings.Count>0) { <details class="answer-details"><summary>Limitações desta consulta</summary>@foreach(var warning in answer.Warnings) { <p>@warning</p> }</details> }
-<small class="generation-info">@answer.Model · @answer.InputTokens entrada / @answer.OutputTokens saída</small></article>
+<small class="generation-info">@answer.Model · @answer.InputTokens entrada / @answer.OutputTokens saída</small>
+<div class="answer-feedback" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.75rem">
+@if(message.Feedback is { } feedback)
+{ <span class="badge @(feedback=="ok"?"":"warning")">@(feedback=="ok"?"✓ Marcada como correta · entrou no gabarito":"✎ Correção salva como orientação validada")</span>
+  @if(feedback=="corrigida") { <button type="button" class="text-button" disabled="@busy" @onclick="() => AskAgain(message)">Perguntar de novo para conferir</button> } }
+else if(!message.Correcting)
+{ <small>Esta resposta está certa?</small><button type="button" class="secondary" disabled="@busy" @onclick="() => MarkCorrect(message)">✓ Correta</button><button type="button" class="secondary" disabled="@busy" @onclick="() => StartCorrection(message)">✗ Errada, corrigir</button>
+  @if(message.FeedbackError is { } markError) { <small class="subtle">@markError</small> } }
+</div>
+@if(message.Correcting&&message.Feedback is null)
+{ <div class="correction-form" style="margin-top:.75rem">
+    <label for="@($"fix-{message.Id}")">Resposta correta</label>
+    <textarea id="@($"fix-{message.Id}")" rows="6" maxlength="12000" @bind="message.CorrectText" @bind:event="oninput" placeholder="Escreva como a IA deveria ter respondido: o caminho, as teclas, a regra. Se o sistema não faz isso, diga também."></textarea>
+    <div class="field-row"><div><label for="@($"fix-mod-{message.Id}")">Módulo</label><input id="@($"fix-mod-{message.Id}")" @bind="message.CorrectModule" maxlength="100" placeholder="PDV, Vendas, Consumer ou Todos" /></div><div><label for="@($"fix-seg-{message.Id}")">Segmento</label><input id="@($"fix-seg-{message.Id}")" @bind="message.CorrectSegment" maxlength="100" placeholder="Todos" /></div></div>
+    <label for="@($"fix-key-{message.Id}")">Palavras que a resposta certa precisa ter (opcional, separadas por vírgula)</label><input id="@($"fix-key-{message.Id}")" @bind="message.Keywords" maxlength="500" placeholder="Ex.: Consumer, F6, cancelar" />
+    <label class="checkbox"><input type="checkbox" @bind="message.CustomerVisible" /> Pode ser usada em respostas ao cliente</label>
+    <p class="field-help">A correção fica em Orientações (dá para arquivar lá) e passa a ter prioridade nas próximas respostas sobre esse assunto, aqui e no HELP. A pergunta entra no gabarito. Não inclua senhas nem dados de clientes.</p>
+    @if(message.FeedbackError is { } feedbackError) { <div class="notice warning-notice" role="alert">@feedbackError</div> }
+    <div class="composer-footer"><button type="button" class="text-button" @onclick="() => message.Correcting=false">Cancelar</button><button type="button" class="primary" disabled="@(message.Saving||string.IsNullOrWhiteSpace(message.CorrectText))" @onclick="() => SaveCorrection(message)">@(message.Saving?"Salvando…":"Salvar correção")</button></div>
+  </div> }
+</article>
 }
 @if(message.Error is { } error) { <div class="notice warning-notice" role="alert">@error</div> }
 }
@@ -64,7 +86,7 @@ else
         if(busy) return;
         var key=$"{mode}|{ticketId}|{crmId}|{segment}|{includeHistory}";
         if(contextKey!=key) { messages.Clear(); turns.Clear(); contextKey=key; }
-        var text=question.Text.Trim(); var message=new ChatMessage(text); messages.Add(message); busy=true;
+        var text=question.Text.Trim(); var message=new ChatMessage(text) { Mode=mode }; messages.Add(message); busy=true;
         cancellation=new CancellationTokenSource(TimeSpan.FromMinutes(3));
         try
         {
@@ -79,6 +101,55 @@ else
         { message.Error="Não foi possível carregar a configuração protegida. Confira o usuário do aplicativo e as permissões de armazenamento."; }
         finally { cancellation.Dispose(); cancellation=null; busy=false; }
     }
+    // ── Avaliação da resposta: correta entra no gabarito; errada vira orientação validada ──
+    private async Task MarkCorrect(ChatMessage message)
+    {
+        message.FeedbackError=null;
+        try { await AddToGabaritoAsync(message,""); message.Feedback="ok"; }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { message.FeedbackError="Não foi possível gravar no gabarito."; }
+    }
+    private void StartCorrection(ChatMessage message)
+    {
+        message.Correcting=true; message.FeedbackError=null;
+        var module=KnowledgeSearch.ModuleOf(message.Question);
+        message.CorrectModule=module.Length>0?module:"Todos";
+        message.CorrectSegment="Todos";
+        message.CustomerVisible=message.Mode!=SimulationMode.Technician;
+    }
+    private async Task SaveCorrection(ChatMessage message)
+    {
+        if(string.IsNullOrWhiteSpace(message.CorrectText)) return;
+        message.Saving=true; message.FeedbackError=null;
+        try
+        {
+            var auth=await Authentication.GetAuthenticationStateAsync();
+            var title=message.Question.Length>145?message.Question[..145]+"…":message.Question;
+            await Store.SaveGuidanceAsync(new GuidanceInput
+            {
+                Title="Correção: "+title,
+                Segment=string.IsNullOrWhiteSpace(message.CorrectSegment)?"Todos":message.CorrectSegment.Trim(),
+                Module=string.IsNullOrWhiteSpace(message.CorrectModule)?"Todos":message.CorrectModule.Trim(),
+                Content=message.CorrectText.Trim(),
+                CustomerVisible=message.CustomerVisible
+            },auth.User.Identity?.Name??"Administrador");
+            await AddToGabaritoAsync(message,message.Keywords);
+            message.Correcting=false; message.Feedback="corrigida";
+        }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or ValidationException or System.Text.Json.JsonException)
+        { message.FeedbackError="Não foi possível salvar a correção. Confira os campos e o armazenamento."; }
+        finally { message.Saving=false; }
+    }
+    private async Task AddToGabaritoAsync(ChatMessage message,string expected)
+    {
+        var items=await KnowledgeQuality.GetGabaritoAsync(Store);
+        var itemMode=message.Mode==SimulationMode.Commercial?"Commercial":"CustomerSupport";
+        expected=(expected??"").Trim(); if(expected.Length>500) expected=expected[..500];
+        var index=items.FindIndex(i=>i.Mode==itemMode&&i.Question.Equals(message.Question,StringComparison.OrdinalIgnoreCase));
+        var item=new GabaritoItem(index>=0?items[index].Id:Guid.NewGuid(),message.Question,expected,itemMode);
+        if(index>=0) items[index]=item; else items.Add(item);
+        await KnowledgeQuality.SaveGabaritoAsync(Store,items);
+    }
+    private async Task AskAgain(ChatMessage message) { question.Text=message.Question; await Send(); }
     private void Clear() { messages.Clear(); turns.Clear(); contextKey=""; question=new(); }
     private void Cancel()=>cancellation?.Cancel();
     private async Task Clarify() { question.Text="Ainda não entendi.";await Send(); }
@@ -87,5 +158,14 @@ else
     private static string SourceLabel(string kind)=>kind switch { "code"=>"Código","interface"=>"Interface e atalhos","resolved-case"=>"Solução revisada de atendimento finalizado","parameter"=>"Parâmetro","guidance"=>"Orientação","documentation"=>"Documentação","crm-history"=>"Histórico comercial","history"=>"Histórico do suporte",_=>"Histórico de IA" };
     public void Dispose()=>cancellation?.Cancel();
     private sealed class QuestionInput { [Required(ErrorMessage="Digite uma pergunta."),StringLength(2000)] public string Text {get;set;}=""; }
-    private sealed class ChatMessage(string text) { public string Question {get;}=text; public SimulationAnswer? Answer {get;set;} public string? Error {get;set;} }
+    private sealed class ChatMessage(string text)
+    {
+        public Guid Id {get;}=Guid.NewGuid();
+        public string Question {get;}=text; public SimulationAnswer? Answer {get;set;} public string? Error {get;set;}
+        public SimulationMode Mode {get;set;}
+        // Avaliação: null = sem avaliação, "ok" = correta, "corrigida" = correção salva
+        public string? Feedback {get;set;} public string? FeedbackError {get;set;}
+        public bool Correcting {get;set;} public bool Saving {get;set;} public bool CustomerVisible {get;set;}=true;
+        public string CorrectText {get;set;}=""; public string CorrectModule {get;set;}="Todos"; public string CorrectSegment {get;set;}="Todos"; public string Keywords {get;set;}="";
+    }
 }

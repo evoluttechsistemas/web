@@ -738,6 +738,10 @@ else if (_perguntasFinalizacao.Count > 0)
 
     private async Task AbrirNotificacaoPainel(NotificacaoPainelModel n)
     {
+        // Tickets: clicar no card só leva para a lista; o aviso de cada ticket sai quando o ticket é aberto
+        if (n.Chave == "GRUPO_TICKET" || n.Chave == "GRUPO_TICKET_SEM_RESP")
+            return;
+
         await RemoverNotificacaoPainel(n.Chave);
     }
 
@@ -1865,12 +1869,7 @@ else if (_perguntasFinalizacao.Count > 0)
                 VistaNotifier.MarcarVisto(UserState.CurrentCompanyId, NotificacaoVistaNotifier.Ticket, codigo);
             }
         }
-        else if (rotaAtual == "tickets")
-        {
-            _notificacoesPainel = _notificacoesPainel
-                .Where(x => x.Chave != "GRUPO_TICKET" && x.Chave != "GRUPO_TICKET_SEM_RESP")
-                .ToList();
-        }
+        // Lista de tickets (/tickets) NÃO tira os avisos: cada ticket só sai quando ele mesmo é aberto
         else if (rotaAtual.StartsWith("card/"))
         {
             var partes = rotaAtual.Split('/');

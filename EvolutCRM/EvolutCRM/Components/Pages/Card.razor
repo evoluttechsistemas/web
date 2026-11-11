@@ -10,6 +10,7 @@
 @inject AdminService AdminService
 @inject NavigationManager Nav
 @inject EvolutCRM.Services.AiService AiSvc
+@inject EvolutCRM.Services.AssistenteAtendenteService AssistenteIA
 @inject IJSRuntime JS
 @inject EvolutCRM.Services.AgendaService AgendaService
 @inject EvolutCRM.Services.HealthMonitorService HealthMonitor
@@ -4662,6 +4663,45 @@ textarea[id^="obsAnotacao_"] {
 
                 return $"[{x.DataHora:dd/MM HH:mm}] {autor}: {texto}";
             }));
+
+            // AtendimentoIA configurado: resposta no modo comercial (funcionalidades comprovadas, sem preços inventados),
+            // a partir do que o lead mandou depois da última resposta da equipe (e dos prints dele).
+            if (AssistenteIA.AtendimentoIaConfigurado && cardModel.Codigo > 0)
+            {
+                var todas = (cardModel.Anotacoes ?? new List<AnotacaoModel>())
+                    .Where(x => x.MensagemExcluida != "S" && !EhInterna(x))
+                    .OrderBy(x => x.DataHora).ToList();
+                var ultimaEquipe = todas.LastOrDefault(x => x.EnvioCliente != "S"
+                    && (!string.IsNullOrWhiteSpace(x.Texto) || !string.IsNullOrWhiteSpace(x.TranscricaoAudio)));
+                var pendentesLead = todas.Skip(ultimaEquipe == null ? 0 : todas.IndexOf(ultimaEquipe) + 1)
+                    .Where(x => x.EnvioCliente == "S").TakeLast(8).ToList();
+                var textoLead = string.Join("\n", pendentesLead
+                    .Select(x => !string.IsNullOrWhiteSpace(x.Texto) ? x.Texto.Trim()
+                        : !string.IsNullOrWhiteSpace(x.TranscricaoAudio) ? "[Áudio] " + x.TranscricaoAudio.Trim() : "")
+                    .Where(t => t.Length > 0));
+                if (string.IsNullOrWhiteSpace(textoLead)) textoLead = pergunta.Trim();
+                var printsLead = pendentesLead.Where(EvolutCRM.Services.AssistenteAtendenteService.EhImagemDoCard)
+                    .Select(x => x.ImagemBytes!).TakeLast(2).ToList();
+
+                var rIa = await AssistenteIA.GerarRespostaLeadCardAsync(cardModel.Codigo, textoLead, printsLead);
+                if (!rIa.Ok)
+                {
+                    _aiErro = rIa.Erro;
+                    return;
+                }
+                SugestaoIA = EvolutCRM.Services.AssistenteAtendenteService.TextoParaCliente(rIa);
+                if (string.IsNullOrWhiteSpace(SugestaoIA))
+                {
+                    _aiErro = "O AtendimentoIA retornou vazio.";
+                    return;
+                }
+                await DefinirTextoCampo(SugestaoIA);
+                if (!rIa.EvidenciasSuficientes)
+                    _aiErro = "⚠️ O AtendimentoIA não encontrou evidências suficientes: a sugestão pede mais detalhes ao lead. Revise antes de enviar.";
+                else if (rIa.BaseadoEmCasoAnterior)
+                    _aiErro = "📌 Sugestão baseada em atendimento anterior resolvido. Confira antes de enviar.";
+                return;
+            }
 
             // Chama o serviço direto (o endpoint /api/help/suggest agora exige login)
             SugestaoIA = (await AiSvc.AskAsync(pergunta, contexto))?.Trim() ?? "";

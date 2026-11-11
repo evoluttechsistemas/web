@@ -45,6 +45,27 @@ public sealed class SupportContextService(SecretStore secrets, IConfiguration co
         while (await reader.ReadAsync(token)) versions.Add(Text(reader,0));
         return context with { Version = ErpVersion.Latest(versions) };
     }
+    // Últimas mensagens DESTE chamado (sem notas internas), só para entender o assunto antes da busca.
+    public const string ConversationQuery = """
+        SELECT TOP (8) ISNULL(d.EnvioCliente,'N'),LEFT(d.Anotacao,600)
+        FROM dbo.TicketChamadoD d
+        JOIN dbo.TicketChamadoC h ON h.Codigo=d.CodTicketChamadoC AND h.CodEmp=d.CodEmp
+        WHERE h.Codigo=@TicketId AND h.CodEmp=@CompanyId AND ISNULL(d.Interno,'N')<>'S'
+          AND NULLIF(LTRIM(RTRIM(CAST(d.Anotacao AS nvarchar(600)))),'') IS NOT NULL
+        ORDER BY d.Codigo DESC;
+        """;
+    public async Task<string> GetRecentConversationAsync(int ticketId, CancellationToken token = default)
+    {
+        if (ticketId <= 0) throw new ArgumentOutOfRangeException(nameof(ticketId));
+        await using var connection = await OpenAsync(token);
+        await using var command = Command(ConversationQuery, connection, ticketId);
+        await using var reader = await command.ExecuteReaderAsync(token);
+        var lines = new List<string>();
+        while (await reader.ReadAsync(token))
+            lines.Add((Text(reader, 0) == "S" ? "Cliente: " : "Atendente: ") + SensitiveText.Redact(Text(reader, 1)));
+        lines.Reverse();
+        return string.Join("\n", lines);
+    }
     public async Task<SupportHistory> GetHistoryAsync(int ticketId, int? beforeId = null, CancellationToken token = default)
     {
         if (ticketId <= 0) throw new ArgumentOutOfRangeException(nameof(ticketId));

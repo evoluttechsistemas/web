@@ -1331,7 +1331,7 @@
                     <div class="commission-main-card">
                         <span>Total selecionado (c/ juros)</span>
                         <strong>@TotalSelecionadoComJuros.ToString("C")</strong>
-                        <small>A partir do 3º dia de atraso: multa de 2% + juros de 2% ao dia</small>
+                        <small>A partir do 3º dia de atraso: multa de 2% + juros de 2% ao mês proporcional por dia, juros sobre juros</small>
                     </div>
                 </div>
             }
@@ -2431,7 +2431,7 @@
         sb.AppendLine();
 
         foreach (var t in TitulosCobranca)
-            sb.AppendLine($"Valor: {t.Valor:C} + multa {t.ValorMulta:C} + juros {t.ValorJuros:C} = {t.ValorComJuros:C} | " +
+            sb.AppendLine($"Valor: {t.ValorComJuros:C} | " +
               $"Vencimento: {t.DataVencimento:dd/MM/yyyy} | {t.DiasAtraso} dia(s) em atraso");
 
         sb.AppendLine();

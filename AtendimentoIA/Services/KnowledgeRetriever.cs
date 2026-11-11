@@ -38,7 +38,7 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
             AddContextParameters(contextCommand,crmId);
             await using (var reader = await contextCommand.ExecuteReaderAsync(token))
             {
-                if (!await reader.ReadAsync(token)) throw new SimulationException("Card comercial não encontrado para a empresa configurada.");
+                if (!await reader.ReadAsync(token)) throw new CrmCardNotFoundException();
                 var knownSegment = Text(reader,0);
                 if (!string.IsNullOrWhiteSpace(knownSegment)) segment=ExternalText.Clean(knownSegment,100);
             }
@@ -53,17 +53,20 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
         checks.Add(new("Orientações cadastradas","consultadas",candidates.Count(s=>s.Kind=="guidance"&&(request.Mode==SimulationMode.Technician||s.CustomerSafe)),"Orientações do segmento e do público selecionados; relevância e módulo são filtrados antes da resposta."));
 
         var terms = KnowledgeSearch.Terms(searchQuestion);
-        if (secrets.HasSql && terms.Length > 0)
+        // Raiz e sinônimos do ERP (padrão + os cadastrados no painel em Vocabulário).
+        var vocabulary = await ErpVocabulary.LoadAsync(store);
+        var groups = KnowledgeSearch.SearchGroups(searchQuestion, vocabulary);
+        if (secrets.HasSql && groups.Count > 0)
         {
             try
             {
                 await using var connection = await OpenAsync(token);
-                candidates.AddRange(await ReadSharedKnowledgeAsync(connection,terms,token));
+                candidates.AddRange(await ReadSharedKnowledgeAsync(connection,groups,token));
                 checks.Add(new("Documentação","consultada",candidates.Count(s=>s.Kind=="documentation"&&(request.Mode==SimulationMode.Technician||s.CustomerSafe)),"Documentos filtrados por empresa e visibilidade; documentos internos não autorizados para o cliente são excluídos da resposta externa."));
                 checks.Add(new("Parâmetros do banco","consultados",candidates.Count(s=>s.Kind=="parameter"),"Nome, grupo e descrição; valores efetivos do cliente não foram consultados."));
                 if(request.Mode!=SimulationMode.Commercial)
                 {
-                    var related=await ResolvedCaseSearch.ReadAsync(connection,support.CompanyId,configuration.GetValue<int>("Support:ClosedSituation",3),searchQuestion,segment,token);
+                    var related=await ResolvedCaseSearch.ReadAsync(connection,support.CompanyId,configuration.GetValue<int>("Support:ClosedSituation",3),searchQuestion,segment,token,vocabulary);
                     candidates.AddRange(related);
                     checks.Add(new("Atendimentos semelhantes finalizados","consultados",related.Count,"Somente resumos de soluções confirmadas e aprovadas para revisão; nenhuma conversa de outro cliente é enviada."));
                 }
@@ -95,7 +98,7 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
         else {warnings.Add("Ainda não há uma indexação de código concluída.");checks.Add(new("Aplicação e interface","não disponíveis",0,"Não há índice concluído."));}
         if (request.Mode != SimulationMode.Technician)
             warnings.Add("Documentação marcada como interna e orientações sem permissão ao cliente não entram na resposta externa.");
-        return new(segment,version,KnowledgeSearch.Rank(candidates,searchQuestion,request.Mode),warnings,Checks:checks);
+        return new(segment,version,KnowledgeSearch.Rank(candidates,searchQuestion,request.Mode,vocabulary),warnings,Checks:checks);
     }
 
     public const string CrmHistoryQuery = """
@@ -122,37 +125,41 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
             kind=="crm-history"));
         return result;
     }
-    private async Task<List<KnowledgeEvidence>> ReadSharedKnowledgeAsync(SqlConnection connection,string[] terms,CancellationToken token)
+    private async Task<List<KnowledgeEvidence>> ReadSharedKnowledgeAsync(SqlConnection connection,IReadOnlyList<string[]> groups,CancellationToken token)
     {
         var found=new List<KnowledgeEvidence>();
         // Only fixed, verified tables and columns. Values and default values of parameters are never selected.
-        var predicate=string.Join(" OR ",terms.Take(5).Select((_,i)=>$"CONCAT(t.Titulo,' ',t.Descricao) COLLATE Latin1_General_CI_AI LIKE @Term{i}"));
+        // Ordem por relevância (título vale mais que conteúdo), não pelas mais recentes: uma documentação antiga
+        // e certa não pode ficar de fora antes de ser avaliada.
+        var filter=new SqlTermFilter(groups);
         using var docs=new SqlCommand($"""
-            SELECT TOP (25) t.Codigo,t.Titulo,LEFT(t.Descricao,2800),t.Publicado,t.Visibilidade,t.Sistema
-            FROM dbo.DocumentacaoTutorial t WHERE t.CodEmp=@CompanyId AND ({predicate}) ORDER BY t.Codigo DESC;
+            SELECT TOP (25) t.Codigo,t.Titulo,LEFT(t.Descricao,2800),t.Publicado,t.Visibilidade,t.Sistema,
+              {filter.Score(("CONCAT('',t.Titulo)",5),("CONCAT('',t.Descricao)",1))} AS Relevancia
+            FROM dbo.DocumentacaoTutorial t WHERE t.CodEmp=@CompanyId AND {filter.Matches("CONCAT('',t.Titulo)","CONCAT('',t.Descricao)")}
+            ORDER BY Relevancia DESC, t.Codigo DESC;
             """,connection) { CommandTimeout=20 };
-        AddSearchParameters(docs,terms);
+        AddSearchParameters(docs,filter);
         await using(var reader=await docs.ExecuteReaderAsync(token))
             while(await reader.ReadAsync(token)) found.Add(new("","documentation",Text(reader,1),$"DocumentacaoTutorial/{reader.GetValue(0)}",
                 ExternalText.Plain(Text(reader,2)),IsPublicDocument(Text(reader,3),Text(reader,4)),Module:KnowledgeSearch.ModuleOf(Text(reader,5))));
-        var blockPredicate=string.Join(" OR ",terms.Take(5).Select((_,i)=>$"CONCAT(t.Titulo,' ',b.Titulo,' ',b.Conteudo) COLLATE Latin1_General_CI_AI LIKE @Term{i}"));
         using var blocks=new SqlCommand($"""
-            SELECT TOP (25) b.Codigo,t.Titulo,b.Titulo,LEFT(b.Conteudo,2800),t.Publicado,t.Visibilidade,t.Sistema
+            SELECT TOP (25) b.Codigo,t.Titulo,b.Titulo,LEFT(b.Conteudo,2800),t.Publicado,t.Visibilidade,t.Sistema,
+              {filter.Score(("CONCAT(t.Titulo,' ',b.Titulo)",5),("CONCAT('',b.Conteudo)",1))} AS Relevancia
             FROM dbo.DocumentacaoTutorialBloco b JOIN dbo.DocumentacaoTutorial t
               ON t.Codigo=b.CodDocumentacaoTutorial AND t.CodEmp=b.CodEmp
-            WHERE t.CodEmp=@CompanyId AND ({blockPredicate}) ORDER BY b.Codigo DESC;
+            WHERE t.CodEmp=@CompanyId AND {filter.Matches("CONCAT(t.Titulo,' ',b.Titulo)","CONCAT('',b.Conteudo)")}
+            ORDER BY Relevancia DESC, b.Codigo DESC;
             """,connection) { CommandTimeout=20 };
-        AddSearchParameters(blocks,terms);
+        AddSearchParameters(blocks,filter);
         await using(var reader=await blocks.ExecuteReaderAsync(token))
             while(await reader.ReadAsync(token)) found.Add(new("","documentation",$"{Text(reader,1)} · {Text(reader,2)}",$"DocumentacaoTutorialBloco/{reader.GetValue(0)}",
                 ExternalText.Plain(Text(reader,3)),IsPublicDocument(Text(reader,4),Text(reader,5)),Module:KnowledgeSearch.ModuleOf(Text(reader,6))));
-        var parameterPredicate=string.Join(" OR ",terms.Take(5).Select((_,i)=>$"CONCAT(p.Parametro,' ',p.Grupo,' ',p.Descricao) COLLATE Latin1_General_CI_AI LIKE @Term{i}"));
-        var parameterScore=string.Join(" + ",terms.Take(5).Select((_,i)=>$"CASE WHEN p.Grupo COLLATE Latin1_General_CI_AI LIKE @Term{i} THEN 4 WHEN CONCAT(p.Parametro,' ',p.Descricao) COLLATE Latin1_General_CI_AI LIKE @Term{i} THEN 1 ELSE 0 END"));
         using var parameters=new SqlCommand($"""
             SELECT TOP (30) p.Codigo,p.Parametro,p.Grupo,LEFT(p.Descricao,2400)
-            FROM dbo.ParametroDinamico p WHERE p.CodEmp=@CompanyId AND ({parameterPredicate}) ORDER BY ({parameterScore}) DESC,p.Codigo;
+            FROM dbo.ParametroDinamico p WHERE p.CodEmp=@CompanyId AND {filter.Matches("CONCAT(p.Parametro,' ',p.Grupo,' ',p.Descricao)")}
+            ORDER BY {filter.Score(("CONCAT('',p.Grupo)",4),("CONCAT(p.Parametro,' ',p.Descricao)",1))} DESC,p.Codigo;
             """,connection) { CommandTimeout=20 };
-        AddSearchParameters(parameters,terms);
+        AddSearchParameters(parameters,filter);
         await using(var reader=await parameters.ExecuteReaderAsync(token))
             while(await reader.ReadAsync(token)) found.Add(new("","parameter",$"{Text(reader,1)} · {Text(reader,2)}",$"ParametroDinamico/{reader.GetValue(0)}",
                 $"Definição de parâmetro: {ExternalText.Plain(Text(reader,3))}. O valor efetivo no cliente não foi consultado.",true,Module:KnowledgeSearch.ParameterModule(Text(reader,1),Text(reader,2)),Parameter:new(Text(reader,1),Text(reader,2),ExternalText.Plain(Text(reader,3)))));
@@ -162,10 +169,10 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
         published.Equals(configuration["AI:DocumentPublishedValue"] ?? "S",StringComparison.OrdinalIgnoreCase) &&
         (configuration["AI:PublicDocumentVisibility"] ?? "").Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries)
             .Contains(visibility,StringComparer.OrdinalIgnoreCase);
-    private void AddSearchParameters(SqlCommand command,string[] terms)
+    private void AddSearchParameters(SqlCommand command,SqlTermFilter filter)
     {
         command.Parameters.Add("@CompanyId",SqlDbType.Int).Value=support.CompanyId;
-        for(var i=0;i<Math.Min(terms.Length,5);i++) command.Parameters.Add($"@Term{i}",SqlDbType.NVarChar,250).Value=$"%{terms[i]}%";
+        filter.AddParameters(command);
     }
     private void AddContextParameters(SqlCommand command,int id)
     {

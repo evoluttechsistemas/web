@@ -24,6 +24,12 @@ builder.Services.AddScoped<IKnowledgeRetriever, KnowledgeRetriever>();
 builder.Services.AddHttpClient<IAnswerProvider, OpenAiAnswerProvider>(client => client.Timeout = TimeSpan.FromSeconds(90))
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<SimulationService>();
+// Modelo auxiliar: traduz a mensagem do cliente para termos de busca do ERP antes da consulta.
+builder.Services.AddHttpClient<QueryRewriter>(client => client.Timeout = TimeSpan.FromSeconds(20))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+// Leitura dos prints que o HELP envia junto com a pergunta do chamado.
+builder.Services.AddHttpClient<CustomerImageReader>(client => client.Timeout = TimeSpan.FromSeconds(60))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<DesignerScreenService>();
 builder.Services.AddSingleton<ApplicationInspectionService>();
 builder.Services.AddHttpClient<VideoCatalogService>(client=>client.Timeout=TimeSpan.FromSeconds(20))
@@ -33,6 +39,8 @@ builder.Services.AddHttpClient<GitHubSource>(client => client.Timeout = TimeSpan
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<IndexingService>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<IndexingService>());
+// Indexa o GitHub sozinho uma vez por dia quando há commit novo (Indexing:Auto / Indexing:AutoHour).
+builder.Services.AddHostedService<AutoIndexingService>();
 
 var app = builder.Build();
 if (secretSetup)

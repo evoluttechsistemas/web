@@ -104,7 +104,7 @@
             }
         }
 
-        // Multa de 2% + juros de 2% ao dia a partir do 3º dia de atraso (regra em RegraAtraso)
+        // Multa de 2% + juros compostos de 2% ao mês (proporcional por dia) a partir do 3º dia de atraso (regra em RegraAtraso)
         public decimal ValorMulta => RegraAtraso.Multa(Valor ?? 0m, DiasAtraso);
         public decimal ValorJuros => RegraAtraso.Juros(Valor ?? 0m, DiasAtraso);
 
@@ -158,7 +158,7 @@
 
         public int DiasAtraso => (DateTime.Today - DataVencimento.Date).Days;
 
-        // Multa de 2% + juros de 2% ao dia a partir do 3º dia de atraso (regra em RegraAtraso)
+        // Multa de 2% + juros compostos de 2% ao mês (proporcional por dia) a partir do 3º dia de atraso (regra em RegraAtraso)
         public decimal ValorMulta => RegraAtraso.Multa(Valor, DiasAtraso);
         public decimal ValorJuros => RegraAtraso.Juros(Valor, DiasAtraso);
 
@@ -204,15 +204,24 @@
     {
         public const int DiasCarencia = 2;
         public const decimal MultaPercentual = 2m;   // 2% uma vez
-        public const decimal JurosPorDia = 2m;       // 2% ao dia (2% ao mês pro rata seria 2m / 30m)
+        public const decimal JurosAoMes = 2m;        // 2% ao mês, proporcional por dia (2% / 30), composto (juros sobre juros)
 
         public static int DiasComJuros(int diasAtraso) => Math.Max(0, diasAtraso - DiasCarencia);
 
         public static decimal Multa(decimal valor, int diasAtraso) =>
             DiasComJuros(diasAtraso) > 0 ? Math.Round(valor * MultaPercentual / 100m, 2) : 0m;
 
-        public static decimal Juros(decimal valor, int diasAtraso) =>
-            Math.Round(valor * JurosPorDia / 100m * DiasComJuros(diasAtraso), 2);
+        // Juros compostos: cada dia rende sobre o saldo do dia anterior (valor + multa + juros já acumulados).
+        public static decimal Juros(decimal valor, int diasAtraso)
+        {
+            int dias = DiasComJuros(diasAtraso);
+            if (dias == 0 || valor <= 0) return 0m;
+            decimal taxaDia = JurosAoMes / 100m / 30m;
+            decimal baseCalculo = valor + Multa(valor, diasAtraso);
+            decimal saldo = baseCalculo;
+            for (int i = 0; i < dias; i++) saldo *= 1m + taxaDia;
+            return Math.Round(saldo - baseCalculo, 2);
+        }
 
         public static decimal ValorAtualizado(decimal valor, int diasAtraso) =>
             valor + Multa(valor, diasAtraso) + Juros(valor, diasAtraso);

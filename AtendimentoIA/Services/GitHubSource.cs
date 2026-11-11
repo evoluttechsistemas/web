@@ -14,18 +14,25 @@ public sealed class GitHubSource(HttpClient client, IConfiguration configuration
             settings.Repository.Split('/').Any(s => s is "." or "..") || settings.Reference.Length > 200 ||
             settings.Reference.Any(char.IsControl)) throw new ArgumentException("Informe um repositório no formato organização/nome e uma referência válida.");
     }
-    public async Task<string> DownloadAsync(SourceSettings settings, string jobDirectory, CancellationToken token,
-        IProgress<ProcessingProgress>? progress = null)
+    /// <summary>Commit atual da referência configurada (usado pela indexação automática para saber se mudou algo).</summary>
+    public async Task<string> LatestCommitAsync(SourceSettings settings, CancellationToken token)
     {
         Validate(settings);
-        progress?.Report(new("resolve", 0, null, "etapas"));
-        // Resolve a branch once, then download that immutable commit. No Git hooks or source execution.
         var reference = string.IsNullOrWhiteSpace(settings.Reference) ? "HEAD" : settings.Reference;
         using var commitResponse = await SendApiAsync($"repos/{settings.Repository}/commits/{Uri.EscapeDataString(reference)}", token);
         await using var commitStream = await commitResponse.Content.ReadAsStreamAsync(token);
         using var commitJson = await JsonDocument.ParseAsync(commitStream, cancellationToken: token);
         var commit = commitJson.RootElement.GetProperty("sha").GetString()!;
         if (!Regex.IsMatch(commit, @"\A[0-9a-fA-F]{40,64}\z")) throw new InvalidDataException("Commit inválido recebido do GitHub.");
+        return commit;
+    }
+    public async Task<string> DownloadAsync(SourceSettings settings, string jobDirectory, CancellationToken token,
+        IProgress<ProcessingProgress>? progress = null)
+    {
+        Validate(settings);
+        progress?.Report(new("resolve", 0, null, "etapas"));
+        // Resolve a branch once, then download that immutable commit. No Git hooks or source execution.
+        var commit = await LatestCommitAsync(settings, token);
         using var response = await SendApiAsync($"repos/{settings.Repository}/zipball/{commit}", token, allowRedirect: true);
         HttpResponseMessage? redirected = null;
         try

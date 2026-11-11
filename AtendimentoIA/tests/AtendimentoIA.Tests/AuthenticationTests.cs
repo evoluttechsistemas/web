@@ -60,6 +60,7 @@ internal static class AuthenticationTests
         builder.Services.AddScoped<IKnowledgeRetriever, HelpFixtureRetriever>();
         builder.Services.AddScoped<IAnswerProvider, HelpFixtureProvider>();
         builder.Services.AddScoped<SimulationService>();
+        builder.Services.AddHttpClient<CustomerImageReader>();
         var accounts=new FakeAccounts(Account());
         builder.Services.RemoveAll<IPanelAccountStore>();
         builder.Services.AddSingleton<IPanelAccountStore>(accounts);

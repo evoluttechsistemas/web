@@ -2212,6 +2212,176 @@ VALUES
             catch { tx.Rollback(); throw; }
         }
 
+        /// <summary>
+        /// Ticket aberto deste telefone que já está com o usuário (para a cobrança não abrir ticket repetido).
+        /// </summary>
+        public async Task<int?> BuscarTicketAbertoDoTelefoneAsync(string telefone, string usuario)
+        {
+            var tel = NormalizarTelefone(telefone ?? "");
+            if (string.IsNullOrWhiteSpace(tel)) return null;
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+            using var cmd = new SqlCommand(@"
+                SELECT TOP 1 Codigo FROM TicketChamadoC
+                WHERE CodEmp = @CodEmp
+                  AND TelefoneWhatsApp = @Tel
+                  AND ISNULL(CodSituacao, 1) <> 3
+                  AND ISNULL(ChatInterno, 'N') <> 'S'
+                  AND UPPER(LTRIM(RTRIM(ISNULL(Usuario, '')))) = @Usuario
+                ORDER BY Codigo DESC", conn);
+            AddCodEmp(cmd);
+            cmd.Parameters.AddWithValue("@Tel", tel);
+            cmd.Parameters.AddWithValue("@Usuario", (usuario ?? "").Trim().ToUpperInvariant());
+            var r = await cmd.ExecuteScalarAsync();
+            return r == null || r == DBNull.Value ? null : Convert.ToInt32(r);
+        }
+
+        /// <summary>
+        /// Botão "Conversar" do contato que o cliente compartilhou no WhatsApp.
+        /// Se o número já tem ticket aberto, devolve esse ticket. Senão abre um ticket novo para o atendente,
+        /// pela mesma conexão de WhatsApp do ticket de origem. O número fica ligado ao cliente que já usa
+        /// esse número em outro ticket; se for um número novo, ao cliente do ticket de onde veio o contato.
+        /// Abrir o ticket não manda nada ao contato: o atendente escreve a primeira mensagem.
+        /// </summary>
+        public async Task<(int CodTicket, bool JaExistia)> AbrirTicketParaContatoAsync(
+            int codTicketOrigem, string telefone, string nomeContato, string usuario)
+        {
+            var tel = new string((telefone ?? "").Where(char.IsDigit).ToArray());
+            if (tel.Length < 10) throw new InvalidOperationException("O contato não tem um número de WhatsApp válido.");
+            if (!tel.StartsWith("55") && tel.Length <= 11) tel = "55" + tel;
+            usuario = (usuario ?? "").Trim().ToUpperInvariant();
+            if (usuario.Length == 0) throw new InvalidOperationException("Usuário não identificado. Entre novamente no HELP.");
+            nomeContato = string.IsNullOrWhiteSpace(nomeContato) ? "Contato" : nomeContato.Trim();
+            if (nomeContato.Length > 50) nomeContato = nomeContato[..50];
+
+            var variantes = TelefoneBR.GerarVariantes(tel);
+            if (!variantes.Contains(tel)) variantes.Add(tel);
+
+            using var conn = new SqlConnection(_conn);
+            await conn.OpenAsync();
+            using var tx = conn.BeginTransaction();
+            try
+            {
+                string inTel = string.Join(",", variantes.Select((_, i) => "@T" + i));
+                void ParamsTel(SqlCommand c) { for (int i = 0; i < variantes.Count; i++) c.Parameters.AddWithValue("@T" + i, variantes[i]); }
+
+                // 1) Já existe conversa aberta com esse número? Usa ela.
+                using (var cmdAberto = new SqlCommand($@"
+                    SELECT TOP 1 Codigo FROM TicketChamadoC WITH (UPDLOCK, HOLDLOCK)
+                    WHERE CodEmp = @CodEmp AND TelefoneWhatsApp IN ({inTel})
+                      AND ISNULL(CodSituacao, 1) <> 3 AND ISNULL(ChatInterno, 'N') <> 'S'
+                    ORDER BY Codigo DESC", conn, tx))
+                {
+                    AddCodEmp(cmdAberto); ParamsTel(cmdAberto);
+                    var r = await cmdAberto.ExecuteScalarAsync();
+                    if (r != null && r != DBNull.Value)
+                    {
+                        tx.Commit();
+                        return (Convert.ToInt32(r), true);
+                    }
+                }
+
+                // 2) Ticket de origem: cliente e conexão de WhatsApp
+                int codClienteOrigem = 0, codInstancia = 0, codSetor = 1;
+                string nomeClienteOrigem = "";
+                using (var cmdOrigem = new SqlCommand(@"
+                    SELECT ISNULL(T.CodCliente, 0), ISNULL(T.CodInstanciaWhatsApp, 0), ISNULL(T.CodSetor, 1),
+                           ISNULL(COALESCE(NULLIF(LTRIM(RTRIM(C.Apelido)), ''), C.Nome), '')
+                    FROM TicketChamadoC T
+                    LEFT JOIN Cliente C ON C.Codigo = T.CodCliente AND C.CodEmp = T.CodEmp
+                    WHERE T.Codigo = @Origem AND T.CodEmp = @CodEmp", conn, tx))
+                {
+                    AddCodEmp(cmdOrigem);
+                    cmdOrigem.Parameters.AddWithValue("@Origem", codTicketOrigem);
+                    using var rd = await cmdOrigem.ExecuteReaderAsync();
+                    if (!await rd.ReadAsync()) throw new InvalidOperationException("Ticket de origem não encontrado.");
+                    codClienteOrigem = rd.GetInt32(0);
+                    codInstancia = rd.GetInt32(1);
+                    codSetor = rd.GetInt32(2);
+                    nomeClienteOrigem = rd.GetString(3);
+                }
+                if (codInstancia <= 0)
+                    throw new InvalidOperationException("O ticket de origem não tem conexão de WhatsApp para falar com o contato.");
+
+                // 3) Número já conhecido de outro cliente? Mantém esse cliente. Número novo: cliente do ticket de origem.
+                int codCliente = codClienteOrigem;
+                using (var cmdConhecido = new SqlCommand($@"
+                    SELECT TOP 1 CodCliente FROM TicketChamadoC
+                    WHERE CodEmp = @CodEmp AND TelefoneWhatsApp IN ({inTel}) AND ISNULL(CodCliente, 0) > 0
+                    ORDER BY Codigo DESC", conn, tx))
+                {
+                    AddCodEmp(cmdConhecido); ParamsTel(cmdConhecido);
+                    var r = await cmdConhecido.ExecuteScalarAsync();
+                    if (r != null && r != DBNull.Value) codCliente = Convert.ToInt32(r);
+                }
+
+                // 4) Abre o ticket com o atendente que clicou
+                int codTicket;
+                var assunto = $"[WhatsApp] {nomeContato}" + (nomeClienteOrigem.Length > 0 ? $" (indicado por {nomeClienteOrigem})" : "");
+                if (assunto.Length > 150) assunto = assunto[..150];
+                using (var cmdNovo = new SqlCommand(@"
+                    DECLARE @NovoTicket TABLE (Codigo INT);
+                    INSERT INTO TicketChamadoC
+                    (CodEmp, Status, CodSetor, CodCategoria, DataAbertura, DataHoraAbertura,
+                     Usuario, UsuarioUltimaGravacao, DataHoraUltimaGravacao,
+                     CodCliente, TelefoneWhatsApp, Assunto, CodSituacao, Novo, CodTipo, CodInstanciaWhatsApp, UsuarioAbertura)
+                    OUTPUT INSERTED.Codigo INTO @NovoTicket
+                    VALUES
+                    (@CodEmp, 1, @Setor, NULL, CAST(GETDATE() AS DATE), GETDATE(),
+                     @Usuario, @Usuario, GETDATE(),
+                     @CodCliente, @Telefone, @Assunto, 1, 'N', 5, @CodInstancia, @NomeContato);
+                    SELECT Codigo FROM @NovoTicket;", conn, tx))
+                {
+                    AddCodEmp(cmdNovo);
+                    cmdNovo.Parameters.AddWithValue("@Setor", codSetor);
+                    cmdNovo.Parameters.AddWithValue("@Usuario", usuario);
+                    cmdNovo.Parameters.Add("@CodCliente", SqlDbType.Int).Value = codCliente;
+                    cmdNovo.Parameters.AddWithValue("@Telefone", tel);
+                    cmdNovo.Parameters.AddWithValue("@Assunto", assunto);
+                    cmdNovo.Parameters.AddWithValue("@CodInstancia", codInstancia);
+                    cmdNovo.Parameters.AddWithValue("@NomeContato", nomeContato);
+                    codTicket = Convert.ToInt32(await cmdNovo.ExecuteScalarAsync());
+                }
+
+                // Anotação interna (igual à do ticket aberto pelo WhatsApp): não vai para o contato
+                using (var cmdNota = new SqlCommand(@"
+                    INSERT INTO TicketChamadoD (CodEmp, CodTicketChamadoC, Anotacao, DataHora, Usuario, CodInstancia)
+                    VALUES (@CodEmp, @Cod, @Texto, GETDATE(), 'WHATSAPP', @CodInstancia)", conn, tx))
+                {
+                    AddCodEmp(cmdNota);
+                    cmdNota.Parameters.AddWithValue("@Cod", codTicket);
+                    cmdNota.Parameters.Add("@Texto", SqlDbType.NVarChar, -1).Value =
+                        $"Contato compartilhado no ticket #{codTicketOrigem}" +
+                        (nomeClienteOrigem.Length > 0 ? $" por {nomeClienteOrigem}" : "") +
+                        $". Celular WhatsApp: {tel}";
+                    cmdNota.Parameters.AddWithValue("@CodInstancia", codInstancia);
+                    await cmdNota.ExecuteNonQueryAsync();
+                }
+
+                tx.Commit();
+                return (codTicket, false);
+            }
+            catch { try { tx.Rollback(); } catch { } throw; }
+        }
+
+        /// <summary>Setor "Financeiro" do cadastro de setores (se não existir, usa o setor 1).</summary>
+        public async Task<int> BuscarCodSetorFinanceiroAsync()
+        {
+            try
+            {
+                using var conn = new SqlConnection(_conn);
+                await conn.OpenAsync();
+                using var cmd = new SqlCommand(@"
+                    SELECT TOP 1 Codigo FROM TicketSetorCRM
+                    WHERE CodEmp = @CodEmp AND ISNULL(Ativo, 'S') = 'S' AND UPPER(Descricao) LIKE 'FINANC%'
+                    ORDER BY Ordem, Codigo", conn);
+                AddCodEmp(cmd);
+                var r = await cmd.ExecuteScalarAsync();
+                return r == null || r == DBNull.Value ? 1 : Convert.ToInt32(r);
+            }
+            catch { return 1; }
+        }
+
         public async Task<int> CriarChamadoComAnexoAsync(
             string assunto, string descricao, int codCliente,
             int codSetor, int codSituacao, int codTipo, int prioridade,

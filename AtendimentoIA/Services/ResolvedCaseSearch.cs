@@ -8,16 +8,20 @@ public static class ResolvedCaseSearch
 {
     // The ERP's CentralTickets maps FINALIZADO to CodSituacao=3, not to the unrelated Situacao catalog.
     // Only reviewed, confirmed solution summaries may enter a customer answer; never a transcript from another customer.
-    public static async Task<List<KnowledgeEvidence>> ReadAsync(SqlConnection connection,int companyId,int closedSituation,string question,string segment,CancellationToken token)
+    public static async Task<List<KnowledgeEvidence>> ReadAsync(SqlConnection connection,int companyId,int closedSituation,string question,string segment,CancellationToken token,
+        IReadOnlyList<string[]>? vocabulary=null)
     {
-        var module=KnowledgeSearch.ModuleOf(question);
-        var terms=KnowledgeSearch.Terms(question).Where(t=>!t.Equals(module,StringComparison.OrdinalIgnoreCase)).Take(4).ToArray();
-        if(terms.Length==0) return [];
-        using var command=new SqlCommand(Query(terms.Length),connection) {CommandTimeout=20};
+        var module=KnowledgeSearch.Normalize(KnowledgeSearch.ModuleOf(question));
+        // Termos com raiz e sinônimos; o nome do módulo sozinho não identifica o caso.
+        var groups=KnowledgeSearch.SearchGroups(question,vocabulary).Where(g=>module.Length==0||g[0]!=module).Take(6).ToList();
+        if(groups.Count==0) return [];
+        var filter=new SqlTermFilter(groups);
+        using var command=new SqlCommand(Query(filter),connection) {CommandTimeout=20};
         command.Parameters.Add("@CompanyId",SqlDbType.Int).Value=companyId;
         command.Parameters.Add("@ClosedSituation",SqlDbType.Int).Value=closedSituation;
         command.Parameters.Add("@Segment",SqlDbType.VarChar,100).Value=segment;
-        for(var i=0;i<terms.Length;i++) command.Parameters.Add($"@Term{i}",SqlDbType.NVarChar,150).Value=$"%{terms[i]}%";
+        command.Parameters.Add("@MinMatches",SqlDbType.Int).Value=MinMatches(filter.Count);
+        filter.AddParameters(command);
         var result=new List<KnowledgeEvidence>();await using var reader=await command.ExecuteReaderAsync(token);
         while(await reader.ReadAsync(token))
         {
@@ -29,19 +33,32 @@ public static class ResolvedCaseSearch
         }
         return result;
     }
-    public static string Query(int termCount)
+    /// <summary>
+    /// Antes exigia TODAS as palavras (AND): "não sai a nota" nunca achava "NF-e rejeitada".
+    /// Agora basta parte delas (1 com até 2 termos, 2 com 3 ou mais), e o mais parecido vem primeiro.
+    /// </summary>
+    public static int MinMatches(int groups)=>groups>=3?2:1;
+    public static string Query(SqlTermFilter filter)
     {
-        if(termCount is <1 or >4) throw new ArgumentOutOfRangeException(nameof(termCount));
-        var predicates=string.Join(" AND ",Enumerable.Range(0,termCount).Select(i=>$"CONCAT(ai.PerguntaCliente,' ',ai.TopicoTitulo,' ',ai.Resumo,' ',ai.Solucao) COLLATE Latin1_General_CI_AI LIKE @Term{i}"));
+        if(filter.Count is <1 or >8) throw new ArgumentOutOfRangeException(nameof(filter));
+        const string question="CONCAT(ai.PerguntaCliente,' ',ai.TopicoTitulo)";
+        const string solution="CONCAT(ai.Resumo,' ',ai.Solucao)";
         return $"""
-            SELECT TOP (8) ai.Codigo,h.Codigo,LEFT(ai.PerguntaCliente,1000),LEFT(ai.Solucao,2400),cli.Segmento,h.Versao,cli.Nome
+            SELECT TOP (8) ai.Codigo,h.Codigo,LEFT(ai.PerguntaCliente,1000),LEFT(ai.Solucao,2400),cli.Segmento,h.Versao,cli.Nome,
+              {filter.Score((question,3),(solution,1))} AS Relevancia
             FROM dbo.AiTicketInsights ai
             JOIN dbo.TicketChamadoC h ON h.Codigo=ai.CodTicketChamadoC
             JOIN dbo.Cliente cli ON cli.Codigo=h.CodCliente AND cli.CodEmp=h.CodEmp
             WHERE h.CodEmp=@CompanyId AND h.CodSituacao=@ClosedSituation
-              AND ai.SolucaoConfirmada=1 AND ai.StatusRevisao='aprovado'
-              AND NULLIF(LTRIM(RTRIM(ai.Solucao)),'') IS NOT NULL AND ({predicates})
-            ORDER BY CASE WHEN cli.Segmento=@Segment AND @Segment<>'' THEN 0 ELSE 1 END,
+              -- No HELP são dois caminhos de confiança: solução confirmada no fechamento OU aprovado na Curadoria IA.
+              -- Exigir os dois juntos deixava a base sem nenhum caso. Descartados e suspensos nunca entram.
+              AND (ai.SolucaoConfirmada=1 OR ai.StatusRevisao='aprovado')
+              AND ISNULL(ai.StatusRevisao,'') NOT IN ('descartado','suspenso')
+              AND NULLIF(LTRIM(RTRIM(ai.Solucao)),'') IS NOT NULL
+              AND {filter.MatchedGroups(question,solution)} >= @MinMatches
+            ORDER BY Relevancia DESC,
+                CASE WHEN ai.SolucaoConfirmada=1 AND ai.StatusRevisao='aprovado' THEN 0 ELSE 1 END,
+                CASE WHEN cli.Segmento=@Segment AND @Segment<>'' THEN 0 ELSE 1 END,
                 ai.RevisadoEm DESC,ai.Codigo DESC;
             """;
     }

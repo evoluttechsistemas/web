@@ -18,7 +18,7 @@
 </section>
 <section id="ia" class="card settings-section"><div class="section-heading"><div><div class="eyebrow">03 · RESPOSTAS DO SIMULADOR</div><h2>OpenAI</h2><p>Configure a chave que será usada para gerar as respostas de suporte e comercial.</p></div><span class="badge @(Simulation.IsConfigured?"":"warning")">@(Simulation.IsConfigured?"CHAVE CONFIGURADA":"CHAVE PENDENTE")</span></div>
 @if(aiNotice is not null) { <div class="notice" role="status">@aiNotice</div> }
-<EditForm Model="ai" FormName="settings-ai" OnValidSubmit="SaveAi"><DataAnnotationsValidator /><ValidationSummary /><label for="settings-openai-key">Chave da API OpenAI</label><InputText id="settings-openai-key" type="password" autocomplete="new-password" @bind-Value="ai.Key" placeholder="Em branco: manter a chave atual" /><p class="field-help">Esta chave é diferente do token do GitHub e fica salva com proteção do Windows.</p><label for="settings-ai-model">Modelo</label><InputText id="settings-ai-model" @bind-Value="ai.Model" placeholder="gpt-4.1-mini" /><p class="field-help">Use um modelo disponível no projeto da sua chave, compatível com Responses API, respostas estruturadas e entrada de imagem para conferir as telas reconstruídas.</p><div class="settings-actions"><button class="primary" type="submit" disabled="@savingAi">@(savingAi?"Salvando…":"Salvar OpenAI")</button><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Gerenciar chaves ↗</a></div></EditForm>
+<EditForm Model="ai" FormName="settings-ai" OnValidSubmit="SaveAi"><DataAnnotationsValidator /><ValidationSummary /><label for="settings-openai-key">Chave da API OpenAI</label><InputText id="settings-openai-key" type="password" autocomplete="new-password" @bind-Value="ai.Key" placeholder="Em branco: manter a chave atual" /><p class="field-help">Esta chave é diferente do token do GitHub e fica salva com proteção do Windows.</p><label for="settings-ai-model">Modelo</label><InputText id="settings-ai-model" @bind-Value="ai.Model" placeholder="gpt-4.1-mini" /><p class="field-help">Usado na resposta final, onde a IA cruza as fontes. Recomendado: gpt-4.1. Precisa ser compatível com Responses API, respostas estruturadas e entrada de imagem.</p><label for="settings-ai-aux">Modelo auxiliar</label><InputText id="settings-ai-aux" @bind-Value="ai.AuxModel" placeholder="gpt-4.1-mini" /><p class="field-help">Tarefas rápidas e baratas: traduzir a pergunta do cliente para os termos de busca do ERP e ler os prints enviados.</p><div class="settings-actions"><button class="primary" type="submit" disabled="@savingAi">@(savingAi?"Salvando…":"Salvar OpenAI")</button><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Gerenciar chaves ↗</a></div></EditForm>
 <div class="notice neutral-note">O simulador envia a pergunta, contexto mínimo e trechos relevantes filtrados à OpenAI. Não envia todo o código nem grava mensagens no SQL Server. A geração depende do acesso e dos limites do projeto da sua chave.</div>
 </section>
 <ScreenReferenceSettings />
@@ -30,7 +30,7 @@
     private string? githubNotice,sqlNotice,aiNotice;
     private bool HasGitHub=>Secrets.HasGitHub||!string.IsNullOrWhiteSpace(Configuration["GitHub:Token"]);
     protected override async Task OnInitializedAsync()
-    { var source=await Store.GetSourceAsync(Configuration); github.Repository=source.Repository;github.Reference=source.Reference;ai.Model=(await Simulation.GetSettingsAsync()).Model;
+    { var source=await Store.GetSourceAsync(Configuration); github.Repository=source.Repository;github.Reference=source.Reference;var aiSettings=await Simulation.GetSettingsAsync();ai.Model=aiSettings.Model;ai.AuxModel=aiSettings.AuxModel;
       github.PdvProject=(await Store.ReadAsync<KnowledgeSettings>("knowledge-settings.json"))?.ModuleProjects.GetValueOrDefault("PDV","")??""; }
     private async Task SaveGitHub()
     {
@@ -56,7 +56,7 @@
     private async Task SaveAi()
     {
         savingAi=true;
-        try { await Simulation.SaveSettingsAsync(new(ai.Model.Trim()));
+        try { await Simulation.SaveSettingsAsync(new(ai.Model.Trim(),string.IsNullOrWhiteSpace(ai.AuxModel)?"gpt-4.1-mini":ai.AuxModel.Trim()));
             if(!string.IsNullOrWhiteSpace(ai.Key)) await Secrets.SaveOpenAiAsync(ai.Key.Trim());
             aiNotice=Simulation.IsConfigured?"OpenAI salva. Abra o simulador para testar as respostas.":"Modelo salvo. Cadastre uma chave OpenAI para gerar respostas."; }
         catch(Exception ex) when(IsConfigurationError(ex)) { aiNotice="Não foi possível salvar. Confira o modelo, a chave e o armazenamento protegido."; }
@@ -72,6 +72,7 @@
     private sealed class SqlInput { [StringLength(4000)] public string Connection {get;set;}=""; }
     private sealed class AiInput {
         [Required,StringLength(120)] public string Model {get;set;}="gpt-4.1-mini";
+        [StringLength(120)] public string AuxModel {get;set;}="gpt-4.1-mini";
         [StringLength(1000)] public string Key {get;set;}="";
     }
 }

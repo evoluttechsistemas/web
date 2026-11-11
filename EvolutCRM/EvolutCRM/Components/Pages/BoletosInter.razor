@@ -1,0 +1,314 @@
+@page "/admin/boletos-inter"
+@using System.Globalization
+@using EvolutCRM.Models
+@using EvolutCRM.Services
+@implements IAsyncDisposable
+@inject BoletoInterService Boletos
+@inject UserState UserState
+@inject IJSRuntime JS
+@inject ILogger<BoletosInter> Logger
+
+<PageTitle>Boletos Banco Inter · HELP</PageTitle>
+
+<section class="bi-page">
+    <div class="bi-heading">
+        <div><span class="bi-eyebrow">FINANCEIRO</span><h1>Boletos Banco Inter</h1>
+            <p>Emita por título e consulte os PDFs salvos no banco de dados.</p></div>
+        <a href="admin/bx-pagar">Voltar ao financeiro</a>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Mensagem))
+    {
+        <div class="bi-message" role="status">@Mensagem</div>
+    }
+
+    @if (Liberado)
+    {
+        <div class="bi-filters">
+            <label>Vencimento inicial<InputDate @bind-Value="Inicio" disabled="@Ocupado" /></label>
+            <label>Vencimento final<InputDate @bind-Value="Fim" disabled="@Ocupado" /></label>
+            <label>Cliente ou título<input @bind="Busca" placeholder="Nome ou código do título" disabled="@Ocupado" /></label>
+            <label>Situação<select @bind="Situacao" disabled="@Ocupado">
+                <option value="abertos">Em aberto</option><option value="todos">Todos</option>
+                <option value="pdf-pendente">PDF pendente / conferir emissão</option>
+            </select></label>
+            <button @onclick="BuscarAsync" disabled="@Ocupado">Buscar títulos</button>
+        </div>
+        <div class="bi-config">
+            <label>Configuração para novos boletos<select @bind="Configuracao" disabled="@Ocupado">
+                <option value="0">Selecione o Banco Inter</option>
+                @foreach (var cfg in Configuracoes) { <option value="@cfg.Codigo">@cfg.Descricao</option> }
+            </select></label>
+            <small>Para recuperar um boleto existente, será usada a configuração vinculada ao título.</small>
+        </div>
+        @if (Ocupado) { <p role="status">Processando… Aguarde a resposta antes de repetir a operação.</p> }
+        <div class="bi-table-wrap">
+            <table>
+                <thead><tr><th>Título / cliente</th><th>Vencimento</th><th>Valor</th><th>Situação</th><th>Ações</th></tr></thead>
+                <tbody>
+                    @foreach (var t in Titulos)
+                    {
+                        <tr @key="t.Codigo">
+                            <td><strong>#@t.Codigo · @t.Cliente</strong>
+                                @if (t.CodigoSolicitacao.Length > 0) { <small class="bi-code">@t.CodigoSolicitacao</small> }
+                                @if (t.LinhaDigitavel.Length > 0) { <small class="bi-code">@t.LinhaDigitavel</small> }
+                            </td>
+                            <td>@t.Vencimento?.ToString("dd/MM/yyyy")</td>
+                            <td>@t.Valor.ToString("C", Br)</td>
+                            <td><span class="bi-badge @(t.Pago ? "pago" : "aberto")">@(t.Pago ? "Pago no receber" : "Em aberto")</span>
+                                <small>@EstadoTexto(t)</small>
+                                @if (t.SituacaoBanco.Length > 0) { <small>Inter: @t.SituacaoBanco</small> }
+                                @if (t.Erro.Length > 0) { <small class="bi-warning">@t.Erro</small> }
+                            </td>
+                            <td><div class="bi-actions">
+                                @if (t.PodeEmitir)
+                                {
+                                    <button disabled="@(Ocupado || Configuracao <= 0)" @onclick="() => PrepararEmissao(t)">Emitir boleto</button>
+                                }
+                                @if (t.CodigoSolicitacao.Length > 0)
+                                {
+                                    <button disabled="@Ocupado" @onclick="() => RecuperarAsync(t)">@(t.TemPdf ? "Atualizar no Inter" : "Recuperar PDF")</button>
+                                }
+                                @if (!t.TemPdf)
+                                {
+                                    <button class="bi-secondary" disabled="@Ocupado" @onclick="() => PrepararVinculo(t)">Vincular solicitação</button>
+                                }
+                                @if (t.TemPdf)
+                                {
+                                    <button class="bi-secondary" disabled="@Ocupado" @onclick="() => AbrirPdfAsync(t)">Abrir / imprimir</button>
+                                    <button class="bi-secondary" disabled="@Ocupado" @onclick="() => BaixarAsync(t)">Baixar PDF</button>
+                                    <button class="bi-secondary" disabled="@Ocupado" @onclick="() => PrepararWhatsAppAsync(t)">WhatsApp</button>
+                                }
+                            </div></td>
+                        </tr>
+                    }
+                    @if (Titulos.Count == 0) { <tr><td colspan="5">Nenhum título encontrado neste filtro.</td></tr> }
+                </tbody>
+            </table>
+        </div>
+        <small>Até 500 títulos por busca. Refine o período se atingir esse limite. A situação consultada no Inter não dá baixa automática no receber.</small>
+    }
+
+    @if (Selecionado is not null)
+    {
+        <div class="bi-overlay"><section class="bi-dialog" role="dialog" aria-modal="true" aria-label="Operação do boleto">
+            <h2>@(Modo == "emitir" ? "Emitir boleto" : Modo == "vincular" ? "Vincular cobrança existente" : "Enviar PDF por WhatsApp")</h2>
+            <p>Título <strong>#@Selecionado.Codigo</strong> · @Selecionado.Cliente</p>
+            <p>@Selecionado.Valor.ToString("C", Br) · vencimento @Selecionado.Vencimento?.ToString("dd/MM/yyyy")</p>
+            @if (Modo == "emitir")
+            {
+                <p>Configuração: <strong>@Configuracoes.FirstOrDefault(x => x.Codigo == Configuracao)?.Descricao</strong></p>
+                <p>A confirmação registrará uma nova cobrança no Banco Inter.</p>
+            }
+            else if (Modo == "vincular")
+            {
+                <p>Informe o código da solicitação de uma cobrança já registrada no Inter. Serão conferidos título, cliente, valor e vencimento.</p>
+                <label>Código da solicitação<input @bind="CodigoInformado" placeholder="UUID retornado pelo Banco Inter" disabled="@Ocupado" /></label>
+                <p>Se o título ainda não possui configuração, selecione o Banco Inter no filtro da tela.</p>
+            }
+            else
+            {
+                <label>Instância conectada<select @bind="Instancia" disabled="@Ocupado">
+                    <option value="0">Selecione</option>
+                    @foreach (var i in Instancias) { <option value="@i.Codigo">@i.Nome</option> }
+                </select></label>
+                <label>Telefone de destino<input @bind="Telefone" placeholder="55 + DDD + telefone" disabled="@Ocupado" /></label>
+                <p>Confira o destinatário. O PDF salvo será enviado como documento.</p>
+            }
+            <div class="bi-actions">
+                <button disabled="@Ocupado" @onclick="ConfirmarAsync">@(Modo == "whatsapp" ? "Enviar PDF" : Modo == "vincular" ? "Conferir e salvar PDF" : "Confirmar emissão")</button>
+                <button class="bi-secondary" disabled="@Ocupado" @onclick="FecharDialogo">Cancelar</button>
+            </div>
+        </section></div>
+    }
+
+    @if (PdfUrl is not null)
+    {
+        <div class="bi-overlay"><section class="bi-pdf" role="dialog" aria-modal="true" aria-label="Visualização do boleto">
+            <div class="bi-actions"><strong>@PdfNome</strong>
+                <button @onclick="ImprimirAsync">Imprimir</button><button class="bi-secondary" @onclick="FecharPdfAsync">Fechar</button></div>
+            <iframe id="boleto-inter-pdf" src="@PdfUrl" title="PDF do boleto"></iframe>
+        </section></div>
+    }
+</section>
+
+@code {
+    private static readonly CultureInfo Br = CultureInfo.GetCultureInfo("pt-BR");
+    private DateTime Inicio = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime Fim = DateTime.Today.AddMonths(1);
+    private string Busca = "", Situacao = "abertos", Mensagem = "Carregando usuário…";
+    private bool Liberado, Ocupado, Encerrado;
+    private int EmpresaTela, Configuracao, Instancia;
+    private string UsuarioTela = "", Modo = "", CodigoInformado = "", Telefone = "";
+    private List<BoletoInterTitulo> Titulos = new();
+    private List<BoletoInterOpcao> Configuracoes = new();
+    private List<BoletoWhatsAppOpcao> Instancias = new();
+    private BoletoInterTitulo? Selecionado;
+    private IJSObjectReference? Modulo;
+    private string? PdfUrl, PdfNome;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserState.OnChange += UsuarioAlterado;
+        for (int n = 0; !UserState.IsReady && n < 100 && !Encerrado; n++) await Task.Delay(50);
+        await CarregarAsync();
+    }
+
+    private bool MesmoContexto => UserState.IsReady && EmpresaTela == UserState.CurrentCompanyId
+        && UsuarioTela == UserState.CurrentUser;
+
+    private void UsuarioAlterado()
+    {
+        if (!MesmoContexto && !Encerrado) _ = InvokeAsync(async () =>
+        {
+            Liberado = false; Selecionado = null; Titulos.Clear(); Configuracoes.Clear();
+            await FecharPdfAsync();
+            if (!Ocupado) await CarregarAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void VerificarContexto()
+    {
+        if (!MesmoContexto) throw new InvalidOperationException("A empresa mudou. Atualize a página antes de continuar.");
+    }
+
+    private async Task CarregarAsync()
+    {
+        if (Encerrado || Ocupado) return;
+        Ocupado = true;
+        EmpresaTela = UserState.CurrentCompanyId; UsuarioTela = UserState.CurrentUser;
+        try
+        {
+            Configuracoes = await Boletos.ListarConfiguracoesAsync();
+            VerificarContexto();
+            Configuracao = Configuracoes.Count == 1 ? Configuracoes[0].Codigo : 0;
+            Titulos = await Boletos.ListarTitulosAsync(Inicio, Fim, Busca, Situacao);
+            VerificarContexto(); Liberado = true;
+            Mensagem = Configuracoes.Count == 0 ? "Nenhuma configuração ativa do Banco Inter encontrada para esta empresa." : "";
+        }
+        catch (Exception ex) { TratarErro(ex); }
+        finally { Ocupado = false; }
+    }
+
+    private async Task ExecutarAsync(Func<Task> acao)
+    {
+        if (Ocupado) return;
+        Ocupado = true; Mensagem = "";
+        try { VerificarContexto(); await acao(); VerificarContexto(); }
+        catch (Exception ex) { TratarErro(ex); }
+        finally
+        {
+            Ocupado = false;
+            if (!MesmoContexto) { Titulos.Clear(); Selecionado = null; Liberado = false; await CarregarAsync(); }
+        }
+    }
+
+    private void TratarErro(Exception ex)
+    {
+        Logger.LogWarning("Operação de boleto não concluída: {Tipo}.", ex.GetType().Name);
+        Mensagem = ex is InvalidOperationException or UnauthorizedAccessException ? ex.Message
+            : ex is HttpRequestException or TaskCanceledException
+                ? "Não houve confirmação da integração. Confira o Inter ou a conversa no WhatsApp antes de repetir a operação."
+                : "Não foi possível concluir. Confira se o script SQL foi aplicado e se as integrações estão disponíveis.";
+    }
+
+    private async Task AtualizarListaAsync()
+    {
+        var lista = await Boletos.ListarTitulosAsync(Inicio, Fim, Busca, Situacao);
+        VerificarContexto(); Titulos = lista;
+    }
+
+    private Task BuscarAsync() => ExecutarAsync(AtualizarListaAsync);
+    private void PrepararEmissao(BoletoInterTitulo t) { Selecionado = t; Modo = "emitir"; }
+    private void PrepararVinculo(BoletoInterTitulo t) { Selecionado = t; Modo = "vincular"; CodigoInformado = ""; }
+    private void FecharDialogo() => Selecionado = null;
+
+    private Task RecuperarAsync(BoletoInterTitulo t) => ExecutarAsync(async () =>
+    {
+        var result = await Boletos.RecuperarAsync(t.Codigo, Configuracao);
+        Mensagem = result.Mensagem; await AtualizarListaAsync();
+    });
+
+    private Task PrepararWhatsAppAsync(BoletoInterTitulo t) => ExecutarAsync(async () =>
+    {
+        Instancias = await Boletos.ListarInstanciasAsync();
+        if (Instancias.Count == 0) throw new InvalidOperationException("Não há instância WhatsApp conectada para esta empresa.");
+        VerificarContexto(); Instancia = Instancias.Count == 1 ? Instancias[0].Codigo : 0;
+        Telefone = t.Telefone; Selecionado = t; Modo = "whatsapp";
+    });
+
+    private Task ConfirmarAsync() => ExecutarAsync(async () =>
+    {
+        var t = Selecionado ?? throw new InvalidOperationException("Selecione um título.");
+        if (Modo == "whatsapp")
+        {
+            await Boletos.EnviarWhatsAppAsync(t.Codigo, Instancia, Telefone);
+            Mensagem = "PDF enviado por WhatsApp.";
+        }
+        else
+        {
+            try
+            {
+                var result = Modo == "emitir" ? await Boletos.EmitirAsync(t.Codigo, Configuracao)
+                    : await Boletos.RecuperarAsync(t.Codigo, Configuracao, CodigoInformado);
+                Mensagem = result.Mensagem;
+            }
+            finally
+            {
+                Selecionado = null;
+                if (MesmoContexto) await AtualizarListaAsync();
+            }
+        }
+        Selecionado = null;
+    });
+
+    private async Task<IJSObjectReference> JsAsync() => Modulo ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/boletos-inter.js");
+
+    private Task AbrirPdfAsync(BoletoInterTitulo t) => ExecutarAsync(async () =>
+    {
+        var pdf = await Boletos.ObterPdfAsync(t.Codigo); VerificarContexto();
+        await FecharPdfAsync();
+        using var stream = new MemoryStream(pdf.Conteudo);
+        using var reference = new DotNetStreamReference(stream);
+        PdfUrl = await (await JsAsync()).InvokeAsync<string>("criarPdfUrl", reference);
+        PdfNome = pdf.Nome;
+    });
+
+    private Task BaixarAsync(BoletoInterTitulo t) => ExecutarAsync(async () =>
+    {
+        var pdf = await Boletos.ObterPdfAsync(t.Codigo); VerificarContexto();
+        using var stream = new MemoryStream(pdf.Conteudo);
+        using var reference = new DotNetStreamReference(stream);
+        await (await JsAsync()).InvokeVoidAsync("baixarPdf", reference, pdf.Nome);
+    });
+
+    private Task ImprimirAsync() => ExecutarAsync(async () =>
+        await (await JsAsync()).InvokeVoidAsync("imprimirPdf", "boleto-inter-pdf"));
+
+    private async Task FecharPdfAsync()
+    {
+        var url = PdfUrl; PdfUrl = null; PdfNome = null;
+        if (url is not null && Modulo is not null)
+        {
+            try { await Modulo.InvokeVoidAsync("liberarPdfUrl", url); }
+            catch (JSDisconnectedException) { }
+        }
+    }
+
+    private static string EstadoTexto(BoletoInterTitulo t) => t.TemPdf ? "PDF salvo no banco"
+        : t.Estado == "EMISSAO_INCERTA" ? "Conferir emissão no Inter"
+        : t.CodigoSolicitacao.Length > 0 && !Guid.TryParse(t.CodigoSolicitacao, out _) ? "Boleto emitido pelo ERP (formato antigo)"
+        : t.CodigoSolicitacao.Length > 0 ? "PDF pendente"
+        : t.TemVinculo ? "Possui vínculo financeiro" : "Não emitido";
+
+    public async ValueTask DisposeAsync()
+    {
+        Encerrado = true; UserState.OnChange -= UsuarioAlterado;
+        await FecharPdfAsync();
+        if (Modulo is not null)
+        {
+            try { await Modulo.DisposeAsync(); } catch (JSDisconnectedException) { }
+        }
+    }
+}

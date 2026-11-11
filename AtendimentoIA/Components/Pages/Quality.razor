@@ -1,0 +1,155 @@
+@page "/qualidade"
+@inject PanelStore Store
+@inject SimulationService Simulation
+<PageTitle>Qualidade das respostas · EvolutTech IA</PageTitle>
+<div class="page-heading"><div><div class="eyebrow">ACERTO DA IA</div><h1>Onde a IA acerta e onde falta conhecimento.</h1><p>Lacunas mostram os assuntos sem evidência; o gabarito mede o acerto com perguntas reais; o vocabulário ensina como o cliente fala.</p></div>
+<span class="badge">@(TaxaMes is { } t ? $"{t:P0} com evidência no mês" : "Sem perguntas no mês")</span></div>
+@if (notice is not null) { <div class="notice" role="status">@notice</div> }
+
+<section class="card"><div class="section-heading"><div><h2>Resumo</h2><p>Perguntas do HELP e do simulador (exceto modo técnico).</p></div></div>
+    @foreach (var m in report.Months.OrderByDescending(m => m.Key).Take(6))
+    {
+        var total = m.Value.Answered + m.Value.Insufficient;
+        <p><b>@m.Key</b> · @total pergunta(s) · @m.Value.Answered com evidência · @m.Value.Insufficient sem evidência
+            @if (total > 0) { <span class="badge neutral">@(((double)m.Value.Answered / total).ToString("P0"))</span> }</p>
+    }
+    @if (report.Months.Count == 0) { <p class="subtle">Ainda não há perguntas registradas.</p> }
+    <p class="field-help">Indexação automática do GitHub: @(autoIndex is null ? "ainda não verificou (roda a partir das 3h, só com commit novo)." : $"{autoIndex.Message} · {autoIndex.UpdatedAt.ToOffset(TimeSpan.FromHours(-3)):dd/MM/yyyy HH:mm}")</p>
+</section>
+
+<section class="card"><div class="section-heading"><div><h2>Lacunas</h2><p>Assuntos em que a IA não encontrou evidência. Cada linha é uma documentação ou orientação que falta — depois de cadastrar, marque como resolvida.</p></div><span class="badge">@report.Gaps.Count assunto(s)</span></div>
+    @if (report.Gaps.Count == 0) { <div class="empty"><span>◎</span><h3>Nenhuma lacuna registrada</h3><p>Quando a IA não achar evidência, o assunto aparece aqui (só as palavras-chave, sem o texto do cliente).</p></div> }
+    @foreach (var gap in report.Gaps.OrderByDescending(g => g.Count).ThenByDescending(g => g.LastSeen).Take(100))
+    {
+        <article class="guidance-entry"><div class="tags"><span class="badge">@gap.Count×</span>@if (gap.Module.Length > 0) { <span class="badge neutral">@gap.Module</span> }<span class="subtle">última vez @gap.LastSeen.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM HH:mm")</span></div>
+            <h3>@string.Join(" · ", gap.Terms)</h3>
+            <button class="text-button" @onclick="() => ResolverLacuna(gap.Key)">Marcar como resolvida</button></article>
+    }
+</section>
+
+<section class="card"><div class="section-heading"><div><h2>Gabarito</h2><p>Perguntas reais com o que a resposta certa precisa conter. "Rodar" pergunta tudo à IA e mostra o acerto. Cada pergunta consome uma chamada à OpenAI.</p></div>
+    <span class="badge">@(Acerto is { } a ? $"{a:P0} de acerto" : "Sem execução")</span></div>
+    <div class="field-row"><div><label for="gab-q">Pergunta</label><input id="gab-q" @bind="novaPergunta" placeholder="Ex.: Como cancelar uma NFC-e?" maxlength="2000" /></div>
+        <div><label for="gab-mode">Tipo</label><select id="gab-mode" @bind="novoModo"><option value="CustomerSupport">Suporte</option><option value="Commercial">Comercial</option></select></div></div>
+    <label for="gab-e">A resposta certa precisa conter (separe por vírgula)</label><input id="gab-e" @bind="novoEsperado" placeholder="Ex.: F6, cancelar, motivo" maxlength="500" />
+    <p class="field-help">Use palavras que só a resposta certa teria: nome da tela, tecla, nome do menu, número da rejeição.</p>
+    <button class="primary" @onclick="AdicionarGabarito" disabled="@rodando">Adicionar ao gabarito</button>
+    <button class="primary" @onclick="RodarGabarito" disabled="@(rodando || gabarito.Count == 0)">@(rodando ? $"Rodando {progresso}/{gabarito.Count}…" : "Rodar gabarito")</button>
+    @foreach (var item in gabarito)
+    {
+        <article class="guidance-entry"><div class="tags">
+            @if (item.Last is { } r) { <span class="badge @(r.Correct ? "" : "neutral")">@(r.Correct ? "✓ acertou" : r.Evidence ? "✗ faltou: " + string.Join(", ", r.Missing) : "✗ sem evidência")</span><span class="subtle">@r.At.ToOffset(TimeSpan.FromHours(-3)).ToString("dd/MM HH:mm")</span> }
+            else { <span class="subtle">ainda não rodou</span> }
+            <span class="badge neutral">@(item.Mode == "Commercial" ? "Comercial" : "Suporte")</span></div>
+            <h3>@item.Question</h3><small>Esperado: @item.Expected</small>
+            @if (item.Last is { Answer.Length: > 0 } last) { <details><summary>Resposta da última execução</summary><p class="preserve-lines">@last.Answer</p></details> }
+            <button class="text-button" @onclick="() => RemoverGabarito(item.Id)" disabled="@rodando">Remover</button></article>
+    }
+</section>
+
+<section class="card"><div class="section-heading"><div><h2>Vocabulário do ERP</h2><p>Palavras que o cliente e a documentação usam para a mesma coisa. Uma linha por grupo, termos separados por vírgula. Entram na busca de documentações, casos e parâmetros.</p></div></div>
+    <label for="vocab">Grupos da equipe</label><textarea id="vocab" rows="8" @bind="vocabulario" placeholder="Ex.: sintegra, arquivo fiscal, sped"></textarea>
+    <button class="primary" @onclick="SalvarVocabulario">Salvar vocabulário</button>
+    <details><summary>Grupos que já vêm prontos (@ErpVocabulary.DefaultGroups.Length)</summary><p class="preserve-lines">@string.Join("\n", ErpVocabulary.DefaultGroups)</p></details>
+</section>
+
+@code {
+    private GapReport report = new(new(), []);
+    private List<GabaritoItem> gabarito = [];
+    private AutoIndexingService.AutoIndexState? autoIndex;
+    private string vocabulario = "";
+    private string novaPergunta = "", novoEsperado = "", novoModo = "CustomerSupport";
+    private bool rodando;
+    private int progresso;
+    private string? notice;
+
+    private double? TaxaMes
+    {
+        get
+        {
+            var m = report.Months.GetValueOrDefault(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)).ToString("yyyy-MM"));
+            var total = (m?.Answered ?? 0) + (m?.Insufficient ?? 0);
+            return total == 0 ? null : (double)m!.Answered / total;
+        }
+    }
+    private double? Acerto
+    {
+        get
+        {
+            var rodados = gabarito.Where(g => g.Last is not null).ToList();
+            return rodados.Count == 0 ? null : (double)rodados.Count(g => g.Last!.Correct) / rodados.Count;
+        }
+    }
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        try
+        {
+            report = await Store.ReadAsync<GapReport>(KnowledgeQuality.GapsFile) ?? new(new(), []);
+            gabarito = await KnowledgeQuality.GetGabaritoAsync(Store);
+            autoIndex = await Store.ReadAsync<AutoIndexingService.AutoIndexState>(AutoIndexingService.StateFile);
+            vocabulario = string.Join("\n", await Store.ReadAsync<List<string>>(ErpVocabulary.File) ?? []);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { notice = "Não foi possível ler os dados de qualidade. Confira o armazenamento."; }
+    }
+
+    private async Task ResolverLacuna(string key)
+    {
+        try { await KnowledgeQuality.RemoveGapAsync(Store, key); await CarregarAsync(); notice = "Lacuna marcada como resolvida."; }
+        catch (IOException) { notice = "Não foi possível atualizar as lacunas."; }
+    }
+
+    private async Task AdicionarGabarito()
+    {
+        var q = (novaPergunta ?? "").Trim(); var e = (novoEsperado ?? "").Trim();
+        if (q.Length is 0 or > 2000 || e.Length == 0) { notice = "Informe a pergunta e o que a resposta certa precisa conter."; return; }
+        gabarito.Add(new(Guid.NewGuid(), q, e[..Math.Min(e.Length, 500)], novoModo == "Commercial" ? "Commercial" : "CustomerSupport"));
+        await KnowledgeQuality.SaveGabaritoAsync(Store, gabarito);
+        novaPergunta = ""; novoEsperado = ""; notice = "Pergunta adicionada ao gabarito.";
+    }
+
+    private async Task RemoverGabarito(Guid id)
+    {
+        gabarito.RemoveAll(g => g.Id == id);
+        await KnowledgeQuality.SaveGabaritoAsync(Store, gabarito);
+    }
+
+    private async Task RodarGabarito()
+    {
+        if (!Simulation.IsConfigured) { notice = "Cadastre a chave da OpenAI em Configurações antes de rodar o gabarito."; return; }
+        rodando = true; progresso = 0; notice = null;
+        try
+        {
+            for (var i = 0; i < gabarito.Count; i++)
+            {
+                var item = gabarito[i];
+                progresso = i + 1; StateHasChanged();
+                GabaritoResult resultado;
+                try
+                {
+                    var mode = item.Mode == "Commercial" ? SimulationMode.Commercial : SimulationMode.CustomerSupport;
+                    var answer = await Simulation.AskAsync(new SimulationRequest(item.Question, mode));
+                    resultado = KnowledgeQuality.Evaluate(answer, item.Expected);
+                }
+                catch (SimulationException ex) { resultado = new(DateTimeOffset.UtcNow, false, false, [], "Falhou: " + ex.Message); }
+                gabarito[i] = item with { Last = resultado };
+                await KnowledgeQuality.SaveGabaritoAsync(Store, gabarito);
+            }
+            notice = Acerto is { } a ? $"Gabarito concluído: {a:P0} de acerto." : "Gabarito concluído.";
+            report = await Store.ReadAsync<GapReport>(KnowledgeQuality.GapsFile) ?? report;
+        }
+        finally { rodando = false; }
+    }
+
+    private async Task SalvarVocabulario()
+    {
+        var linhas = (vocabulario ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(l => l.Length is > 2 and <= 300).Take(500).ToList();
+        var validos = ErpVocabulary.Parse(linhas).Count;
+        try { await Store.WriteAsync(ErpVocabulary.File, linhas); notice = $"Vocabulário salvo: {validos} grupo(s) válido(s). Vale a partir da próxima pergunta."; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { notice = "Não foi possível salvar o vocabulário."; }
+    }
+}

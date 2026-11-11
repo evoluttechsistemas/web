@@ -1,6 +1,7 @@
 ﻿@page "/ticket"
 @page "/ticket/{id:int}"
 @inject EvolutCRM.Services.TicketService TicketService
+@inject EvolutCRM.Services.NotificacaoVistaNotifier VistaNotifier
 @inject EvolutCRM.Services.UserState UserState
 @inject EvolutCRM.Services.DocumentacaoService DocumentacaoSvc
 @inject NavigationManager Nav
@@ -31,6 +32,7 @@
 @inject EvolutCRM.Services.TicketClassificacaoService TicketClassificacaoService
 @inject AdminService AdminService
 @inject RespostaRapidaService RespostasRapidas
+@inject EvolutCRM.Services.AssistenteAtendenteService AssistenteIA
 
 
 <style>
@@ -3013,7 +3015,38 @@ else
                                 }
                                 else
                                 {
-                                    @if (!string.IsNullOrWhiteSpace(h.Anotacao))
+                                    @if (EvolutCRM.Services.ContatoCompartilhado.EhContato(h.Anotacao))
+                                    {
+                                        <div style="display:flex; flex-direction:column; gap:8px; min-width:230px;">
+                                            @foreach (var ct in EvolutCRM.Services.ContatoCompartilhado.Extrair(h.Anotacao))
+                                            {
+                                                <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px;
+                                                            background:#f8fafc; border:1px solid #e2e8f0;">
+                                                    <div style="width:36px; height:36px; border-radius:50%; flex-shrink:0; display:flex; align-items:center;
+                                                                justify-content:center; background:#dbeafe; color:#1e40af; font-size:17px;">👤</div>
+                                                    <div style="flex:1; min-width:0;">
+                                                        <div style="font-size:10.5px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Contato compartilhado</div>
+                                                        <div style="font-weight:800; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@ct.Nome</div>
+                                                        <div style="font-size:12.5px; color:#334155;">@EvolutCRM.Services.ContatoCompartilhado.Formatar(ct.Telefone)</div>
+                                                    </div>
+                                                    @if (ct.Telefone.Length > 0)
+                                                    {
+                                                        <button type="button" disabled="@_abrindoContato"
+                                                                style="border:none; border-radius:9px; padding:7px 12px; font-weight:800; font-size:12px; cursor:pointer;
+                                                                       background:#16a34a; color:#fff; white-space:nowrap;"
+                                                                @onclick="() => ConversarComContatoAsync(h.Codigo, ct.Nome, ct.Telefone)">
+                                                            @(_abrindoContato ? "Abrindo..." : "💬 Conversar")
+                                                        </button>
+                                                    }
+                                                </div>
+                                            }
+                                            @if (_erroContatoMsg == h.Codigo && !string.IsNullOrEmpty(_erroContato))
+                                            {
+                                                <div style="font-size:12px; color:#b91c1c; font-weight:600;">@_erroContato</div>
+                                            }
+                                        </div>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(h.Anotacao))
                                     {
                                         <span class="historico-texto">
                                             @foreach (var parte in SepararUrlsDoTexto(h.Anotacao))
@@ -5509,6 +5542,35 @@ private bool _finalizandoViaF2ComInsight = false;
 
     string MensagemCliente = "";
     TicketChamadoCModel? TicketAtual;
+
+    // ── Contato compartilhado pelo cliente no WhatsApp ──
+    bool _abrindoContato;
+    string _erroContato = "";
+    int _erroContatoMsg;
+
+    async Task ConversarComContatoAsync(int codMensagem, string nome, string telefone)
+    {
+        if (_abrindoContato || TicketAtual == null) return;
+        _abrindoContato = true;
+        _erroContato = "";
+        _erroContatoMsg = codMensagem;
+        StateHasChanged();
+        try
+        {
+            var usuario = (UserState.CurrentUser ?? "").Trim().ToUpperInvariant();
+            var (codTicket, _) = await TicketService.AbrirTicketParaContatoAsync(TicketAtual.Codigo, telefone, nome, usuario);
+            Nav.NavigateTo($"/ticket/{codTicket}");
+        }
+        catch (Exception ex)
+        {
+            _erroContato = "Não consegui abrir a conversa: " + ex.Message;
+        }
+        finally
+        {
+            _abrindoContato = false;
+            StateHasChanged();
+        }
+    }
     string NomeCliente = "";
     List<TicketChamadoDModel> Historico = new();
     string NovaAnotacao = "";
@@ -5844,6 +5906,31 @@ private bool _finalizandoViaF2ComInsight = false;
     private string? _minhaRotaAba;
     private bool AbaAtiva => _minhaRotaAba == null || (Abas.RotaAtiva ?? "") == _minhaRotaAba;
 
+    // Chegou mensagem enquanto o ticket estava aberto mas ninguém olhando (outra aba/janela)
+    private bool _leituraPendente;
+
+    private async Task<bool> EstaOlhandoAsync()
+    {
+        try { return await JS.InvokeAsync<bool>("crmPaginaEmUso"); }
+        catch { return false; }
+    }
+
+    // Voltou a olhar o ticket: marca como lido o que chegou e tira o aviso do painel
+    private async Task MarcarLidoAoVoltarAsync()
+    {
+        if (!_leituraPendente || TicketAtual == null || EhNovo || !AbaAtiva)
+            return;
+
+        var rotaAtual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].ToLowerInvariant();
+        if (rotaAtual != $"ticket/{id}" || !await EstaOlhandoAsync())
+            return;
+
+        _leituraPendente = false;
+        await TicketService.MarcarComoAbertoAsync(id);
+        VistaNotifier.MarcarVisto(UserState.CurrentCompanyId, EvolutCRM.Services.NotificacaoVistaNotifier.Ticket, id);
+        TicketNotify.SetNovos(await TicketService.GetQuantidadeTicketsNovosAsync(UserState.CurrentUser));
+    }
+
     private async Task AtualizarAutomaticamente()
     {
         if (EhNovo) return;
@@ -5865,7 +5952,11 @@ private bool _finalizandoViaF2ComInsight = false;
 
                 _atualizando = true;
 
-                try { await AtualizarTicket(); }
+                try
+                {
+                    await MarcarLidoAoVoltarAsync();
+                    await AtualizarTicket();
+                }
                 finally { _atualizando = false; }
             }
         }
@@ -5881,7 +5972,9 @@ private bool _finalizandoViaF2ComInsight = false;
             return;
 
         var rotaAtual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].ToLowerInvariant();
-        bool visivelAgora = rotaAtual == $"ticket/{id}";
+        // Só conta como lido se a pessoa está olhando de verdade: este ticket na aba ativa do HELP,
+        // aba do navegador visível e janela com foco. Aberto em outra aba/janela, continua notificando.
+        bool visivelAgora = rotaAtual == $"ticket/{id}" && AbaAtiva && await EstaOlhandoAsync();
 
         // ── Passo 1: query ultra-leve, só 2 números ──────────────────────────
         var resumo = await TicketService.ResumoHistoricoAsync(id);
@@ -5948,6 +6041,8 @@ private bool _finalizandoViaF2ComInsight = false;
 
         if (visivelAgora)
             await TicketService.MarcarComoAbertoAsync(id);
+        else
+            _leituraPendente = true; // marca como lido quando a pessoa voltar para este ticket
 
         if (TicketAtual != null)
         {
@@ -6602,6 +6697,37 @@ private bool _finalizandoViaF2ComInsight = false;
 
                     return $"[{x.DataHora:dd/MM HH:mm}] {autor}: {texto}";
                 }));
+
+            // AtendimentoIA configurado: a sugestão vem de lá (docs, casos aprovados, parâmetros e código do ERP),
+            // com os prints que o cliente mandou. Sem ele, continua a IA do HELP abaixo.
+            if (AssistenteIA.AtendimentoIaConfigurado)
+            {
+                var rIa = await AssistenteIA.GerarRespostaClienteTicketAsync(id, mensagensCliente, TicketAtual?.Assunto, codigosImagens);
+                if (!rIa.Ok)
+                {
+                    Mensagem = rIa.Erro;
+                    Sucesso = false;
+                    HealthMonitor.Log(LogCategory.Tickets, LogSeverity.Warning, $"Ticket #{id} — AtendimentoIA não gerou sugestão", rIa.Erro);
+                    return;
+                }
+                ResultadoIA = null;
+                FonteIAAberta = null;
+                FeedbackIA = 0;
+                SugestaoIA = EvolutCRM.Services.AssistenteAtendenteService.TextoParaCliente(rIa);
+                if (string.IsNullOrWhiteSpace(SugestaoIA))
+                {
+                    Mensagem = "O AtendimentoIA retornou vazio.";
+                    Sucesso = false;
+                    return;
+                }
+                NovaAnotacao = SugestaoIA;
+                _expandirMsgIA = true;
+                Sucesso = true;
+                Mensagem = !rIa.EvidenciasSuficientes
+                    ? "⚠️ O AtendimentoIA não encontrou evidências suficientes: a sugestão pede mais detalhes ao cliente. Revise antes de enviar."
+                    : rIa.BaseadoEmCasoAnterior ? "📌 Sugestão baseada em atendimento anterior resolvido. Confira se vale para a versão deste cliente." : "";
+                return;
+            }
 
             // Chama o serviço direto (antes ia por HTTP para o próprio servidor)
             var resultado = await AiSvc.SugerirAsync(new AiPedidoSugestao

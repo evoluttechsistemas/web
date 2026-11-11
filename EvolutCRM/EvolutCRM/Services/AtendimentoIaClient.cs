@@ -47,25 +47,30 @@ public sealed class AtendimentoIaClient
 
     public void EsquecerConversa(int codTicket, string usuario) => _continuacoes.TryRemove(Chave(codTicket, usuario), out _);
 
-    public async Task<AtendimentoIaResposta> PerguntarAsync(int codTicket, string usuario, string pergunta, CancellationToken ct)
+    public const int MaxImagens = 2;   // limite da API do AtendimentoIA
+
+    /// <param name="imagens">Prints em data URL (JPEG/PNG/WEBP, até 4 MB cada). O AtendimentoIA lê a tela e o erro.</param>
+    public async Task<AtendimentoIaResposta> PerguntarAsync(int codTicket, string usuario, string pergunta, CancellationToken ct,
+        IReadOnlyList<string>? imagens = null)
     {
         if (!Configurado)
             return AtendimentoIaResposta.Falha("O AtendimentoIA não está configurado (AtendimentoIA:Url e AtendimentoIA:Token).");
 
         pergunta = (pergunta ?? "").Trim();
-        if (pergunta.Length == 0) return AtendimentoIaResposta.Falha("Digite uma pergunta.");
+        var prints = (imagens ?? Array.Empty<string>()).Where(i => !string.IsNullOrWhiteSpace(i)).Take(MaxImagens).ToList();
+        if (pergunta.Length == 0 && prints.Count == 0) return AtendimentoIaResposta.Falha("Digite uma pergunta.");
         if (pergunta.Length > 2000) pergunta = pergunta[..2000];
 
         var chave = Chave(codTicket, usuario);
         string? continuacao = _continuacoes.TryGetValue(chave, out var c) && c.Expira > DateTime.UtcNow ? c.Valor : null;
 
-        var r = await EnviarAsync(codTicket, pergunta, continuacao, ct);
+        var r = await EnviarAsync($"chamados/{codTicket}", $"Ticket #{codTicket}", pergunta, continuacao, prints, ct);
 
         // Continuação expirada ou inválida: começa uma conversa nova com a mesma pergunta
         if (r.Status == HttpStatusCode.BadRequest && continuacao != null)
         {
             _continuacoes.TryRemove(chave, out _);
-            r = await EnviarAsync(codTicket, pergunta, null, ct);
+            r = await EnviarAsync($"chamados/{codTicket}", $"Ticket #{codTicket}", pergunta, null, prints, ct);
         }
 
         if (r.Resposta != null)
@@ -78,15 +83,38 @@ public sealed class AtendimentoIaClient
         return AtendimentoIaResposta.Falha(r.Erro ?? "Não foi possível falar com o AtendimentoIA.");
     }
 
+    /// <summary>
+    /// Botão "Gerar resposta IA": uma resposta avulsa para o cliente (ticket) ou para o lead (card),
+    /// sem misturar com a conversa do painel da IA. Nada é enviado ao cliente: o texto vai para o campo de mensagem.
+    /// </summary>
+    public Task<AtendimentoIaResposta> GerarRespostaTicketAsync(int codTicket, string pergunta, IReadOnlyList<string>? imagens, CancellationToken ct) =>
+        RespostaAvulsaAsync($"chamados/{codTicket}", $"Ticket #{codTicket}", pergunta, imagens, ct);
+
+    public Task<AtendimentoIaResposta> GerarRespostaCardAsync(int codCard, string pergunta, IReadOnlyList<string>? imagens, CancellationToken ct) =>
+        RespostaAvulsaAsync($"cards/{codCard}", $"Card #{codCard}", pergunta, imagens, ct);
+
+    private async Task<AtendimentoIaResposta> RespostaAvulsaAsync(string rota, string rotulo, string pergunta,
+        IReadOnlyList<string>? imagens, CancellationToken ct)
+    {
+        if (!Configurado)
+            return AtendimentoIaResposta.Falha("O AtendimentoIA não está configurado (AtendimentoIA:Url e AtendimentoIA:Token).");
+        pergunta = (pergunta ?? "").Trim();
+        if (pergunta.Length > 2000) pergunta = pergunta[..2000];
+        var prints = (imagens ?? Array.Empty<string>()).Where(i => !string.IsNullOrWhiteSpace(i)).Take(MaxImagens).ToList();
+        if (pergunta.Length == 0 && prints.Count == 0) return AtendimentoIaResposta.Falha("Não há mensagem do cliente para responder.");
+        var r = await EnviarAsync(rota, rotulo, pergunta, null, prints, ct);
+        return r.Resposta ?? AtendimentoIaResposta.Falha(r.Erro ?? "Não foi possível falar com o AtendimentoIA.");
+    }
+
     private async Task<(HttpStatusCode? Status, AtendimentoIaResposta? Resposta, string? Erro)> EnviarAsync(
-        int codTicket, string pergunta, string? continuacao, CancellationToken ct)
+        string rota, string rotulo, string pergunta, string? continuacao, IReadOnlyList<string> imagens, CancellationToken ct)
     {
         try
         {
             var client = _http.CreateClient(NomeHttpClient);
-            using var req = new HttpRequestMessage(HttpMethod.Post, $"{Url}/api/v1/help/chamados/{codTicket}/respostas")
+            using var req = new HttpRequestMessage(HttpMethod.Post, $"{Url}/api/v1/help/{rota}/respostas")
             {
-                Content = JsonContent.Create(new { pergunta, continuacao })
+                Content = JsonContent.Create(new { pergunta, continuacao, imagens = imagens.Count > 0 ? imagens : null })
             };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Token);
 
@@ -96,7 +124,7 @@ public sealed class AtendimentoIaClient
             if ((int)resp.StatusCode is >= 300 and < 400 || (resp.IsSuccessStatusCode && !tipo.Contains("json", StringComparison.OrdinalIgnoreCase)))
             {
                 var destino = resp.Headers.Location?.ToString() ?? "";
-                LogHelper.Log($"[ATENDIMENTO-IA] Ticket #{codTicket} | HTTP {(int)resp.StatusCode} | tipo={tipo} | destino={destino}");
+                LogHelper.Log($"[ATENDIMENTO-IA] {rotulo} | HTTP {(int)resp.StatusCode} | tipo={tipo} | destino={destino}");
                 return (resp.StatusCode, null,
                     "O AtendimentoIA devolveu uma página em vez da API. A versão publicada pode não ter a API do HELP, " +
                     "ou ele está mandando para a tela de login.");
@@ -112,11 +140,11 @@ public sealed class AtendimentoIaClient
             }
 
             var detalhe = await LerErroAsync(resp, ct);
-            LogHelper.Log($"[ATENDIMENTO-IA] Ticket #{codTicket} | HTTP {(int)resp.StatusCode} | {detalhe}");
+            LogHelper.Log($"[ATENDIMENTO-IA] {rotulo} | HTTP {(int)resp.StatusCode} | {detalhe}");
             var erro = resp.StatusCode switch
             {
                 HttpStatusCode.Unauthorized => "O AtendimentoIA recusou a credencial do HELP. Confira o AtendimentoIA:Token.",
-                HttpStatusCode.NotFound => "O AtendimentoIA não encontrou este chamado.",
+                HttpStatusCode.NotFound => rota.StartsWith("cards/") ? "O AtendimentoIA não encontrou este card." : "O AtendimentoIA não encontrou este chamado.",
                 HttpStatusCode.TooManyRequests => "O AtendimentoIA está atendendo outras perguntas agora. Tente de novo em alguns segundos.",
                 HttpStatusCode.BadRequest => string.IsNullOrWhiteSpace(detalhe) ? "Pergunta recusada pelo AtendimentoIA." : detalhe,
                 _ => "O AtendimentoIA não conseguiu responder agora. Tente novamente em instantes."
@@ -129,12 +157,12 @@ public sealed class AtendimentoIaClient
         }
         catch (TaskCanceledException)
         {
-            LogHelper.Log($"[ATENDIMENTO-IA] Ticket #{codTicket} | tempo esgotado");
+            LogHelper.Log($"[ATENDIMENTO-IA] {rotulo} | tempo esgotado");
             return (null, null, "O AtendimentoIA demorou demais para responder. Tente novamente.");
         }
         catch (Exception ex)
         {
-            LogHelper.Log($"[ATENDIMENTO-IA] Ticket #{codTicket} | {ex.GetType().Name}: {ex.Message}");
+            LogHelper.Log($"[ATENDIMENTO-IA] {rotulo} | {ex.GetType().Name}: {ex.Message}");
             return (null, null, "Não foi possível conectar ao AtendimentoIA. Confira se ele está no ar e o AtendimentoIA:Url.");
         }
     }
@@ -173,6 +201,8 @@ public sealed class AtendimentoIaResposta
     public string? Resposta { get; set; }
     public string? PerguntaDeAcompanhamento { get; set; }
     public bool EvidenciasSuficientes { get; set; }
+    /// <summary>A orientação veio só de atendimento anterior resolvido (insight aprovado): conferir a versão do cliente.</summary>
+    public bool BaseadoEmCasoAnterior { get; set; }
     public string? Segmento { get; set; }
     public string? VersaoErp { get; set; }
     public string? Formato { get; set; }                 // texto | fluxo | imagem

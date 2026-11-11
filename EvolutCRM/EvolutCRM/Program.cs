@@ -109,6 +109,7 @@ builder.Services.AddScoped<CurriculoOnlineService>();
 builder.Services.AddScoped<AbaService>();
 builder.Services.AddScoped<LogAcessoService>();
 builder.Services.AddScoped<MonitorBackupService>();
+builder.Services.AddScoped<BackupFtpService>();   // tela Backups dos Clientes (lista e baixa do FTP)
 builder.Services.AddHostedService<BackupMonitorBackgroundService>();
 // Servidor de backup (FTP) ligado? Verifica a cada minuto, avisa no HELP e por WhatsApp
 builder.Services.AddSingleton<MonitorServidorService>();
@@ -116,6 +117,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MonitorServidorSer
 builder.Services.AddSingleton<HealthMonitorService>();
 builder.Services.AddScoped<BxClienteService>();
 builder.Services.AddScoped<LogFinanceiroService>();
+builder.Services.AddScoped<BoletoInterService>();   // emissão de boletos pelo Banco Inter (tela Boletos Inter)
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<CadastroUsuarioService>();
 builder.Services.AddScoped<ClienteCadastroService>();
@@ -186,6 +188,7 @@ AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AcessoRemoto), "Acess
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.AdminLogs), "Admin Logs", "fas fa-file-shield", "admin/logs");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Agendas), "Agendas", "fas fa-calendar-days", "agendas");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BaixaReceber), "Financeiro", "fas fa-money-bill", "admin/bx-pagar");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BoletosInter), "Boletos Inter", "fas fa-barcode", "admin/boletos-inter");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BancoTalentos), "Banco de Talentos", "fas fa-users", "banco-talentos");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Card), "Card", "fas fa-id-card", "card");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.Cards), "CRM", "fas fa-table-columns", "cards");
@@ -210,6 +213,7 @@ AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.LogAcesso), "Log de A
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.LogFinanceiro), "Log Financeiro", "fas fa-money-bill-transfer", "admin/log-financeiro");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CuradoriaIA), "Curadoria da IA", "fas fa-wand-magic-sparkles", "admin/ia-curadoria");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorBackups), "Monitor de Backups", "fas fa-database", "admin/monitor-backups");
+AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.BackupsClientes), "Backups dos Clientes", "fas fa-cloud-arrow-down", "admin/backups-clientes");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.MonitorHealth), "Monitor HELP", "fas fa-heart-pulse", "admin/monitor");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CadastroUsuario), "Cadastro de Usuário", "fas fa-user-plus", "cadastro-usuario");
 AbaService.RegistrarMeta(typeof(EvolutCRM.Components.Pages.CadastroCliente), "Cadastro de Cliente", "fas fa-users", "cadastro-cliente");
@@ -532,6 +536,44 @@ _ = Task.Run(async () =>
 app.MapBlogEndpoints();
 app.MapMobileEndpoints();
 app.MapIndicacaoEndpoints();   // botão "Indique e ganhe" do sistema desktop
+
+// Download de backup dos clientes: link assinado gerado pela tela Backups dos Clientes (vale 2h).
+// O arquivo vem do FTP direto para o navegador, passando pelo HELP; a senha do FTP nunca sai do servidor.
+app.MapGet("/api/backups-clientes/download", async (HttpContext http, string? p, long? e, string? u, string? s,
+    BackupFtpService ftp, AdminService admin) =>
+{
+    if (!BackupFtpService.LinkValido(p, e ?? 0, u, s))
+    {
+        http.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await http.Response.WriteAsync("Link inválido ou vencido. Atualize a tela Backups dos Clientes e clique em Baixar de novo.");
+        return;
+    }
+    var usuario = (u ?? "").Trim().ToUpperInvariant();
+    var permissoes = await admin.GetPermissoesUsuarioAsync(usuario);
+    if (!permissoes.Contains("ADMIN_ACESSAR"))
+    {
+        http.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await http.Response.WriteAsync("Usuário sem permissão.");
+        return;
+    }
+    try
+    {
+        LogHelper.Log($"[BACKUP-FTP] {usuario} baixou {p}");
+        await ftp.BaixarParaAsync(p!, http.Response, http.RequestAborted);
+    }
+    catch (OperationCanceledException) { }
+    catch (Exception ex)
+    {
+        LogHelper.Log($"[BACKUP-FTP] Falha ao baixar {p}: {ex.GetType().Name}: {ex.Message}");
+        if (!http.Response.HasStarted)
+        {
+            http.Response.StatusCode = ex is FileNotFoundException ? StatusCodes.Status404NotFound : StatusCodes.Status502BadGateway;
+            http.Response.ContentType = "text/plain; charset=utf-8";
+            await http.Response.WriteAsync(ex is FileNotFoundException ? "Arquivo não encontrado no FTP." : "Não foi possível baixar do servidor de backup.");
+        }
+        else http.Abort();
+    }
+});
 app.MapHub<ReuniaoHub>("/hubs/reuniao");
 
 app.Run();

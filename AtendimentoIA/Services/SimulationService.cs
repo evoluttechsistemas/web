@@ -5,13 +5,14 @@ using Microsoft.Data.SqlClient;
 namespace EvolutTech.IA.Painel.Services;
 
 public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvider provider,PanelStore store,
-    ILogger<SimulationService> logger,DesignerScreenService? designerScreens=null,ApplicationInspectionService? applicationInspection=null,VideoCatalogService? videos=null)
+    ILogger<SimulationService> logger,DesignerScreenService? designerScreens=null,ApplicationInspectionService? applicationInspection=null,VideoCatalogService? videos=null,
+    QueryRewriter? rewriter=null)
 {
     public bool IsConfigured=>provider.IsConfigured;
     public async Task<AiSettings> GetSettingsAsync()=>await store.ReadAsync<AiSettings>("ai-settings.json")??new();
     public async Task SaveSettingsAsync(AiSettings settings)
     {
-        if(!Regex.IsMatch(settings.Model,@"\A[a-zA-Z0-9_.:-]{1,120}\z")) throw new ArgumentException("Nome de modelo inválido.");
+        if(!Regex.IsMatch(settings.Model,@"\A[a-zA-Z0-9_.:-]{1,120}\z")||!Regex.IsMatch(settings.AuxModel,@"\A[a-zA-Z0-9_.:-]{1,120}\z")) throw new ArgumentException("Nome de modelo inválido.");
         await store.WriteAsync("ai-settings.json",settings);
     }
     public async Task<SimulationAnswer> AskAsync(SimulationRequest request,CancellationToken token=default)
@@ -27,6 +28,12 @@ public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvi
         var settings=await GetSettingsAsync();
         try
         {
+            // Modelo auxiliar traduz a mensagem para os termos do ERP antes da busca (falha = segue com a pergunta original).
+            if(rewriter is not null&&!ExplanationPolicy.IsClarification(request.Question))
+            {
+                var hint=await rewriter.RewriteAsync(request,token);
+                if(hint.Length>0) request=request with {SearchHint=hint};
+            }
             var context=await retriever.RetrieveAsync(request,token);
             if(applicationInspection is not null) context=await applicationInspection.InspectAsync(request,context,token);
             SimulationAnswer answer;
@@ -56,6 +63,8 @@ public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvi
                 catch(Exception ex) when(ex is IOException or HttpRequestException or JsonException or System.Xml.XmlException)
                 {answer=answer with {Warnings=[..answer.Warnings,"O catálogo de vídeos está indisponível. A orientação foi mantida com as demais fontes."]};}
             await AuditAsync(id,request,settings.Model,answer.SufficientEvidence?"answered":"insufficient",answer.Sources,answer.InputTokens,answer.OutputTokens,context.Checks,context.InterfaceReview);
+            // Lacunas: assuntos sem evidência viram a lista de documentações/orientações que faltam (só palavras-chave).
+            if(request.Mode!=SimulationMode.Technician) await KnowledgeQuality.RecordAsync(store,KnowledgeSearch.RetrievalQuestion(request),answer.SufficientEvidence);
             return answer;
         }
         catch(OperationCanceledException) when(token.IsCancellationRequested) { await AuditAsync(id,request,settings.Model,"cancelled",[],0,0); throw; }
@@ -78,7 +87,8 @@ public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvi
         var ids=generated.SourceIds.Distinct().ToArray();
         var sources=context.Sources.Where(s=>ids.Contains(s.Id,StringComparer.Ordinal)).ToList();
         var valid=ids.Length>0&&sources.Count==ids.Length&&sources.All(s=>(mode==SimulationMode.Technician||s.CustomerSafe)&&KnowledgeSearch.MatchesModule(s,requestedModule));
-        var hasFactualSource=sources.Any(s=>s.Kind is "guidance" or "documentation" or "code" or "parameter" or "interface")&&(!requireInterfaceEvidence||sources.Any(s=>s.Kind=="interface"&&(requestedModule.Length==0||KnowledgeSearch.ModuleOf(s)==requestedModule)));
+        // Insight aprovado (resolved-case) também sustenta a resposta: são soluções confirmadas de problemas específicos.
+        var hasFactualSource=sources.Any(s=>s.Kind is "guidance" or "documentation" or "code" or "parameter" or "interface" or "resolved-case")&&(!requireInterfaceEvidence||sources.Any(s=>s.Kind=="interface"&&(requestedModule.Length==0||KnowledgeSearch.ModuleOf(s)==requestedModule)));
         var hasModuleEvidence=requestedModule.Length==0||sources.Any(s=>KnowledgeSearch.ModuleOf(s).Equals(requestedModule,StringComparison.OrdinalIgnoreCase));
         var sufficient=generated.SufficientEvidence&&valid&&hasFactualSource&&hasModuleEvidence&&!string.IsNullOrWhiteSpace(generated.Answer);
         // Invalid IDs are never silently accepted as grounding for a model claim.
@@ -91,7 +101,8 @@ public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvi
             ExternalText.Clean(generated.TechnicalNotes,5000),sufficient,
             mode==SimulationMode.Technician?ExternalText.Clean(generated.FollowUp,500):string.IsNullOrWhiteSpace(generated.FollowUp)?"":CustomerParameterPolicy.Apply(generated.FollowUp,sources,sufficient,includeHandoff:false),sources,context.Warnings,
             context.Segment,context.Version,model,generated.InputTokens,generated.OutputTokens,format,steps);
-        return NavigationPresentation.Complete(ConfigurationPresentation.Complete(validated,context.Sources,question),context.Sources,requestedModule,question);
+        var resolvedOnly=sufficient&&sources.Count>0&&sources.All(s=>s.Kind is "resolved-case" or "history" or "ai-history" or "crm-history");
+        return NavigationPresentation.Complete(ConfigurationPresentation.Complete(validated with {ResolvedCaseOnly=resolvedOnly},context.Sources,question),context.Sources,requestedModule,question);
     }
     private async Task AuditAsync(Guid id,SimulationRequest request,string model,string status,List<KnowledgeEvidence> sources,int inputTokens,int outputTokens,IReadOnlyList<SourceCheck>? checks=null,InterfaceReview? review=null)
     {
