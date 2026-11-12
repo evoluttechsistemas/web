@@ -47,9 +47,14 @@ public sealed class KnowledgeRetriever(PanelStore store, SecretStore secrets, In
         }
 
         var guidance = await store.GetGuidanceAsync();
-        candidates.AddRange(guidance.Where(g => !g.Archived &&
-            (g.Segment.Equals("Todos",StringComparison.OrdinalIgnoreCase) || g.Segment.Equals(segment,StringComparison.OrdinalIgnoreCase)))
+        var activeGuidance = guidance.Where(g => !g.Archived &&
+            (g.Segment.Equals("Todos",StringComparison.OrdinalIgnoreCase) || g.Segment.Equals(segment,StringComparison.OrdinalIgnoreCase))).ToList();
+        candidates.AddRange(activeGuidance.Where(g => !string.IsNullOrWhiteSpace(g.Content))
             .Select(g => new KnowledgeEvidence("","guidance",$"{g.Title} · {g.Module}",$"Orientação/{g.Id}",g.Content,g.CustomerVisible,Module:KnowledgeSearch.ModuleOf(g.Module))));
+        // Observação do responsável: orienta a resposta em qualquer modo (só vai para a IA, nunca é citada ao cliente),
+        // mas não comprova caminho nem regra — não conta como fonte factual.
+        candidates.AddRange(activeGuidance.Where(g => !string.IsNullOrWhiteSpace(g.Note))
+            .Select(g => new KnowledgeEvidence("","reviewer-note",$"{g.Title} · {g.Module}",$"Orientação/{g.Id}/observação",g.Note,true,Module:KnowledgeSearch.ModuleOf(g.Module))));
         checks.Add(new("Orientações cadastradas","consultadas",candidates.Count(s=>s.Kind=="guidance"&&(request.Mode==SimulationMode.Technician||s.CustomerSafe)),"Orientações do segmento e do público selecionados; relevância e módulo são filtrados antes da resposta."));
 
         var terms = KnowledgeSearch.Terms(searchQuestion);

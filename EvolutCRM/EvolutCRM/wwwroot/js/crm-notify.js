@@ -27,7 +27,10 @@
     };
 
     // Popup do Windows (fora do navegador quando minimizado)
-    window.crmNotifyPopup = async function (title, body, iconUrl) {
+    // url: tela aberta ao clicar (ex.: /ticket/123). tag: avisos com a mesma tag se substituem
+    // (o mesmo ticket); sem tag, cada aviso fica separado — antes todos usavam a mesma tag e
+    // um aviso de card/chat/agenda apagava na hora o aviso de ticket que tinha acabado de aparecer.
+    window.crmNotifyPopup = async function (title, body, iconUrl, url, tag) {
         try {
             if (!("Notification" in window)) {
                 window.crmToast((title || "CRM") + " - " + (body || ""), "danger");
@@ -35,7 +38,8 @@
             }
 
             if (Notification.permission !== "granted") {
-                const perm = await window.crmNotifyInit();
+                // Sem clique do usuário o navegador ignora o pedido de permissão; ele é feito no primeiro clique (abaixo)
+                const perm = Notification.permission;
 
                 if (perm !== "granted") {
                     window.crmToast((title || "CRM") + " - " + (body || ""), "danger");
@@ -43,17 +47,11 @@
                 }
             }
 
-            // Fecha notificação anterior antes de abrir outra
-            if (window.__crm.lastNotification) {
-                try { window.__crm.lastNotification.close(); } catch { }
-                window.__crm.lastNotification = null;
-            }
-
             const n = new Notification(title || "CRM", {
                 body: body || "",
                 icon: iconUrl || "/images/logo-evoluttech.png",
                 silent: false,
-                tag: "evolutcrm-notificacao",
+                tag: tag || ("evolutcrm-" + Date.now() + "-" + Math.random().toString(36).slice(2)),
                 renotify: true
             });
 
@@ -61,6 +59,7 @@
 
             n.onclick = () => {
                 try { window.focus(); } catch { }
+                try { if (url && window.Blazor && window.Blazor.navigateTo) window.Blazor.navigateTo(url); } catch { }
                 try { n.close(); } catch { }
                 window.__crm.lastNotification = null;
             };
@@ -71,13 +70,8 @@
                 }
             };
 
-            setTimeout(() => {
-                try { n.close(); } catch { }
-
-                if (window.__crm.lastNotification === n) {
-                    window.__crm.lastNotification = null;
-                }
-            }, 8000);
+            // Não fecha mais sozinho em 8s: quem não estava olhando perdia o aviso (sumia também da
+            // central de notificações do Windows). O Windows esconde o balão e guarda na central.
 
             return { ok: true };
         } catch (e) {
@@ -216,6 +210,11 @@
     // Auto-unlock no primeiro clique/tecla
     (function attachAudioUnlock() {
         const unlockOnce = async () => {
+            // Permissão do popup do Windows: o navegador só aceita o pedido junto de um clique/tecla
+            try {
+                if ("Notification" in window && Notification.permission === "default")
+                    Notification.requestPermission();
+            } catch { }
             await window.crmAudioUnlock();
             window.removeEventListener("pointerdown", unlockOnce);
             window.removeEventListener("keydown", unlockOnce);

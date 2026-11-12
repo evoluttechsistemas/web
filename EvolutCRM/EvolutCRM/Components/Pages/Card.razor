@@ -2833,7 +2833,7 @@ textarea[id^="obsAnotacao_"] {
                         @if (!excluida && temAudio)
                         {
                             <div class="audio-mini-container">
-                                <audio controls class="audio-mini-player"
+                                <audio controls preload="none" class="audio-mini-player"
                                        onloadedmetadata="window.evolutCardUI && window.evolutCardUI.aplicarVelocidade(this)">
                                     <source src="@anot.Audio" type="@(string.IsNullOrWhiteSpace(anot.AudioMimeType) ? "audio/ogg" : anot.AudioMimeType)" />
                                 </audio>

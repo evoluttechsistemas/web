@@ -117,7 +117,10 @@ WHERE Codigo = @Codigo
             if (string.IsNullOrWhiteSpace(mimeType))
                 mimeType = "audio/mpeg";
 
-            return File(bytes, mimeType);
+            // Áudio não muda: o navegador guarda e não baixa de novo a cada abertura do ticket.
+            // Range: o player pede só o pedaço que precisa e solta a conexão (antes vinha sempre o arquivo todo).
+            Response.Headers.CacheControl = "private, max-age=604800";
+            return File(bytes, mimeType, enableRangeProcessing: true);
         }
 
         [HttpGet("video/{codigo:int}")]
@@ -155,8 +158,9 @@ WHERE Codigo = @Codigo
                 mimeType = "video/mp4";
 
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{nome}\"";
+            Response.Headers.CacheControl = "private, max-age=604800";
 
-            return File(bytes, mimeType);
+            return File(bytes, mimeType, enableRangeProcessing: true);
         }
 
         private static string ObterMimeType(string? nomeArquivo)

@@ -2073,6 +2073,13 @@
     private bool estaDigitando = false;
 
     private int totalNaoLidas = 0;
+    private bool _leituraPendente;
+
+    private async Task<bool> EmUsoAsync()
+    {
+        try { return await JS.InvokeAsync<bool>("crmPaginaEmUso"); }
+        catch { return false; }
+    }
     private int uploadPct = 0;
 
     private List<string> usuariosGrupo = new();
@@ -2159,6 +2166,16 @@
                             if (conversas.Count != convAntes) houveMudanca = true;
                         }
 
+                        // Voltou a olhar o chat: marca como lida o que chegou enquanto estava fora
+                        if (_leituraPendente && conversaSelecionada != null && IsVisible && await EmUsoAsync())
+                        {
+                            _leituraPendente = false;
+                            await ChatService.MarcarConversaComoLidaAsync(
+                                conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
+                            await CarregarTudo(false);
+                            houveMudanca = true;
+                        }
+
                         // DEPOIS:
                         if (conversaSelecionada != null)
                         {
@@ -2177,8 +2194,9 @@
                                     houveMudanca = true;
                                     _ultimoCodigoMensagem = resumo.UltimoCodigo;
 
-                                    // DEPOIS — só marca como lida e scrolla se o usuário estiver vendo a aba
-                                    if (IsVisible)
+                                    // Só marca como lida se a pessoa está vendo: aba ativa do HELP e HELP em foco
+                                    // (minimizado ou atrás de outro programa, fica não lida para o aviso sair)
+                                    if (IsVisible && await EmUsoAsync())
                                     {
                                         await ChatService.MarcarConversaComoLidaAsync(
                                             conversaSelecionada.Codigo, UserState.CurrentUser ?? "", CodEmp);
@@ -2187,6 +2205,7 @@
                                     }
                                     else
                                     {
+                                        _leituraPendente = true;
                                         // Atualiza a lista de conversas para o badge interno da sidebar do chat aparecer
                                         await CarregarTudo(false);
                                     }

@@ -35,6 +35,12 @@ internal static class ResolvedCaseTests
         var aiHistory=new RetrievalContext("","",[historical with {Kind="ai-history"}],[]);
         if(SimulationService.Validate(Guid.NewGuid(),new("O histórico diz.","",true,["S1"],""),aiHistory,SimulationMode.CustomerSupport,"fixture","PDV").SufficientEvidence)
             throw new Exception("Unvalidated AI history was accepted as evidence");
+        // Observação do responsável orienta, mas sozinha não comprova o caminho.
+        var noteOnly=new RetrievalContext("","",[new KnowledgeEvidence("S1","reviewer-note","Correção: cancelar NFC-e","Orientação/x/observação","Faltou o passo a passo.",true)],[]);
+        if(SimulationService.Validate(Guid.NewGuid(),new("Acesse Vendas > Cancelar.","",true,["S1"],""),noteOnly,SimulationMode.CustomerSupport,"fixture","").SufficientEvidence)
+            throw new Exception("A reviewer note was accepted as factual evidence");
+        if(new GuidanceInput{Title="t",Segment="Todos",Module="Todos",Note="só observação"} is var onlyNote&&!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(onlyNote,new(onlyNote),null,true))
+            throw new Exception("A note-only correction was rejected");
         return Task.CompletedTask;
     }
 }

@@ -8,16 +8,23 @@ public sealed record IndexRun(Guid Id, DateTimeOffset StartedAt, string Reposito
     string State, string Message, string? Commit = null, int Files = 0, int Classes = 0,
     int Methods = 0, int Forms = 0, int Issues = 0, string? Stage = null, long Processed = 0,
     long? Total = null, string? Unit = null, DateTimeOffset? UpdatedAt = null, DateTimeOffset? FinishedAt = null);
-public sealed class GuidanceInput
+public sealed class GuidanceInput : IValidatableObject
 {
     [Required(ErrorMessage = "Informe o título."), StringLength(160)] public string Title { get; set; } = "";
     [Required(ErrorMessage = "Informe o segmento ou use Todos."), StringLength(100)] public string Segment { get; set; } = "Todos";
     [Required(ErrorMessage = "Informe o módulo."), StringLength(100)] public string Module { get; set; } = "";
-    [Required(ErrorMessage = "Escreva a orientação."), StringLength(12000)] public string Content { get; set; } = "";
+    [StringLength(12000)] public string Content { get; set; } = "";
+    /// <summary>Observação do responsável para a IA (o que faltou, o que trocou). Guia a resposta, não é citada ao cliente.</summary>
+    [StringLength(4000)] public string Note { get; set; } = "";
     public bool CustomerVisible { get; set; }
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (string.IsNullOrWhiteSpace(Content) && string.IsNullOrWhiteSpace(Note))
+            yield return new("Escreva a orientação ou a observação para a IA.", [nameof(Content)]);
+    }
 }
 public sealed record Guidance(Guid Id, string Title, string Segment, string Module, string Content,
-    bool CustomerVisible, DateTimeOffset UpdatedAt, string Author, bool Archived = false);
+    bool CustomerVisible, DateTimeOffset UpdatedAt, string Author, bool Archived = false, string Note = "");
 
 public sealed class PanelStore
 {
@@ -59,7 +66,7 @@ public sealed class PanelStore
         {
             var entries = await GetGuidanceAsync();
             entries.Add(new(Guid.NewGuid(), input.Title.Trim(), input.Segment.Trim(), input.Module.Trim(),
-                input.Content.Trim(), input.CustomerVisible, DateTimeOffset.UtcNow, author));
+                (input.Content ?? "").Trim(), input.CustomerVisible, DateTimeOffset.UtcNow, author, Note: (input.Note ?? "").Trim()));
             await WriteUnlockedAsync("guidance.json", entries);
         }
         finally { gate.Release(); }

@@ -1,4 +1,5 @@
-﻿using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Toolkit.Uwp.Notifications;
+using Microsoft.Web.WebView2.Core;
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -10,11 +11,27 @@ namespace HelpDesktop
     public partial class MainWindow : Window
     {
         private const string CrmUrl = "https://help.evoluttech.com/";
+        private const string CrmOrigem = "https://help.evoluttech.com";
+        private const string GrupoAvisos = "help";
+
+        // Avisos mostrados no Windows, para repassar o clique à página (abre o ticket certo)
+        private readonly Dictionary<string, CoreWebView2Notification> _avisos = new();
+        private readonly Queue<string> _ordemAvisos = new();
+        private WindowState _estadoAntesDeMinimizar = WindowState.Maximized;
 
         public MainWindow()
         {
             InitializeComponent();
             Loaded += MainWindow_Loaded;
+            StateChanged += (_, _) => { if (WindowState != WindowState.Minimized) _estadoAntesDeMinimizar = WindowState; };
+
+            // Clique no aviso do Windows: traz o HELP para frente e abre o ticket do aviso
+            ToastNotificationManagerCompat.OnActivated += toastArgs =>
+            {
+                ToastArguments args;
+                try { args = ToastArguments.Parse(toastArgs.Argument); } catch { return; }
+                Dispatcher.Invoke(() => AoClicarNoAviso(args));
+            };
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -27,7 +44,20 @@ namespace HelpDesktop
                     return;
                 }
 
-                await WebView.EnsureCoreWebView2Async();
+                // A página continua rodando com a janela minimizada ou atrás de outro programa.
+                // Sem isso o motor do Edge "desacelera" o HELP em segundo plano e os avisos atrasam ou não saem.
+                var opcoes = new CoreWebView2EnvironmentOptions(
+                    "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows");
+                var ambiente = await CoreWebView2Environment.CreateAsync(null, null, opcoes);
+                await WebView.EnsureCoreWebView2Async(ambiente);
+
+                // Notificações já liberadas desde o início (antes dependia de um pedido que às vezes não acontecia)
+                try
+                {
+                    await WebView.CoreWebView2.Profile.SetPermissionStateAsync(
+                        CoreWebView2PermissionKind.Notifications, CrmOrigem, CoreWebView2PermissionState.Allow);
+                }
+                catch { }
 
                 WebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 WebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -35,6 +65,7 @@ namespace HelpDesktop
 
                 WebView.CoreWebView2.PermissionRequested += CoreWebView2_PermissionRequested;
                 WebView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
+                WebView.CoreWebView2.NotificationReceived += CoreWebView2_NotificationReceived;
 
                 WebView.CoreWebView2.Navigate(uri.ToString());
             }
@@ -61,6 +92,103 @@ namespace HelpDesktop
             }
         }
 
+
+        // ── Avisos do HELP como notificação do Windows ──
+        // O WebView2 não garante o balão do Windows sozinho (app instalado fora da loja). O HelpDesktop
+        // assume o aviso e mostra ele mesmo, com o nome e o ícone do aplicativo.
+        private void CoreWebView2_NotificationReceived(object? sender, CoreWebView2NotificationReceivedEventArgs e)
+        {
+            var aviso = e.Notification;
+            var id = Guid.NewGuid().ToString("N");
+            var tagWindows = TagWindows(aviso.Tag, id);
+
+            try
+            {
+                e.Handled = true;
+
+                var builder = new ToastContentBuilder()
+                    .AddArgument("id", id)
+                    .AddArgument("tag", aviso.Tag ?? "")
+                    .AddText(string.IsNullOrWhiteSpace(aviso.Title) ? "EvolutTech Help" : aviso.Title)
+                    .AddText(aviso.Body ?? "");
+                if (aviso.IsSilent)
+                    builder.AddAudio(new ToastAudio { Silent = true });
+
+                builder.Show(toast =>
+                {
+                    toast.Tag = tagWindows;   // mesmo ticket: o aviso novo substitui o anterior
+                    toast.Group = GrupoAvisos;
+                });
+
+                aviso.ReportShown();
+                GuardarAviso(id, aviso);
+
+                aviso.CloseRequested += (_, _) =>
+                {
+                    try { ToastNotificationManagerCompat.History.Remove(tagWindows, GrupoAvisos); } catch { }
+                    _avisos.Remove(id);
+                };
+
+                if (!IsActive)
+                    PiscarIconeBarraTarefas();
+            }
+            catch
+            {
+                // Falhou o aviso próprio: deixa o WebView2 mostrar o dele
+                e.Handled = false;
+            }
+        }
+
+        private void GuardarAviso(string id, CoreWebView2Notification aviso)
+        {
+            _avisos[id] = aviso;
+            _ordemAvisos.Enqueue(id);
+            while (_ordemAvisos.Count > 100)
+                _avisos.Remove(_ordemAvisos.Dequeue());
+        }
+
+        // Tag do Windows aceita até 64 caracteres
+        private static string TagWindows(string? tag, string id)
+        {
+            if (string.IsNullOrWhiteSpace(tag)) return id[..32];
+            if (tag.Length <= 60) return tag;
+            var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tag));
+            return Convert.ToHexString(hash)[..32];
+        }
+
+        private void AoClicarNoAviso(ToastArguments args)
+        {
+            TrazerParaFrente();
+
+            if (args.TryGetValue("id", out var id) && _avisos.TryGetValue(id, out var aviso))
+            {
+                _avisos.Remove(id);
+                try
+                {
+                    aviso.ReportClicked();   // a página trata o clique: abre a tela do aviso
+                    return;
+                }
+                catch { }   // página recarregou depois do aviso: abre pelo número do ticket
+            }
+
+            if (args.TryGetValue("tag", out var tag) && tag.StartsWith("ticket-") &&
+                int.TryParse(tag["ticket-".Length..], out var codTicket))
+            {
+                _ = WebView.CoreWebView2?.ExecuteScriptAsync(
+                    $"window.Blazor && window.Blazor.navigateTo('/ticket/{codTicket}')");
+            }
+        }
+
+        private void TrazerParaFrente()
+        {
+            if (WindowState == WindowState.Minimized)
+                WindowState = _estadoAntesDeMinimizar;
+            Show();
+            Activate();
+            Topmost = true;   // garante que vem para frente de outros programas
+            Topmost = false;
+            Focus();
+        }
 
         private void CoreWebView2_WebMessageReceived(
     object? sender,

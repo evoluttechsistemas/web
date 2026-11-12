@@ -3281,7 +3281,9 @@ else
                             @if (!string.IsNullOrWhiteSpace(h.AudioUrl))
                             {
                                 <div class="audio-mini-container">
-                                    <audio controls class="audio-mini-player"
+                                    @* preload="none": o áudio só é baixado ao dar play. Com vários áudios na conversa, cada player
+                                       segurava uma conexão aberta e, passado o limite do navegador, os seguintes ficavam "0:00" sem tocar. *@
+                                    <audio controls preload="none" class="audio-mini-player"
                                            onloadedmetadata="window.aplicarVelocidadeAudio(this)">
                                         <source src="@h.AudioUrl" type="@(h.AudioMimeType ?? "audio/mpeg")" />
                                     </audio>
@@ -5971,10 +5973,6 @@ private bool _finalizandoViaF2ComInsight = false;
         if (TicketAtual == null || EhNovo)
             return;
 
-        var rotaAtual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].ToLowerInvariant();
-        // Só conta como lido se a pessoa está olhando de verdade: este ticket na aba ativa do HELP,
-        // aba do navegador visível e janela com foco. Aberto em outra aba/janela, continua notificando.
-        bool visivelAgora = rotaAtual == $"ticket/{id}" && AbaAtiva && await EstaOlhandoAsync();
 
         // ── Passo 1: query ultra-leve, só 2 números ──────────────────────────
         var resumo = await TicketService.ResumoHistoricoAsync(id);
@@ -5995,6 +5993,11 @@ private bool _finalizandoViaF2ComInsight = false;
         }
 
         // ── Passo 3: só chega aqui quando há mensagem nova ───────────────────
+        var rotaAtual = Nav.ToBaseRelativePath(Nav.Uri).Split('?')[0].ToLowerInvariant();
+        // Só conta como lido se a pessoa está olhando de verdade: este ticket na aba ativa do HELP,
+        // aba do navegador visível e janela com foco. Aberto em outra aba/janela, continua notificando.
+        bool visivelAgora = rotaAtual == $"ticket/{id}" && AbaAtiva && await EstaOlhandoAsync();
+
         var novas = await TicketService.BuscarHistoricoNovasAsync(id, _ultimoCodigoHistorico);
 
         var codigosExistentes = Historico.Select(h => h.Codigo).ToHashSet();

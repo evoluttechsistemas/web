@@ -52,14 +52,17 @@ else if(!message.Correcting)
 </div>
 @if(message.Correcting&&message.Feedback is null)
 { <div class="correction-form" style="margin-top:.75rem">
-    <label for="@($"fix-{message.Id}")">Resposta correta</label>
-    <textarea id="@($"fix-{message.Id}")" rows="6" maxlength="12000" @bind="message.CorrectText" @bind:event="oninput" placeholder="Escreva como a IA deveria ter respondido: o caminho, as teclas, a regra. Se o sistema não faz isso, diga também."></textarea>
+    <label for="@($"fix-{message.Id}")">Resposta correta <small class="subtle">(o que o cliente deve ler: caminho, teclas, regra)</small></label>
+    <textarea id="@($"fix-{message.Id}")" rows="5" maxlength="12000" @bind="message.CorrectText" @bind:event="oninput" placeholder="Ex.: Para cancelar a NFC-e: [onde fica] → [como localizar a nota] → [botão/tecla] → motivo → confirmar. Se o sistema não faz isso, diga também."></textarea>
+    <label for="@($"note-{message.Id}")">Observação para a IA <small class="subtle">(o empurrão: o que faltou, o que trocou, o que evitar — não vai para o cliente)</small></label>
+    <textarea id="@($"note-{message.Id}")" rows="3" maxlength="4000" @bind="message.NoteText" @bind:event="oninput" placeholder="Ex.: A explicação do prazo estava certa, mas faltou o passo a passo. NFC-e não fica em Nota Fiscal; essa tela é só da NF-e."></textarea>
+    <p class="field-help">Preencha um dos dois ou os dois. A resposta correta passa a valer como fonte; a observação só orienta a IA e não comprova caminho nenhum.</p>
     <div class="field-row"><div><label for="@($"fix-mod-{message.Id}")">Módulo</label><input id="@($"fix-mod-{message.Id}")" @bind="message.CorrectModule" maxlength="100" placeholder="PDV, Vendas, Consumer ou Todos" /></div><div><label for="@($"fix-seg-{message.Id}")">Segmento</label><input id="@($"fix-seg-{message.Id}")" @bind="message.CorrectSegment" maxlength="100" placeholder="Todos" /></div></div>
     <label for="@($"fix-key-{message.Id}")">Palavras que a resposta certa precisa ter (opcional, separadas por vírgula)</label><input id="@($"fix-key-{message.Id}")" @bind="message.Keywords" maxlength="500" placeholder="Ex.: Consumer, F6, cancelar" />
     <label class="checkbox"><input type="checkbox" @bind="message.CustomerVisible" /> Pode ser usada em respostas ao cliente</label>
     <p class="field-help">A correção fica em Orientações (dá para arquivar lá) e passa a ter prioridade nas próximas respostas sobre esse assunto, aqui e no HELP. A pergunta entra no gabarito. Não inclua senhas nem dados de clientes.</p>
     @if(message.FeedbackError is { } feedbackError) { <div class="notice warning-notice" role="alert">@feedbackError</div> }
-    <div class="composer-footer"><button type="button" class="text-button" @onclick="() => message.Correcting=false">Cancelar</button><button type="button" class="primary" disabled="@(message.Saving||string.IsNullOrWhiteSpace(message.CorrectText))" @onclick="() => SaveCorrection(message)">@(message.Saving?"Salvando…":"Salvar correção")</button></div>
+    <div class="composer-footer"><button type="button" class="text-button" @onclick="() => message.Correcting=false">Cancelar</button><button type="button" class="primary" disabled="@(message.Saving||(string.IsNullOrWhiteSpace(message.CorrectText)&&string.IsNullOrWhiteSpace(message.NoteText)))" @onclick="() => SaveCorrection(message)">@(message.Saving?"Salvando…":"Salvar correção")</button></div>
   </div> }
 </article>
 }
@@ -118,7 +121,7 @@ else if(!message.Correcting)
     }
     private async Task SaveCorrection(ChatMessage message)
     {
-        if(string.IsNullOrWhiteSpace(message.CorrectText)) return;
+        if(string.IsNullOrWhiteSpace(message.CorrectText)&&string.IsNullOrWhiteSpace(message.NoteText)) return;
         message.Saving=true; message.FeedbackError=null;
         try
         {
@@ -130,6 +133,7 @@ else if(!message.Correcting)
                 Segment=string.IsNullOrWhiteSpace(message.CorrectSegment)?"Todos":message.CorrectSegment.Trim(),
                 Module=string.IsNullOrWhiteSpace(message.CorrectModule)?"Todos":message.CorrectModule.Trim(),
                 Content=message.CorrectText.Trim(),
+                Note=message.NoteText.Trim(),
                 CustomerVisible=message.CustomerVisible
             },auth.User.Identity?.Name??"Administrador");
             await AddToGabaritoAsync(message,message.Keywords);
@@ -155,7 +159,7 @@ else if(!message.Correcting)
     private async Task Clarify() { question.Text="Ainda não entendi.";await Send(); }
     private void Example(int index)=>question.Text=new[] {"O sistema tem controle de estoque?","Como registrar uma venda?","Existe um parâmetro para essa opção?"}[index];
     private static string ModeLabel(SimulationMode value)=>value switch { SimulationMode.Commercial=>"Comercial · funcionalidades e condições",SimulationMode.Technician=>"Técnico · conhecimento interno e hipóteses",_=>"Suporte · resposta em linguagem do cliente" };
-    private static string SourceLabel(string kind)=>kind switch { "code"=>"Código","interface"=>"Interface e atalhos","resolved-case"=>"Solução revisada de atendimento finalizado","parameter"=>"Parâmetro","guidance"=>"Orientação","documentation"=>"Documentação","crm-history"=>"Histórico comercial","history"=>"Histórico do suporte",_=>"Histórico de IA" };
+    private static string SourceLabel(string kind)=>kind switch { "code"=>"Código","interface"=>"Interface e atalhos","resolved-case"=>"Solução revisada de atendimento finalizado","parameter"=>"Parâmetro","guidance"=>"Orientação","reviewer-note"=>"Observação do responsável (não vai ao cliente)","documentation"=>"Documentação","crm-history"=>"Histórico comercial","history"=>"Histórico do suporte",_=>"Histórico de IA" };
     public void Dispose()=>cancellation?.Cancel();
     private sealed class QuestionInput { [Required(ErrorMessage="Digite uma pergunta."),StringLength(2000)] public string Text {get;set;}=""; }
     private sealed class ChatMessage(string text)
@@ -166,6 +170,6 @@ else if(!message.Correcting)
         // Avaliação: null = sem avaliação, "ok" = correta, "corrigida" = correção salva
         public string? Feedback {get;set;} public string? FeedbackError {get;set;}
         public bool Correcting {get;set;} public bool Saving {get;set;} public bool CustomerVisible {get;set;}=true;
-        public string CorrectText {get;set;}=""; public string CorrectModule {get;set;}="Todos"; public string CorrectSegment {get;set;}="Todos"; public string Keywords {get;set;}="";
+        public string CorrectText {get;set;}=""; public string NoteText {get;set;}=""; public string CorrectModule {get;set;}="Todos"; public string CorrectSegment {get;set;}="Todos"; public string Keywords {get;set;}="";
     }
 }

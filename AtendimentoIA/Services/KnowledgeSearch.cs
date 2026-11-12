@@ -127,7 +127,7 @@ public static class KnowledgeSearch
         title = Normalize(title); content = Normalize(content);
         return terms.Sum(term => (title.Contains(term, StringComparison.Ordinal) ? 5 : 0) + (content.Contains(term, StringComparison.Ordinal) ? 1 : 0));
     }
-    private static readonly HashSet<string> TextKinds = ["documentation","resolved-case","guidance","parameter"];
+    private static readonly HashSet<string> TextKinds = ["documentation","resolved-case","guidance","parameter","reviewer-note"];
     public static List<KnowledgeEvidence> Rank(IEnumerable<KnowledgeEvidence> evidence, string question, SimulationMode mode,
         IReadOnlyList<string[]>? vocabulary = null)
     {
@@ -149,7 +149,8 @@ public static class KnowledgeSearch
             .DistinctBy(e=>e.Evidence.Kind=="parameter"?"parameter|"+Normalize(e.Evidence.Title):e.Evidence.Kind+"|"+e.Evidence.Locator+"|"+e.Evidence.Title).ToList();
         // Vagas por tipo: orientações validadas, documentação e casos aprovados não podem ser empurrados
         // para fora pelo código. Interface e código continuam garantidos para caminho, atalho e regra.
-        var selected=ranked.Where(e=>e.Evidence.Kind=="guidance").Take(2)
+        var selected=ranked.Where(e=>e.Evidence.Kind=="reviewer-note").Take(2)
+            .Concat(ranked.Where(e=>e.Evidence.Kind=="guidance").Take(2))
             .Concat(ranked.Where(e=>e.Evidence.Kind=="documentation").Take(3))
             .Concat(ranked.Where(e=>e.Evidence.Kind=="resolved-case").Take(2))
             .Concat(ranked.Where(e=>e.Evidence.Kind=="interface").Take(3))

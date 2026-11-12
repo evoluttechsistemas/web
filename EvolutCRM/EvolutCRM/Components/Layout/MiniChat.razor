@@ -448,6 +448,13 @@
     private (int Total, int UltimoCodigo) _resumo;
     private bool _carregandoPrimeira = true;
     private bool _carregando;
+    private bool _leituraPendente;
+
+    private async Task<bool> EmUsoAsync()
+    {
+        try { return await JS.InvokeAsync<bool>("crmPaginaEmUso"); }
+        catch { return false; }
+    }
     private bool _enviando;
     private bool _enviandoArquivo;
     private bool _rolarParaFim;
@@ -527,6 +534,10 @@
 
                 try
                 {
+                    // Chegou mensagem com o HELP minimizado: marca como lida quando a pessoa voltar
+                    if (_leituraPendente && await EmUsoAsync())
+                        await InvokeAsync(CarregarAsync);
+
                     var resumo = await ChatService.ResumoMensagensAsync(_codCarregado, CodEmp);
                     if (resumo != _resumo)
                         await InvokeAsync(CarregarAsync);
@@ -554,8 +565,12 @@
             _mensagens = lista;
             _resumo = await ChatService.ResumoMensagensAsync(cod, CodEmp);
 
-            // Janela aberta = a pessoa está vendo: marca como lida
-            if (lista.Any(m => !m.MinhaMensagem && !m.Lida))
+            // Janela aberta E a pessoa olhando (HELP em foco): marca como lida.
+            // Minimizado ou atrás de outro programa, fica não lida para o aviso sair.
+            _leituraPendente = false;
+            if (lista.Any(m => !m.MinhaMensagem && !m.Lida) && !await EmUsoAsync())
+                _leituraPendente = true;
+            else if (lista.Any(m => !m.MinhaMensagem && !m.Lida))
             {
                 await ChatService.MarcarConversaComoLidaAsync(cod, Eu, CodEmp);
                 var qtd = await ChatService.ObterQuantidadeMensagensNaoLidasAsync(Eu, CodEmp);

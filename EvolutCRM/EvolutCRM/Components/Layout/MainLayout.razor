@@ -1109,47 +1109,54 @@ else if (_perguntasFinalizacao.Count > 0)
                     });
             }
 
+            // Um aviso do Windows por ticket (até 3 por rodada). Antes só o primeiro ticket da rodada
+            // gerava aviso: se dois clientes escreviam nos mesmos 5 segundos, o segundo ficava só no painel.
+            string NomeDoTicket(TicketChamadoCModel tk) =>
+                !string.IsNullOrWhiteSpace(tk.ApelidoCliente) ? tk.ApelidoCliente
+                : !string.IsNullOrWhiteSpace(tk.NomeCliente) ? tk.NomeCliente
+                : $"Ticket #{tk.Codigo}";
+
+            string TextoDoTicket(TicketChamadoCModel tk)
+            {
+                var texto = ultimasAnotacoes.GetValueOrDefault(tk.Codigo, "");
+                if (tk.CodSituacao == 6)
+                    texto = $"Aguardando aprovação: {tk.Assunto}";
+                else if (string.IsNullOrWhiteSpace(texto))
+                    texto = tk.Assunto ?? "Nova mensagem recebida.";
+                return texto.Length > 80 ? texto.Substring(0, 80) + "..." : texto;
+            }
+
             var primeiroTicket = novosParaNotificar.First();
-
-            var primeiroNomeCliente = !string.IsNullOrWhiteSpace(primeiroTicket.ApelidoCliente)
-                ? primeiroTicket.ApelidoCliente
-                : !string.IsNullOrWhiteSpace(primeiroTicket.NomeCliente)
-                    ? primeiroTicket.NomeCliente
-                    : $"Ticket #{primeiroTicket.Codigo}";
-
-            var primeiraUltimaAnotacao = ultimasAnotacoes.GetValueOrDefault(primeiroTicket.Codigo, "");
+            var primeiroNomeCliente = NomeDoTicket(primeiroTicket);
+            var primeiraUltimaAnotacao = TextoDoTicket(primeiroTicket);
 
             if (primeiroTicket.CodSituacao == 6)
-                primeiraUltimaAnotacao = $"Aguardando aprovação: {primeiroTicket.Assunto}";
-            else if (string.IsNullOrWhiteSpace(primeiraUltimaAnotacao))
-                primeiraUltimaAnotacao = primeiroTicket.Assunto ?? "Nova mensagem recebida.";
-
-            if (primeiraUltimaAnotacao.Length > 80)
-                primeiraUltimaAnotacao = primeiraUltimaAnotacao.Substring(0, 80) + "...";
-
-            // Várias abas do HELP no navegador: só a primeira que pegar este aviso toca/abre pop-up/pisca
-            var avisoUnico = await AvisoUnicoAsync($"tk-{primeiroTicket.Codigo}-{primeiroTicket.DataHoraUltimaGravacao:yyyyMMddHHmmss}", 600);
-
-            if (primeiroTicket.CodSituacao == 6)
-            {
                 await SafeJs("crmToast", $"⏳ {primeiroNomeCliente}: aguardando aprovação", "warning");
-                if (avisoUnico) await SafeJs("crmBlinkStart", $"⏳ Aguardando aprovação", 10);
-            }
             else
-            {
                 await SafeJs("crmToast", $"💬 {primeiroNomeCliente}: {primeiraUltimaAnotacao}", "danger");
-                if (avisoUnico) await SafeJs("crmBlinkStart", $"💬 {primeiroNomeCliente}", 10);
-            }
 
-            if (avisoUnico)
+            var algumAviso = false;
+            foreach (var tk in novosParaNotificar.Take(3))
             {
+                // Várias abas do HELP no navegador: só a primeira que pegar este aviso abre o pop-up
+                if (!await AvisoUnicoAsync($"tk-{tk.Codigo}-{tk.DataHoraUltimaGravacao:yyyyMMddHHmmss}", 600))
+                    continue;
+
+                algumAviso = true;
                 await SafeJs(
                     "crmNotifyPopup",
-                    primeiroNomeCliente,
-                    primeiraUltimaAnotacao,
-                    "/images/logo-evoluttech.png"
+                    NomeDoTicket(tk),
+                    TextoDoTicket(tk),
+                    "/images/logo-evoluttech.png",
+                    $"/ticket/{tk.Codigo}",
+                    $"ticket-{tk.Codigo}"
                 );
+            }
 
+            if (algumAviso)
+            {
+                await SafeJs("crmBlinkStart",
+                    primeiroTicket.CodSituacao == 6 ? "⏳ Aguardando aprovação" : $"💬 {primeiroNomeCliente}", 10);
                 await SafeJs("crmBeep", 300);
             }
         }
@@ -1258,7 +1265,9 @@ else if (_perguntasFinalizacao.Count > 0)
                         "crmNotifyPopup",
                         "🆘 Ticket sem atendimento",
                         mensagem,
-                        "/images/logo-evoluttech.png"
+                        "/images/logo-evoluttech.png",
+                        $"/ticket/{t.Codigo}",
+                        $"ticket-{t.Codigo}"
                     );
 
                     await SafeJs("crmBeep", 400);
@@ -1568,7 +1577,8 @@ else if (_perguntasFinalizacao.Count > 0)
                     "crmNotifyPopup",
                     "🆕 Novo contato no CRM",
                     mensagemPainel,
-                    "/images/logo-evoluttech.png"
+                    "/images/logo-evoluttech.png",
+                    qtd == 1 && primeiro != null ? $"/card/{primeiro.Codigo}" : "/menu"
                 );
 
                 await SafeJs("crmBeep", 280);
@@ -1578,10 +1588,24 @@ else if (_perguntasFinalizacao.Count > 0)
             var ultimasMensagens = await CardService.GetUltimasMensagensClienteAsync(
                 cards.Select(c => c.Codigo).ToList());
 
+            // Card aberto só conta como "visto" se a pessoa está olhando (HELP em foco).
+            // Minimizado ou atrás de outro programa, avisa normalmente.
+            var olhandoCardAberto = false;
+            if (estaDentroDoCard && idCardAberto > 0)
+            {
+                try { olhandoCardAberto = await JS.InvokeAsync<bool>("crmPaginaEmUso"); }
+                catch { olhandoCardAberto = false; }
+            }
+
             foreach (var card in cards)
             {
-                if (estaDentroDoCard && card.Codigo == idCardAberto)
+                if (olhandoCardAberto && card.Codigo == idCardAberto)
+                {
+                    // está vendo: a mensagem que chegou não deve virar aviso depois
+                    if (ultimasMensagens.TryGetValue(card.Codigo, out var vista))
+                        _cardsMensagensNotificadas[card.Codigo] = vista.DataHora;
                     continue;
+                }
 
                 // Só notifica o responsável pelo card
                 var responsavel = (card.Usuario ?? "").Trim().ToUpperInvariant();
@@ -1640,7 +1664,9 @@ else if (_perguntasFinalizacao.Count > 0)
                     "crmNotifyPopup",
                     "💬 Nova mensagem no CRM",
                     $"{nome}: {texto}",
-                    "/images/logo-evoluttech.png"
+                    "/images/logo-evoluttech.png",
+                    $"/card/{card.Codigo}",
+                    $"card-{card.Codigo}"
                 );
 
                 await SafeJs("crmBeep", 280);
@@ -2233,12 +2259,14 @@ else if (_perguntasFinalizacao.Count > 0)
             if (ultima.Usuario.Trim().Equals(usuario, StringComparison.OrdinalIgnoreCase))
                 return;
 
-            if ((Abas.RotaAtiva ?? "") == "chat-interno")
-                return;
-
-            // Conversa já aberta na janelinha da faixa da equipe: não precisa de aviso
-            if (MiniChat.CodConversaAberta == ultima.CodConversa)
-                return;
+            // Chat aberto (tela ou janelinha) só dispensa o aviso se a pessoa está olhando (HELP em foco)
+            var chatAbertoNaTela = (Abas.RotaAtiva ?? "") == "chat-interno" || MiniChat.CodConversaAberta == ultima.CodConversa;
+            if (chatAbertoNaTela)
+            {
+                var olhando = false;
+                try { olhando = await JS.InvokeAsync<bool>("crmPaginaEmUso"); } catch { }
+                if (olhando) return;
+            }
 
             if (_chatNotificadoLayout.ContainsKey(ultima.Codigo))
                 return;
@@ -2279,7 +2307,9 @@ else if (_perguntasFinalizacao.Count > 0)
                 "crmNotifyPopup",
                 $"💬 Nova mensagem de {usuarioOrigem}",
                 texto,
-                "/images/logo-evoluttech.png"
+                "/images/logo-evoluttech.png",
+                "/chat-interno",
+                $"chat-{ultima.CodConversa}"
             );
 
             await SafeJs("crmBlinkStart", $"💬 Chat interno", 8);

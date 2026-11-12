@@ -101,7 +101,7 @@ public sealed class SimulationService(IKnowledgeRetriever retriever,IAnswerProvi
             ExternalText.Clean(generated.TechnicalNotes,5000),sufficient,
             mode==SimulationMode.Technician?ExternalText.Clean(generated.FollowUp,500):string.IsNullOrWhiteSpace(generated.FollowUp)?"":CustomerParameterPolicy.Apply(generated.FollowUp,sources,sufficient,includeHandoff:false),sources,context.Warnings,
             context.Segment,context.Version,model,generated.InputTokens,generated.OutputTokens,format,steps);
-        var resolvedOnly=sufficient&&sources.Count>0&&sources.All(s=>s.Kind is "resolved-case" or "history" or "ai-history" or "crm-history");
+        var resolvedOnly=sufficient&&sources.Count>0&&sources.All(s=>s.Kind is "resolved-case" or "history" or "ai-history" or "crm-history" or "reviewer-note");
         return NavigationPresentation.Complete(ConfigurationPresentation.Complete(validated with {ResolvedCaseOnly=resolvedOnly},context.Sources,question),context.Sources,requestedModule,question);
     }
     private async Task AuditAsync(Guid id,SimulationRequest request,string model,string status,List<KnowledgeEvidence> sources,int inputTokens,int outputTokens,IReadOnlyList<SourceCheck>? checks=null,InterfaceReview? review=null)
