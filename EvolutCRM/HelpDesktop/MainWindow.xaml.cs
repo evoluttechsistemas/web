@@ -1,6 +1,8 @@
-﻿using Microsoft.Toolkit.Uwp.Notifications;
+﻿using CommunityToolkit.WinUI.Notifications;
 using Microsoft.Web.WebView2.Core;
+using Microsoft.Win32;
 using System;
+using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -19,19 +21,45 @@ namespace HelpDesktop
         private readonly Queue<string> _ordemAvisos = new();
         private WindowState _estadoAntesDeMinimizar = WindowState.Maximized;
 
+        // Motor compartilhado com as janelas separadas (mesmo login)
+        internal static CoreWebView2Environment? Ambiente;
+
+        private bool _paginaCarregada;
+        private string? _rotaPendente;          // link evoluthelp:// recebido antes do HELP carregar
+        private int _ultimoContador = -1;
+
+        // Atalhos globais
+        private const int AtalhoTrazer = 0xB001;   // Ctrl+Alt+H
+        private const int AtalhoPrint = 0xB002;    // Ctrl+Alt+P
+
         public MainWindow()
         {
             InitializeComponent();
             Loaded += MainWindow_Loaded;
             StateChanged += (_, _) => { if (WindowState != WindowState.Minimized) _estadoAntesDeMinimizar = WindowState; };
 
-            // Clique no aviso do Windows: traz o HELP para frente e abre o ticket do aviso
+            // Clique no aviso do Windows: traz o HELP para frente e abre o ticket do aviso.
+            // Botão "Responder": envia o texto digitado no próprio aviso, sem abrir a janela.
             ToastNotificationManagerCompat.OnActivated += toastArgs =>
             {
                 ToastArguments args;
                 try { args = ToastArguments.Parse(toastArgs.Argument); } catch { return; }
-                Dispatcher.Invoke(() => AoClicarNoAviso(args));
+                var resposta = toastArgs.UserInput.TryGetValue("resposta", out var r) ? r as string : null;
+                Dispatcher.Invoke(() =>
+                {
+                    if (args.TryGetValue("acao", out var acao) && acao == "responder")
+                        ResponderPeloAviso(args, resposta);
+                    else
+                        AoClicarNoAviso(args);
+                });
             };
+
+            // Voltou da suspensão ou a internet voltou: o HELP tenta reconectar na hora
+            SystemEvents.PowerModeChanged += AoMudarEnergia;
+            NetworkChange.NetworkAvailabilityChanged += AoMudarRede;
+
+            if (App.LinkInicial is { } link)
+                _rotaPendente = RotaDoLink(link);
         }
 
         private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -46,10 +74,12 @@ namespace HelpDesktop
 
                 // A página continua rodando com a janela minimizada ou atrás de outro programa.
                 // Sem isso o motor do Edge "desacelera" o HELP em segundo plano e os avisos atrasam ou não saem.
+                // autoplay: o bipe do aviso toca mesmo que ninguém tenha clicado no HELP desde que ele abriu.
                 var opcoes = new CoreWebView2EnvironmentOptions(
-                    "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows");
+                    "--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required");
                 var ambiente = await CoreWebView2Environment.CreateAsync(null, null, opcoes);
                 await WebView.EnsureCoreWebView2Async(ambiente);
+                Ambiente = ambiente;
 
                 // Notificações já liberadas desde o início (antes dependia de um pedido que às vezes não acontecia)
                 try
@@ -67,6 +97,22 @@ namespace HelpDesktop
                 WebView.CoreWebView2.WebMessageReceived += CoreWebView2_WebMessageReceived;
                 WebView.CoreWebView2.NotificationReceived += CoreWebView2_NotificationReceived;
 
+                // Página recarregando: zera o contador (o HELP manda o número de novo ao carregar)
+                WebView.CoreWebView2.NavigationStarting += (_, _) => { _paginaCarregada = false; AtualizarSelo(0); };
+                WebView.CoreWebView2.NavigationCompleted += async (_, args) =>
+                {
+                    if (!args.IsSuccess) return;
+                    _paginaCarregada = true;
+
+                    // Link evoluthelp:// ou clique em aviso que chegou antes do HELP carregar
+                    if (_rotaPendente is { } rota)
+                    {
+                        _rotaPendente = null;
+                        await NavegacaoHelp.IrQuandoProntoAsync(WebView.CoreWebView2, rota);
+                    }
+                };
+
+                // Sempre abre pela página inicial (o ticket direto pelo endereço dá erro no HELP)
                 WebView.CoreWebView2.Navigate(uri.ToString());
             }
             catch (WebView2RuntimeNotFoundException)
@@ -111,6 +157,17 @@ namespace HelpDesktop
                     .AddArgument("tag", aviso.Tag ?? "")
                     .AddText(string.IsNullOrWhiteSpace(aviso.Title) ? "EvolutTech Help" : aviso.Title)
                     .AddText(aviso.Body ?? "");
+
+                // Aviso de ticket: dá para responder ao cliente direto pelo balão
+                if (CodTicketDaTag(aviso.Tag) is int codTicket)
+                {
+                    builder.AddArgument("ticket", codTicket)
+                        .AddInputTextBox("resposta", "Responder ao cliente...")
+                        .AddButton(new ToastButton()
+                            .SetContent("Responder")
+                            .AddArgument("acao", "responder")
+                            .SetTextBoxId("resposta"));
+                }
                 if (aviso.IsSilent)
                     builder.AddAudio(new ToastAudio { Silent = true });
 
@@ -132,9 +189,10 @@ namespace HelpDesktop
                 if (!IsActive)
                     PiscarIconeBarraTarefas();
             }
-            catch
+            catch (Exception ex)
             {
-                // Falhou o aviso próprio: deixa o WebView2 mostrar o dele
+                // Falhou o aviso próprio: registra e deixa o WebView2 mostrar o dele
+                App.RegistrarErro(ex);
                 e.Handled = false;
             }
         }
@@ -171,15 +229,187 @@ namespace HelpDesktop
                 catch { }   // página recarregou depois do aviso: abre pelo número do ticket
             }
 
-            if (args.TryGetValue("tag", out var tag) && tag.StartsWith("ticket-") &&
-                int.TryParse(tag["ticket-".Length..], out var codTicket))
-            {
-                _ = WebView.CoreWebView2?.ExecuteScriptAsync(
-                    $"window.Blazor && window.Blazor.navigateTo('/ticket/{codTicket}')");
-            }
+            if (args.TryGetValue("tag", out var tag) && CodTicketDaTag(tag) is int codTicket)
+                Navegar($"/ticket/{codTicket}");
         }
 
-        private void TrazerParaFrente()
+        private static int? CodTicketDaTag(string? tag) =>
+            tag != null && tag.StartsWith("ticket-") && int.TryParse(tag["ticket-".Length..], out var cod) && cod > 0
+                ? cod : null;
+
+        // ── Responder pelo aviso ──
+        private void ResponderPeloAviso(ToastArguments args, string? resposta)
+        {
+            if (!args.TryGetValue("ticket", out var textoCod) || !int.TryParse(textoCod, out var codTicket))
+                return;
+
+            resposta = (resposta ?? "").Trim();
+            if (resposta.Length == 0)
+            {
+                // Clicou em Responder sem escrever: abre o ticket
+                TrazerParaFrente();
+                Navegar($"/ticket/{codTicket}");
+                return;
+            }
+
+            if (WebView.CoreWebView2 == null || !_paginaCarregada)
+            {
+                AvisoSimples("Resposta não enviada", "O HELP ainda está carregando. Abra o ticket para responder.", codTicket);
+                return;
+            }
+
+            WebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+            {
+                type = "responder",
+                codigo = codTicket,
+                texto = resposta
+            }));
+        }
+
+        private void AvisoSimples(string titulo, string texto, int? codTicket = null)
+        {
+            try
+            {
+                var builder = new ToastContentBuilder().AddText(titulo).AddText(texto)
+                    .AddAudio(new ToastAudio { Silent = true });
+                if (codTicket is int cod)
+                    builder.AddArgument("tag", $"ticket-{cod}");
+                builder.Show(t => { t.Group = GrupoAvisos; });
+            }
+            catch (Exception ex) { App.RegistrarErro(ex); }
+        }
+
+        // ── Navegação dentro do HELP ──
+        private void Navegar(string rota)
+        {
+            // HELP ainda carregando: vai para a tela assim que terminar
+            if (WebView.CoreWebView2 == null || !_paginaCarregada) { _rotaPendente = rota; return; }
+            _ = NavegacaoHelp.IrQuandoProntoAsync(WebView.CoreWebView2, rota);
+        }
+
+        /// <summary>Link evoluthelp://ticket/123 (de e-mail, ERP, chat...).</summary>
+        internal void AbrirLink(string link)
+        {
+            var rota = RotaDoLink(link);
+            TrazerParaFrente();
+            if (rota != null) Navegar(rota);
+        }
+
+        internal static string? RotaDoLink(string link)
+        {
+            if (!Uri.TryCreate((link ?? "").Trim(), UriKind.Absolute, out var uri) ||
+                !uri.Scheme.Equals("evoluthelp", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return RotaPermitida(uri.Host + "/" + uri.AbsolutePath);
+        }
+
+        // Só telas conhecidas, com número válido (nada de endereço arbitrário vindo de fora)
+        private static string? RotaPermitida(string? caminho)
+        {
+            var partes = (caminho ?? "").Split('?')[0].ToLowerInvariant()
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (partes.Length == 2 && (partes[0] == "ticket" || partes[0] == "card") &&
+                int.TryParse(partes[1], out var n) && n > 0)
+                return $"/{partes[0]}/{n}";
+            if (partes.Length == 1 && (partes[0] == "tickets" || partes[0] == "chat-interno" || partes[0] == "menu"))
+                return "/" + partes[0];
+            return null;
+        }
+
+        // ── Contador de não lidos no ícone da barra de tarefas ──
+        private void AtualizarSelo(int total)
+        {
+            if (total < 0) total = 0;
+            if (total == _ultimoContador) return;
+            _ultimoContador = total;
+            TaskbarItemInfo ??= new System.Windows.Shell.TaskbarItemInfo();
+            TaskbarItemInfo.Overlay = total > 0 ? SeloBarraTarefas.Criar(total) : null;
+            TaskbarItemInfo.Description = total > 0 ? $"EvolutTech Help · {total} aguardando" : "EvolutTech Help";
+        }
+
+        // ── Print de área (Ctrl+Alt+P) ──
+        private void FazerPrint()
+        {
+            var imagem = CapturaTela.Capturar();
+            if (imagem == null) return;
+
+            try { Clipboard.SetImage(imagem); } catch { }
+
+            if (WebView.CoreWebView2 == null || !_paginaCarregada)
+            {
+                AvisoSimples("Print copiado", "Cole com Ctrl+V onde quiser.");
+                return;
+            }
+
+            WebView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+            {
+                type = "print",
+                imagem = CapturaTela.ParaDataUrl(imagem)
+            }));
+        }
+
+        // ── Atalhos globais ──
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            var handle = new WindowInteropHelper(this).Handle;
+            HwndSource.FromHwnd(handle)?.AddHook(ProcessarMensagemWindows);
+            RegisterHotKey(handle, AtalhoTrazer, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x48); // H
+            RegisterHotKey(handle, AtalhoPrint, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 0x50);  // P
+        }
+
+        private IntPtr ProcessarMensagemWindows(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY)
+            {
+                var id = wParam.ToInt32();
+                if (id == AtalhoTrazer) { TrazerParaFrente(); handled = true; }
+                else if (id == AtalhoPrint) { handled = true; Dispatcher.BeginInvoke(new Action(FazerPrint)); }
+            }
+            return IntPtr.Zero;
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            UnregisterHotKey(handle, AtalhoTrazer);
+            UnregisterHotKey(handle, AtalhoPrint);
+            SystemEvents.PowerModeChanged -= AoMudarEnergia;
+            NetworkChange.NetworkAvailabilityChanged -= AoMudarRede;
+            base.OnClosed(e);
+        }
+
+        // ── Reconexão rápida ──
+        private void AoMudarEnergia(object? sender, PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == PowerModes.Resume) AcordarHelp();
+        }
+
+        private void AoMudarRede(object? sender, NetworkAvailabilityEventArgs e)
+        {
+            if (e.IsAvailable) AcordarHelp();
+        }
+
+        private void AcordarHelp()
+        {
+            Dispatcher.InvokeAsync(async () =>
+            {
+                await Task.Delay(3000);   // dá tempo da rede subir
+                try
+                {
+                    if (WebView.CoreWebView2 != null)
+                        await WebView.CoreWebView2.ExecuteScriptAsync("window.helpAcordar && window.helpAcordar()");
+                }
+                catch { }
+            });
+        }
+
+        private const int WM_HOTKEY = 0x0312;
+        private const uint MOD_ALT = 0x0001, MOD_CONTROL = 0x0002, MOD_NOREPEAT = 0x4000;
+        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+
+        internal void TrazerParaFrente()
         {
             if (WindowState == WindowState.Minimized)
                 WindowState = _estadoAntesDeMinimizar;
@@ -198,6 +428,39 @@ namespace HelpDesktop
             {
                 var json = e.WebMessageAsJson;
                 var msg = JsonSerializer.Deserialize<WebViewMessage>(json);
+
+                // Mensagens novas só valem vindas do próprio HELP
+                var doHelp = (e.Source ?? "").StartsWith(CrmOrigem, StringComparison.OrdinalIgnoreCase);
+
+                if (doHelp && msg?.type == "contador")
+                {
+                    AtualizarSelo(msg.total ?? 0);
+                    return;
+                }
+
+                if (doHelp && msg?.type == "resposta-aviso")
+                {
+                    if (msg.ok == true)
+                        AvisoSimples("✓ Resposta enviada", "Ticket #" + msg.codigo);
+                    else
+                        AvisoSimples("Resposta não enviada", string.IsNullOrWhiteSpace(msg.texto)
+                            ? "Abra o ticket para responder." : msg.texto!, msg.codigo);
+                    return;
+                }
+
+                if (doHelp && msg?.type == "print-resultado")
+                {
+                    if (msg.ok == true) TrazerParaFrente();
+                    else AvisoSimples("Print copiado", "Nenhum ticket aberto: cole com Ctrl+V onde quiser.");
+                    return;
+                }
+
+                if (doHelp && msg?.type == "janela")
+                {
+                    if (RotaPermitida(msg.url) is { } rota)
+                        new JanelaAvulsa(CrmUrl, rota).Show();
+                    return;
+                }
 
                 if (msg?.type == "abrir-acesso-remoto")
                 {
@@ -228,6 +491,11 @@ namespace HelpDesktop
             public string? type { get; set; }
             public string? codigoAcesso { get; set; }
             public string? Mensagem { get; set; }
+            public int? total { get; set; }
+            public bool? ok { get; set; }
+            public int? codigo { get; set; }
+            public string? texto { get; set; }
+            public string? url { get; set; }
         }
 
         private void AbrirAcessoRemoto(string? codigoAcesso)

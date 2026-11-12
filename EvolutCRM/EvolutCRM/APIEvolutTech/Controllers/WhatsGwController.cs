@@ -853,6 +853,21 @@ VALUES
                 cmdLido.Parameters.AddWithValue("@CodEmp", codEmp);
                 await cmdLido.ExecuteNonQueryAsync();
             }
+            else if (envioCliente == "S")
+            {
+                // Mensagem do cliente num ticket que já existia: marca como novidade e registra a
+                // movimentação. Antes só ticket criado/reaberto ficava "Novo": no ticket que já tinha
+                // responsável a hora não mudava, o HELP achava que o atendente já tinha visto e não avisava.
+                using var cmdNovidade = new SqlCommand(@"
+                    UPDATE TicketChamadoC
+                    SET Novo = 'S',
+                        DataHoraUltimaGravacao = GETDATE(),
+                        UsuarioUltimaGravacao = 'WHATSAPP'
+                    WHERE Codigo = @Cod AND CodEmp = @CodEmp", conn, transaction);
+                cmdNovidade.Parameters.AddWithValue("@Cod", codTicketChamadoC);
+                cmdNovidade.Parameters.AddWithValue("@CodEmp", codEmp);
+                await cmdNovidade.ExecuteNonQueryAsync();
+            }
         }
 
         // =========================================================

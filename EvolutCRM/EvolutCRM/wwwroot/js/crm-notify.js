@@ -31,6 +31,8 @@
     // (o mesmo ticket); sem tag, cada aviso fica separado — antes todos usavam a mesma tag e
     // um aviso de card/chat/agenda apagava na hora o aviso de ticket que tinha acabado de aparecer.
     window.crmNotifyPopup = async function (title, body, iconUrl, url, tag) {
+        // Ticket aberto em janela separada do HelpDesktop: quem avisa é a janela principal
+        if (window.__helpJanelaAvulsa) return { ok: false, reason: "janela-separada" };
         try {
             if (!("Notification" in window)) {
                 window.crmToast((title || "CRM") + " - " + (body || ""), "danger");
@@ -86,6 +88,7 @@
     // 🟦 BADGE (Taskbar / AppBadge)
     // ============================
     window.crmSetBadge = async function (count) {
+        try { window.crmDesktopContador && window.crmDesktopContador("tickets", count); } catch { }
         try {
             // Chromium/Edge: App Badge API (nem sempre habilitada)
             if ("setAppBadge" in navigator) {
@@ -172,14 +175,22 @@
 
     // Beep: só toca se já estiver desbloqueado
     window.crmBeep = function (ms) {
+        if (window.__helpJanelaAvulsa) return;
         try {
             const duration = ms || 250;
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (!AudioContext) return;
 
-            // se ainda não desbloqueou, não vai tocar (por política do browser)
             if (!CRM.audioCtx) CRM.audioCtx = new AudioContext();
-            if (CRM.audioCtx.state === "suspended") return;
+
+            // Áudio "suspenso" (ninguém clicou ainda): tenta liberar e toca em seguida.
+            // No HelpDesktop o autoplay é liberado, então isso funciona mesmo sem clique.
+            if (CRM.audioCtx.state === "suspended") {
+                CRM.audioCtx.resume()
+                    .then(() => { if (CRM.audioCtx.state === "running") window.crmBeep(duration); })
+                    .catch(() => { });
+                return;
+            }
 
             const ctx = CRM.audioCtx;
 
@@ -194,14 +205,12 @@
             g.gain.setValueAtTime(0.0001, ctx.currentTime);
             g.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
 
+            // Fim agendado no próprio relógio do áudio (não depende de timer, que atrasa em segundo plano)
+            const fim = ctx.currentTime + duration / 1000;
             o.start();
-
-            setTimeout(() => {
-                try {
-                    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.02);
-                    o.stop(ctx.currentTime + 0.04);
-                } catch { }
-            }, duration);
+            g.gain.setValueAtTime(0.15, fim);
+            g.gain.exponentialRampToValueAtTime(0.0001, fim + 0.02);
+            o.stop(fim + 0.04);
         } catch (e) {
             console.warn("crmBeep falhou:", e);
         }
@@ -311,4 +320,56 @@
             return { error: true };
         }
     };
+})();
+
+// ============================
+// 🖥️ HelpDesktop (programa instalado)
+// ============================
+(function () {
+    const webview = (window.chrome && window.chrome.webview) || null;
+    const contadores = { tickets: 0, chat: 0 };
+    let layoutRef = null;
+
+    function paraDesktop(msg) {
+        try { if (webview && !window.__helpJanelaAvulsa) webview.postMessage(msg); } catch { }
+    }
+
+    // Está dentro do HelpDesktop (janela principal)?
+    window.crmNoDesktop = function () { return !!webview && !window.__helpJanelaAvulsa; };
+
+    // Número de não lidos no ícone da barra de tarefas (tickets novos + chat interno)
+    window.crmDesktopContador = function (tipo, n) {
+        contadores[tipo] = Math.max(0, Number(n) || 0);
+        paraDesktop({ type: "contador", total: contadores.tickets + contadores.chat });
+    };
+
+    window.crmRegistrarLayout = function (ref) { layoutRef = ref; };
+
+    window.crmAbrirJanelaSeparada = function (rota) { paraDesktop({ type: "janela", url: String(rota || "") }); };
+
+    if (!webview) return;
+
+    webview.addEventListener("message", async (ev) => {
+        const m = ev.data || {};
+
+        // Resposta escrita no próprio aviso do Windows
+        if (m.type === "responder") {
+            const codigo = Number(m.codigo) || 0;
+            let r = { ok: false, mensagem: "O HELP ainda está carregando. Abra o ticket para responder." };
+            try {
+                if (layoutRef) r = await layoutRef.invokeMethodAsync("ResponderPeloAviso", codigo, String(m.texto || ""));
+            } catch (e) {
+                r = { ok: false, mensagem: "Não foi possível enviar a resposta. Abra o ticket para responder." };
+            }
+            paraDesktop({ type: "resposta-aviso", ok: !!(r && r.ok), texto: (r && r.mensagem) || "", codigo });
+            return;
+        }
+
+        // Print de área (Ctrl+Alt+P): vai para o ticket aberto
+        if (m.type === "print") {
+            let ok = false;
+            try { ok = window.crmColarImagemNoTicket ? await window.crmColarImagemNoTicket(m.imagem) : false; } catch { }
+            paraDesktop({ type: "print-resultado", ok: !!ok });
+        }
+    });
 })();

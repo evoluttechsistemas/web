@@ -18,9 +18,9 @@
 <body>
     <Routes @rendermode="InteractiveServer" />
 
-    <script src="/js/crm-notify.js?v=4"></script>
+    <script src="/js/crm-notify.js?v=6"></script>
     <script src="/js/ticket-audio.js"></script>
-    <script src="/js/paste-image.js?v=2"></script>
+    <script src="/js/paste-image.js?v=3"></script>
     <script src="/js/assistente-ia.js?v=1"></script>
     <script src="_framework/blazor.web.js" autostart="false"></script>
     <script src="/js/screen-recorder.js"></script>
@@ -42,6 +42,8 @@
         // Beep, pop-up do Windows e piscar do título saem só na primeira aba que pegar o aviso
         // (as outras veem a mesma chave gravada há pouco e não repetem).
         window.crmAvisoUnico = (chave, segundos) => {
+            // Janela separada do HelpDesktop não "pega" o aviso: quem avisa é a janela principal
+            if (window.__helpJanelaAvulsa) return false;
             try {
                 const k = 'crm_aviso_' + chave;
                 const agora = Date.now();
@@ -153,7 +155,14 @@
 
     <script>
             (function() {
-                const esperar = ms => new Promise(r => setTimeout(r, ms));
+                // Espera que pode ser interrompida: o HelpDesktop avisa quando o computador sai
+                // da suspensão ou a internet volta, e o HELP tenta reconectar na hora
+                let acordar = null;
+                const esperar = ms => new Promise(r => {
+                    const t = setTimeout(() => { acordar = null; r(); }, ms);
+                    acordar = () => { clearTimeout(t); acordar = null; r(); };
+                });
+                window.helpAcordar = () => { if (acordar) acordar(); };
                 let tratando = false;
 
                 // ── Aviso em tela cheia enquanto o sistema está fora / atualizando ──

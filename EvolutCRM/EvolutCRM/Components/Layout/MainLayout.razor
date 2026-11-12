@@ -18,6 +18,7 @@
 @inject EvolutCRM.Services.DeployNotificacaoState DeployState
 @inject EvolutCRM.Services.MiniChatState MiniChat
 @inject EvolutCRM.Services.NotificacaoVistaNotifier VistaNotifier
+@inject EvolutCRM.Services.AdminService AdminService
 @inject EvolutCRM.Services.MonitorServidorService MonitorServidor
 @inject EvolutCRM.Services.FinalizacaoConfirmacaoService FinalizacaoConfirmacao
 
@@ -759,7 +760,12 @@ else if (_perguntasFinalizacao.Count > 0)
     {
 
         if (firstRender)
+        {
             await SafeJs("helpMarcarConectado");
+            // HelpDesktop: permite responder ticket pelo aviso do Windows
+            _layoutRef = DotNetObjectReference.Create(this);
+            await SafeJs("crmRegistrarLayout", _layoutRef);
+        }
         await SafeJs("crmLog",
             $"[Layout] Render | firstRender={firstRender} | IsReady={UserState.IsReady}");
 
@@ -2096,6 +2102,7 @@ else if (_perguntasFinalizacao.Count > 0)
 
     public void Dispose()
     {
+        _layoutRef?.Dispose();
         _disposed = true;
 
         // Marca offline no Dispose normal (Sair, reload, navegação)
@@ -2239,6 +2246,13 @@ else if (_perguntasFinalizacao.Count > 0)
                 .ObterQuantidadeMensagensNaoLidasAsync(usuario, CodEmp);
 
             ChatNotify.SetNovas(qtdNovas);
+
+            // HelpDesktop: número de não lidos no ícone da barra de tarefas
+            if (qtdNovas != _ultimaQtdChatDesktop)
+            {
+                _ultimaQtdChatDesktop = qtdNovas;
+                await SafeJs("crmDesktopContador", "chat", Math.Max(0, qtdNovas));
+            }
 
             if (qtdNovas <= 0)
             {
@@ -2510,5 +2524,68 @@ private IDictionary<string, object?> GetParametros(AbaItem aba, bool ativa)
     }
 
     private record AbaRect(double X, double Y, double W);
+
+    // ── HelpDesktop: resposta escrita no próprio aviso do Windows ──
+    private DotNetObjectReference<MainLayout>? _layoutRef;
+    private int _ultimaQtdChatDesktop = -1;
+
+    public sealed record RespostaAviso(bool ok, string mensagem);
+
+    [JSInvokable]
+    public async Task<RespostaAviso> ResponderPeloAviso(int codTicket, string texto)
+    {
+        try
+        {
+            texto = (texto ?? "").Trim();
+            if (codTicket <= 0 || texto.Length == 0)
+                return new(false, "Mensagem vazia.");
+            if (texto.Length > 4000)
+                texto = texto[..4000];
+
+            if (!UserState.IsReady || string.IsNullOrWhiteSpace(UserState.CurrentUser))
+                return new(false, "Entre no HELP para responder.");
+
+            var usuario = UserState.CurrentUser.Trim().ToUpperInvariant();
+
+            if (!await AdminService.UsuarioTemPermissaoAsync(usuario, "TICKETS_RESPONDER"))
+                return new(false, "Você não tem permissão para responder tickets.");
+
+            var ticket = await TicketService.BuscarChamadoAsync(codTicket);
+            if (ticket == null)
+                return new(false, "Ticket não encontrado.");
+            if (ticket.CodSituacao == 3)
+                return new(false, "Ticket finalizado. Abra o ticket para responder.");
+            if (ticket.CodCliente <= 0)
+                return new(false, "Ticket sem cliente. Abra o ticket para responder.");
+
+            // Mesma regra da tela: sem responsável, quem responde assume; de outro atendente, só com permissão
+            var responsavel = (ticket.Usuario ?? "").Trim();
+            if (responsavel.Length == 0 || responsavel.Equals("NOVO", StringComparison.OrdinalIgnoreCase))
+                ticket.Usuario = usuario;
+            else if (!responsavel.Equals(usuario, StringComparison.OrdinalIgnoreCase) &&
+                     !await AdminService.UsuarioTemPermissaoAsync(usuario, "TICKETS_VER_TODOS"))
+                return new(false, "Este ticket é de outro atendente.");
+
+            var resultado = await TicketService.SalvarAlteracoesAsync(ticket, texto, UserState.CurrentUser);
+            if (!resultado.Sucesso)
+                return new(false, string.IsNullOrWhiteSpace(resultado.Mensagem) ? "Não foi possível enviar." : resultado.Mensagem);
+
+            await TicketService.SalvarCabecalhoTicketAsync(ticket, UserState.CurrentUser ?? "");
+
+            // Respondeu: o aviso desse ticket sai de todas as telas
+            VistaNotifier.MarcarVisto(UserState.CurrentCompanyId, NotificacaoVistaNotifier.Ticket, codTicket);
+            await RemoverItemDoGrupo("GRUPO_TICKET", codTicket);
+            await RemoverItemDoGrupo("GRUPO_TICKET_SEM_RESP", codTicket);
+            TicketNotify.SetNovos(await TicketService.GetQuantidadeTicketsNovosAsync(usuario));
+            await InvokeAsync(StateHasChanged);
+
+            return new(true, "Resposta enviada.");
+        }
+        catch (Exception ex)
+        {
+            await SafeJs("crmLog", $"[ResponderPeloAviso] Erro: {ex.Message}");
+            return new(false, "Não foi possível enviar a resposta. Abra o ticket para responder.");
+        }
+    }
 
 }

@@ -2827,6 +2827,11 @@ else
         <header class="ticket-modern-topbar">
             <div class="ticket-header-left">
                 <button type="button" class="ticket-back-btn" @onclick="Voltar" title="Voltar">←</button>
+                @if (_noHelpDesktop)
+                {
+                    <button type="button" class="ticket-back-btn" @onclick="AbrirEmJanelaSeparada"
+                            title="Abrir este ticket em uma janela separada" aria-label="Abrir em janela separada">⧉</button>
+                }
                 <div class="ticket-title-wrap">
                     <div class="ticket-ticket-line">
                         <div class="ticket-code-box">
@@ -7414,8 +7419,22 @@ CodTipo == 5 ? NomeWhatsApp : null
     }
 
 
+    // HelpDesktop: botão para abrir o ticket em janela separada
+    private bool _noHelpDesktop;
+
+    private async Task AbrirEmJanelaSeparada()
+    {
+        try { await JS.InvokeVoidAsync("crmAbrirJanelaSeparada", $"/ticket/{id}"); } catch { }
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            try { _noHelpDesktop = await JS.InvokeAsync<bool>("crmNoDesktop"); } catch { _noHelpDesktop = false; }
+            if (_noHelpDesktop) StateHasChanged();
+        }
+
         // Resposta da IA acabou de ir para a caixa: aumenta para revisar
         if (_expandirMsgIA)
         {
