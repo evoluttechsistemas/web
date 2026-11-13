@@ -13,6 +13,18 @@
     <link rel="icon" type="image/x-icon" href="images/favicon.ico" />
 
     <HeadOutlet @rendermode="InteractiveServer" />
+
+        @* Ticket aberto em janela separada no HelpDesktop: só a tela, sem menu, abas e notificações
+       (igual à janela de documentação). O HelpDesktop marca a página com a classe help-janela-avulsa. *@
+    <style>
+        html.help-janela-avulsa .layout { display: block !important; height: 100vh; }
+        html.help-janela-avulsa .layout > nav,
+        html.help-janela-avulsa .notif-panel,
+        html.help-janela-avulsa .aba-topo,
+        html.help-janela-avulsa .ham-btn,
+        html.help-janela-avulsa .mob-overlay { display: none !important; }
+        html.help-janela-avulsa .content { width: 100% !important; height: 100vh !important; }
+    </style>
 </head>
 
 <body>

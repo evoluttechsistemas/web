@@ -36,7 +36,9 @@ namespace HelpDesktop
             try
             {
                 await _web.EnsureCoreWebView2Async(MainWindow.Ambiente);
-                await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("window.__helpJanelaAvulsa = true;");
+                // Marca a página e esconde menu, abas e notificações: fica só o ticket (igual à documentação).
+                // O script roda antes de a página existir, então espera o <html> aparecer para marcar.
+                await _web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(ScriptJanelaAvulsa);
                 _web.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 _web.CoreWebView2.Settings.IsStatusBarEnabled = false;
                 _web.CoreWebView2.DocumentTitleChanged += (_, _) =>
@@ -44,7 +46,7 @@ namespace HelpDesktop
                     var t = _web.CoreWebView2.DocumentTitle;
                     Title = string.IsNullOrWhiteSpace(t) ? "EvolutTech Help" : t;
                 };
-                // Abre pela página inicial e vai para o ticket quando o HELP estiver logado
+                // Abre pelo menu (que lê o login já salvo, sem pedir de novo) e vai para o ticket
                 _web.CoreWebView2.NavigationCompleted += async (_, args) =>
                 {
                     if (!args.IsSuccess || _abriuTela) return;
@@ -59,6 +61,33 @@ namespace HelpDesktop
                 Close();
             }
         }
+
+        private const string ScriptJanelaAvulsa = @"
+window.__helpJanelaAvulsa = true;
+(function () {
+    var css =
+        'html.help-janela-avulsa .layout{display:block!important;height:100vh}' +
+        'html.help-janela-avulsa .layout>nav,html.help-janela-avulsa .notif-panel,html.help-janela-avulsa .aba-topo,' +
+        'html.help-janela-avulsa .ham-btn,html.help-janela-avulsa .mob-overlay{display:none!important}' +
+        'html.help-janela-avulsa .content{width:100%!important;height:100vh!important}';
+    function aplicar() {
+        var raiz = document.documentElement;
+        if (!raiz) return false;
+        raiz.classList.add('help-janela-avulsa');
+        if (!document.getElementById('help-janela-avulsa-css') && (document.head || raiz)) {
+            var st = document.createElement('style');
+            st.id = 'help-janela-avulsa-css';
+            st.textContent = css;
+            (document.head || raiz).appendChild(st);
+        }
+        return true;
+    }
+    if (!aplicar()) {
+        var obs = new MutationObserver(function () { if (aplicar()) obs.disconnect(); });
+        obs.observe(document, { childList: true, subtree: true });
+    }
+    document.addEventListener('DOMContentLoaded', aplicar);
+})();";
 
         protected override void OnClosed(EventArgs e)
         {

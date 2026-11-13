@@ -104,15 +104,16 @@ namespace HelpDesktop
                     if (!args.IsSuccess) return;
                     _paginaCarregada = true;
 
-                    // Link evoluthelp:// ou clique em aviso que chegou antes do HELP carregar
+                    // Link evoluthelp:// ou clique em aviso que chegou antes do HELP carregar:
+                    // abre assim que a pessoa entrar no HELP (espera o login, até 10 minutos)
                     if (_rotaPendente is { } rota)
                     {
                         _rotaPendente = null;
-                        await NavegacaoHelp.IrQuandoProntoAsync(WebView.CoreWebView2, rota);
+                        await NavegacaoHelp.IrQuandoProntoAsync(WebView.CoreWebView2, rota, 600);
                     }
                 };
 
-                // Sempre abre pela página inicial (o ticket direto pelo endereço dá erro no HELP)
+                // Sempre abre pela tela de login (o ticket direto pelo endereço dá erro no HELP)
                 WebView.CoreWebView2.Navigate(uri.ToString());
             }
             catch (WebView2RuntimeNotFoundException)
@@ -458,7 +459,7 @@ namespace HelpDesktop
                 if (doHelp && msg?.type == "janela")
                 {
                     if (RotaPermitida(msg.url) is { } rota)
-                        new JanelaAvulsa(CrmUrl, rota).Show();
+                        new JanelaAvulsa(CrmUrl + "menu", rota).Show();
                     return;
                 }
 
